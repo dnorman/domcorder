@@ -29,26 +29,27 @@ Create an "HTML video" capture & playback system that records webpage state over
 
 ### Design `.dcrr` Binary Format
 
-- [ ] Research existing container formats (WebM, MP4) for inspiration
-- [ ] Design seekable binary container format that supports:
+- [x] Research existing container formats (WebM, MP4) for inspiration
+- [x] Design streaming append-only binary container format that supports:
   - File header with magic bytes, version, metadata
-  - Frame size metadata (variable during recording)
+  - Viewport frames (variable during recording)
   - Keyframes (full HTML snapshots)
   - Delta frames (DOM mutations)
   - Input events (keyboard/mouse) with timecodes
   - Misc events with timecodes
-  - Frame index for seeking
-- [ ] Document format spec in `docs/file_format.md`
-- [ ] Create TypeScript types for format structures
-- [ ] Build basic reader/writer utilities
+  - Sequential frame structure for streaming
+- [x] Document format spec in `docs/file_format.md`
+- [x] Create TypeScript types for format structures
+- [x] Build basic reader/writer utilities with seeking support
 
 ### Basic Still Image Pipeline
 
-- [ ] Set up minimal HTTP server (Bun) with CORS handling
-- [ ] Create simple server endpoint to receive and save captures
-- [ ] Generate bookmarklet from TypeScript source
-- [ ] Test bookmarklet injection + immediate `captureKeyframe` call
-- [ ] Basic player page that loads a `.dcrr` file and displays in iframe
+- [x] Set up minimal HTTP server (Bun) with CORS handling
+- [x] Create simple server endpoint to receive and save captures
+- [x] Generate bookmarklet from TypeScript source with build watcher
+- [x] Test bookmarklet injection + immediate `captureKeyframe` call
+- [ ] Add player interface to main page that loads `.dcrr` files from server and displays in iframe
+- [ ] Update GETTING_STARTED.md to remove "not implemented yet" note once player works
 
 ## Phase 2 - Basic Video Recording
 
@@ -62,12 +63,22 @@ Create an "HTML video" capture & playback system that records webpage state over
 
 ### Player Timeline
 
-- [ ] Add basic timeline/scrubber to player
+- [ ] Add basic timeline/scrubber to player interface
 - [ ] Implement frame seeking using file index
 - [ ] Test playback of multi-keyframe recordings
 - [ ] Add playback controls (play/pause/speed)
 
 ## Phase 3 - Delta Frames & Input
+
+### Resource Frame Design
+
+- [ ] Design "Resource" frame type for static assets (images, fonts, etc.)
+  - Research addressing schemes: content-addressed vs ID-based vs offset-based
+  - Define how keyframes/deltas reference resources (URLs, hashes, IDs)
+  - Consider deduplication strategies for repeated resources
+  - Plan streaming implications (when to send resources vs references)
+- [ ] Update `.dcrr` format specification with Resource frame type
+- [ ] Implement Resource frame encoding/decoding in format utilities
 
 ### Delta Frame Implementation
 
@@ -77,17 +88,26 @@ Create an "HTML video" capture & playback system that records webpage state over
   - Compression opportunities
 - [ ] Design mutation serialization format
 - [ ] Implement and test mutation serialization in `startRecording`
-- [ ] Update player to handle delta frames during playback
+- [ ] Update player interface to handle delta frames during playback
 - [ ] Performance testing: mutation processing overhead
 
 ### Input Event Recording
 
 - [ ] Design input event schema (keyboard, mouse, scroll, resize)
 - [ ] Implement event capture in bookmarklet
-- [ ] Add input events to `.dcrr` format and player
+- [ ] Add input events to `.dcrr` format and player interface
 - [ ] Create visual overlays for input playback (cursor, keyboard)
 
-## Phase 4 - Optimization & Edge Cases
+## Phase 4 - Cataloging & Real-time Updates
+
+### Ankurah Integration
+
+- [ ] Design recording metadata schema for cataloging
+- [ ] Integrate Ankurah for recording management
+- [ ] Add real-time recording list updates
+- [ ] Add search and filtering to recordings interface
+
+## Phase 5 - Optimization & Edge Cases
 
 ### Performance & Reliability
 
