@@ -1,5 +1,6 @@
-// TypeScript utility to compute minimal diffs between two DOM trees
+// TypeScript utility to compute incremental diffs between two DOM trees
 // Each operation includes a path (array of child indices) to the parent node
+// Operations are computed incrementally, taking into account the effects of previous operations
 
 // JSON-serializable representation of a DOM node
 export type SerializedNode =
@@ -24,92 +25,127 @@ export function nodeToSerialized(node: Node): SerializedNode {
   }
 }
 
-export type Path = number[];
+export type NodePath = number[];
 
-export type DiffOp =
-  | { op: 'insert'; path: Path; node: SerializedNode; index: number }
-  | { op: 'remove'; path: Path; index: number }
-  | { op: 'replace'; path: Path; index: number; node: SerializedNode }
-  | { op: 'updateAttribute'; path: Path; index: number; name: string; value: string }
-  | { op: 'removeAttribute'; path: Path; index: number; name: string }
-  | { op: 'updateText'; path: Path; value: string };
+export type DomOperation =
+  | { op: 'insert'; path: NodePath; node: SerializedNode; index: number }
+  | { op: 'remove'; path: NodePath; index: number }
+  | { op: 'replace'; path: NodePath; node: SerializedNode }
+  | { op: 'updateAttribute'; path: NodePath; index: number; name: string; value: string }
+  | { op: 'removeAttribute'; path: NodePath; index: number; name: string }
+  | { op: 'updateText'; path: NodePath; value: string };
 
 /**
- * Compute minimal diff operations to transform oldNode into newNode.
+ * Compute incremental diff operations to transform oldNode into newNode.
+ * Each operation is computed based on the state after applying previous operations.
  * @param oldNode - The root of the old DOM tree
  * @param newNode - The root of the new DOM tree
- * @returns List of diff operations
+ * @returns List of incremental diff operations
  */
 export function diffDom(
   oldNode: Node,
   newNode: Node,
-  path: Path = []
-): DiffOp[] {
+  path: NodePath = []
+): DomOperation[] {
+  const ops: DomOperation[] = [];
+  
   // If nodes are of different types, replace
   if (oldNode.nodeType !== newNode.nodeType) {
-    return [{ op: 'replace', path, index: path[path.length - 1] ?? 0, node: nodeToSerialized(newNode) }];
+    ops.push({ 
+      op: 'replace', 
+      path,
+      node: nodeToSerialized(newNode) 
+    });
+    return ops;
   }
 
   // Handle text nodes
   if (oldNode.nodeType === Node.TEXT_NODE && newNode.nodeType === Node.TEXT_NODE) {
     if (oldNode.textContent !== newNode.textContent) {
-      return [{
+      ops.push({
         op: 'updateText',
         path,
         value: newNode.textContent || ''
-      }];
+      });
     }
-    return [];
+    return ops;
   }
 
   // Handle element nodes
   if (oldNode.nodeType === Node.ELEMENT_NODE && newNode.nodeType === Node.ELEMENT_NODE) {
     const oldEl = oldNode as Element;
     const newEl = newNode as Element;
-    const ops: DiffOp[] = [];
+    
     // Tag name changed: replace
     if (oldEl.tagName !== newEl.tagName) {
-      return [{ op: 'replace', path, index: path[path.length - 1] ?? 0, node: nodeToSerialized(newNode) }];
+      ops.push({ 
+        op: 'replace', 
+        path, 
+        index: path[path.length - 1] ?? 0, 
+        node: nodeToSerialized(newNode) 
+      });
+      return ops;
     }
+    
     // Attribute diffs
     const oldAttrs = oldEl.attributes;
     const newAttrs = newEl.attributes;
-    const oldAttrNames = new Set<string>();
+    
+    // Check for removed and updated attributes
     for (let i = 0; i < oldAttrs.length; i++) {
-      oldAttrNames.add(oldAttrs[i].name);
-      const newAttr = newEl.getAttribute(oldAttrs[i].name);
+      const attrName = oldAttrs[i].name;
+      const newAttr = newEl.getAttribute(attrName);
       if (newAttr === null) {
         ops.push({
           op: 'removeAttribute',
           path,
           index: path[path.length - 1] ?? 0,
-          name: oldAttrs[i].name
+          name: attrName
         });
       } else if (newAttr !== oldAttrs[i].value) {
         ops.push({
           op: 'updateAttribute',
           path,
           index: path[path.length - 1] ?? 0,
-          name: oldAttrs[i].name,
+          name: attrName,
           value: newAttr
         });
       }
     }
+    
+    // Check for new attributes
     for (let i = 0; i < newAttrs.length; i++) {
-      if (!oldEl.hasAttribute(newAttrs[i].name)) {
+      const attrName = newAttrs[i].name;
+      if (!oldEl.hasAttribute(attrName)) {
         ops.push({
           op: 'updateAttribute',
           path,
           index: path[path.length - 1] ?? 0,
-          name: newAttrs[i].name,
+          name: attrName,
           value: newAttrs[i].value
         });
       }
     }
-    // Children diff
+    
+    // Children diff - process from end to beginning to maintain indices
     const oldChildren = Array.from(oldEl.childNodes);
     const newChildren = Array.from(newEl.childNodes);
     const maxLen = Math.max(oldChildren.length, newChildren.length);
+    
+    // Process removals first (from end to beginning to maintain indices)
+    for (let i = maxLen - 1; i >= 0; i--) {
+      if (i >= oldChildren.length) continue; // nothing to remove
+      if (i >= newChildren.length) {
+        // Remove old child
+        ops.push({
+          op: 'remove',
+          path,
+          index: i
+        });
+      }
+    }
+    
+    // Process insertions and updates
     for (let i = 0; i < maxLen; i++) {
       const childPath = [...path, i];
       if (i >= oldChildren.length) {
@@ -120,20 +156,23 @@ export function diffDom(
           node: nodeToSerialized(newChildren[i]),
           index: i
         });
-      } else if (i >= newChildren.length) {
-        // Remove old child
-        ops.push({
-          op: 'remove',
-          path,
-          index: i
-        });
-      } else {
+      } else if (i < newChildren.length) {
         // Diff children recursively
-        ops.push(...diffDom(oldChildren[i], newChildren[i], childPath));
+        const childOps = diffDom(oldChildren[i], newChildren[i], childPath);
+        ops.push(...childOps);
       }
     }
+    
     return ops;
   }
+  
   // Fallback: replace
-  return [{ op: 'replace', path, index: path[path.length - 1] ?? 0, node: nodeToSerialized(newNode) }];
+  ops.push({ 
+    op: 'replace', 
+    path, 
+    node: nodeToSerialized(newNode) 
+  });
+  return ops;
 }
+
+// To run the test, see test/domDiff.test.ts 

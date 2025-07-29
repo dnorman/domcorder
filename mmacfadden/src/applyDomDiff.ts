@@ -1,4 +1,4 @@
-import type { DiffOp, SerializedNode, Path } from './domDiff';
+import type { DomOperation, SerializedNode, NodePath } from './domDiff';
 
 // Helper: create a DOM Node from a SerializedNode
 function createNodeFromSerialized(doc: Document, node: SerializedNode): Node {
@@ -17,7 +17,7 @@ function createNodeFromSerialized(doc: Document, node: SerializedNode): Node {
 }
 
 // Helper: find the parent node by path
-function getNodeByPath(root: Element, path: Path): Node {
+function getNodeByPath(root: Element, path: NodePath): Node {
   let node: Node = root;
   for (const idx of path) {
     if (!node.childNodes[idx]) throw new Error('Invalid path');
@@ -26,13 +26,7 @@ function getNodeByPath(root: Element, path: Path): Node {
   return node;
 }
 
-// Helper: find the parent node of the target by path (all but last index)
-function getParentByPath(root: Element, path: Path): Node {
-  if (path.length === 0) return root;
-  return getNodeByPath(root, path.slice(0, -1));
-}
-
-export function applyDomDiff(root: Element, ops: DiffOp[]): void {
+export function applyDomDiff(root: Element, ops: DomOperation[]): void {
   for (const op of ops) {
     switch (op.op) {
       case 'insert': {
@@ -48,9 +42,9 @@ export function applyDomDiff(root: Element, ops: DiffOp[]): void {
         break;
       }
       case 'replace': {
-        const parent = getNodeByPath(root, op.path) as Element;
+        const parent = getNodeByPath(root, op.path.slice(0, -1)) as Element;
         const node = createNodeFromSerialized(root.ownerDocument!, op.node);
-        const oldChild = parent.childNodes[op.index];
+        const oldChild = parent.childNodes[op.path[op.path.length - 1]];
         if (oldChild) parent.replaceChild(node, oldChild);
         break;
       }

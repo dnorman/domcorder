@@ -1,5 +1,5 @@
 import { diffDom } from './domDiff';
-import type { DiffOp } from './domDiff';
+import type { DomOperation } from './domDiff';
 
 /**
  * Starts an incremental DOM diff process.
@@ -14,7 +14,7 @@ import type { DiffOp } from './domDiff';
  */
 export function startIncrementalDomDiff(
   root: Element,
-  onDiff: (ops: DiffOp[]) => void,
+  onDiff: (ops: DomOperation[]) => void,
   intervalMs: number = 1000
 ): { stop: () => void } {
   let snapshot = root.cloneNode(true) as Element;
