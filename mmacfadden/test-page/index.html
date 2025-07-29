@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script src="../dist/index.js" type="module"></script>
+  </head>
+  <body>
+    <!-- Include Quill stylesheet -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css"
+      rel="stylesheet"
+    />
+
+    <!-- Create the editor container -->
+    <h2>Source DOM</h2>
+    <div id="editor">
+      <p>Hello World!</p>
+      <p>Some initial <strong>bold</strong> text</p>
+      <p><br /></p>
+    </div>
+
+    <br/>
+    <h2>Target DOM</h2>
+
+    <div id="target" class="ql-container ql-snow">
+    </div>
+
+    <!-- Include the Quill library -->
+    <script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
+
+    <!-- Initialize Quill editor -->
+    <script>
+      const quill = new Quill("#editor", {
+        theme: "snow",
+      });
+
+    </script>
+    <script type="module">
+      import {startIncrementalDomDiff, applyDomDiff} from "../dist/index.js";
+      const rootClone = quill.root.cloneNode(true);
+      const target = document.getElementById("target");
+      target.appendChild(rootClone);
+
+      const differ = new startIncrementalDomDiff(quill.root, (deltas) => {
+        deltas.forEach(delta => {
+          console.log(JSON.stringify(delta));
+        });
+        applyDomDiff(rootClone, deltas);
+      });
+    </script>
+  </body>
+</html>
