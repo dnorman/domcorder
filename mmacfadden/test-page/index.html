@@ -36,12 +36,12 @@
 
     </script>
     <script type="module">
-      import {startIncrementalDomDiff, applyDomDiff} from "../dist/index.js";
+      import {startIncrementalDomDiff, startMutationObserverDiff, applyDomDiff} from "../dist/index.js";
       const rootClone = quill.root.cloneNode(true);
       const target = document.getElementById("target");
       target.appendChild(rootClone);
 
-      const differ = new startIncrementalDomDiff(quill.root, (deltas) => {
+      const differ = new startMutationObserverDiff(quill.root, (deltas) => {
         deltas.forEach(delta => {
           console.log(JSON.stringify(delta));
         });
