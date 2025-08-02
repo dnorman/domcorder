@@ -1,4 +1,2 @@
-export * from './domDiff';
-export * from './incrementalDomDiff';
-export * from './applyDomDiff';
-export * from './mutationObserverDiff'; 
+export * from './DomChangeDetector';
+export * from './DomMutator';

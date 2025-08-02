@@ -80,8 +80,7 @@ export function diffDom(
     if (oldEl.tagName !== newEl.tagName) {
       ops.push({ 
         op: 'replace', 
-        path, 
-        index: path[path.length - 1] ?? 0, 
+        path,
         node: nodeToSerialized(newNode) 
       });
       return ops;

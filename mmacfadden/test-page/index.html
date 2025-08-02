@@ -36,16 +36,20 @@
 
     </script>
     <script type="module">
-      import {startIncrementalDomDiff, startMutationObserverDiff, applyDomDiff} from "../dist/index.js";
+      import {DomChangeDetector, DomMutator} from "../dist/index.js";
       const rootClone = quill.root.cloneNode(true);
       const target = document.getElementById("target");
       target.appendChild(rootClone);
 
-      const differ = new startMutationObserverDiff(quill.root, (deltas) => {
-        deltas.forEach(delta => {
-          console.log(JSON.stringify(delta));
+
+      const mutator = new DomMutator(rootClone);
+
+      const differ = new DomChangeDetector(quill.root, (operations) => {
+        operations.forEach(op => {
+          console.log(JSON.stringify(op));
         });
-        applyDomDiff(rootClone, deltas);
+
+        mutator.applyOps(operations);
       });
     </script>
   </body>
