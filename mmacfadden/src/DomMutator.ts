@@ -28,10 +28,14 @@ export class DomMutator {
           break;
         }
         case 'replace': {
-          // const parent = getNodeByPath(root, op.path.slice(0, -1)) as Element;
-          // const node = deserializeDomNode(root.ownerDocument!, op.node);
-          // const oldChild = parent.childNodes[op.path[op.path.length - 1]];
-          // if (oldChild) parent.replaceChild(node, oldChild);
+          const oldChild = this.nodeMap.getNodeById(op.nodeId)!;
+          if (oldChild?.parentNode) {
+            const newChild = deserializeDomNode(this.root.ownerDocument!, op.node);
+            oldChild.parentNode.replaceChild(newChild, oldChild);
+            this.nodeMap.removeNodesInSubtree(oldChild);
+            this.nodeMap.assignNodeIdsToSubTree(newChild);
+          }
+          
           break;
         }
         case 'updateAttribute': {

@@ -6,7 +6,7 @@ export class NodeIdBiMap {
 
   constructor(root: Node) {
     this.maxNodeId = 0;
-    this.idToNodeMap = new Map<number, Node>()
+    this.idToNodeMap = new Map<number, Node>();
     this.assignNodeIdsToSubTree(root);
   }
 
