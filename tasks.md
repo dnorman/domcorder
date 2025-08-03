@@ -1,5 +1,59 @@
 # Domcorder Roadmap
 
+## Project Goals
+
+Create an "HTML video" capture & playback system that records webpage state over time, using keyframes and delta frames, with input event recording.
+
+## punchlist
+
+- [~] Change detection
+  - [x] DOM Change detector (responsible for detecing changes that would be visible in outerHTML / detectable by MutationObserver)
+    - [x] interval vdom diff module
+  - [ ] recording canvas changes (monkey-patching?)
+  - [ ] recording scrolloffsets for scrollable elements (scroll event binding?)
+  - [ ] stylesheet changes (event binding?)
+  - [ ] mouse / keyboard / scrolloffset (references dom elements)
+  - [ ] viewport size
+  - [ ] maybe don't bother - but, zoom level (not sure if possible)
+- [~] JS change operation in-memory format
+
+- [ ] Transformation/inlining engine - transform the dom structure to be replayable (incrementally)
+
+  - Note: reasons we transform/inline things:
+
+    - content is not actually represented in the dom - eg canvas state
+    - cases where the player may not be able to access resources (css files, images, etc) which might require a login to access, or maybe ephemeral, or maybe not available due to network connectivity, etc. (we want to fully and centrally capture the resources necessary to replay the recording with visual fidelity)
+
+  - [x] POC keyframe generator - captureKeyframe function (and associated functions)
+  - [ ] rename captureKeyframe to transformSubtree (or something like that - and created a new captureKeyframe function that calls transformSubtree on the entire document)
+  - [ ] update transformSubtree to:
+    - [ ] background resource fetching without yielding the transformSubtree recursion
+    - [ ] initial output format - sufficient for feeding local player iframe (used during developemnt)
+    - [ ] update initial output format to be the direct binary serialization
+
+- [ ] POC player component
+
+  - [ ] in the same page as the recorder for development purposes
+  - [ ] consumes the initial output format and plays it back in an iframe in the same page as the recording
+  - [ ] update player to consume the direct binary serialization
+
+- [ ] Binary serialization and deserialization schema
+
+  - [ ] change operations
+  - [ ] change content
+  - [ ] viewport size events
+  - [ ] packet/frame containing N operations and events
+
+- Optimization
+  - [ ] webworkers for resource fetching / encoding? (probably needs to own the websocket connection to avoid double copying)
+
+## Pending discssion points
+
+- [ ] Strawman set of rust structs for the protocol
+- [ ] Page navigation - stitching together of multiple recordings AND non-pageload navigations
+
+#### TODO evaluate below here - pending review:
+
 ## Current Status
 
 **Works**
@@ -16,38 +70,21 @@
 **Technical Debt & Unknowns**
 
 - `startRecording()` mutation observer logic needs implementation and testing
+- Canvas content changes not detected by MutationObserver (requires separate strategy)
 
 ---
 
-## Project Goals
+## Phase 1 - File Format & Still Image Capture ✅
 
-Create an "HTML video" capture & playback system that records webpage state over time, using keyframes and delta frames, with input event recording.
+**Completed:**
 
----
+- Binary `.dcrr` format design with streaming support for keyframes, deltas, input events
+- Format specification documented in `docs/file_format.md`
+- TypeScript types and reader/writer utilities with seeking
+- HTTP server setup with CORS, capture endpoints, bookmarklet generation and testing
 
-## Phase 1 - File Format & Still Image Capture
+**Remaining:**
 
-### Design `.dcrr` Binary Format
-
-- [x] Research existing container formats (WebM, MP4) for inspiration
-- [x] Design streaming append-only binary container format that supports:
-  - File header with magic bytes, version, metadata
-  - Viewport frames (variable during recording)
-  - Keyframes (full HTML snapshots)
-  - Delta frames (DOM mutations)
-  - Input events (keyboard/mouse) with timecodes
-  - Misc events with timecodes
-  - Sequential frame structure for streaming
-- [x] Document format spec in `docs/file_format.md`
-- [x] Create TypeScript types for format structures
-- [x] Build basic reader/writer utilities with seeking support
-
-### Basic Still Image Pipeline
-
-- [x] Set up minimal HTTP server (Bun) with CORS handling
-- [x] Create simple server endpoint to receive and save captures
-- [x] Generate bookmarklet from TypeScript source with build watcher
-- [x] Test bookmarklet injection + immediate `captureKeyframe` call
 - [ ] Add player interface to main page that loads `.dcrr` files from server and displays in iframe
 - [ ] Update GETTING_STARTED.md to remove "not implemented yet" note once player works
 
@@ -70,6 +107,21 @@ Create an "HTML video" capture & playback system that records webpage state over
 
 ## Phase 3 - Delta Frames & Input
 
+### Change Detection Infrastructure
+
+- [ ] **DOM Diff Calculation Module**: Implement efficient DOM diffing system
+  - Research diff algorithms (Myers, patience diff) for DOM trees
+  - Element ID tagging vs XPath references for node identification
+  - Compression opportunities for mutation data
+- [ ] **Canvas Change Detection Strategy**: Handle canvas content changes (MutationObserver blind spot)
+  - Monkey-patch Canvas API methods (`drawImage`, `fillRect`, `strokeText`, etc.)
+  - Implement canvas content hashing for change detection
+  - Add canvas-specific delta encoding (image diffs or full snapshots)
+- [ ] **Interval Diff Calculation Module**: Periodic change detection fallback
+  - Implement scheduled DOM tree comparison for missed changes
+  - Handle dynamic content not caught by MutationObserver
+  - Configurable interval timing and scope
+
 ### Resource Frame Design
 
 - [ ] Design "Resource" frame type for static assets (images, fonts, etc.)
@@ -82,11 +134,7 @@ Create an "HTML video" capture & playback system that records webpage state over
 
 ### Delta Frame Implementation
 
-- [ ] Research efficient DOM mutation encoding approaches:
-  - Element ID tagging vs XPath references
-  - Diff algorithms (Myers, patience diff)
-  - Compression opportunities
-- [ ] Design mutation serialization format
+- [ ] Design mutation serialization format using diff calculation module
 - [ ] Implement and test mutation serialization in `startRecording`
 - [ ] Update player interface to handle delta frames during playback
 - [ ] Performance testing: mutation processing overhead
