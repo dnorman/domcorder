@@ -105,15 +105,6 @@ export class DomChangeDetector {
 
     const ops: DomOperation[] = [];
   
-    // If nodes are of different types, replace
-    if (snapshotNode.nodeType !== liveNode.nodeType) {
-      ops.push({ 
-        op: 'replace',
-        nodeId: liveNodeId,
-        node: serializeDomNode(liveNode) 
-      });
-      return ops;
-    }
 
     // Handle text nodes (we know the types are the same)
     if (liveNode.nodeType === Node.TEXT_NODE) {
@@ -129,17 +120,7 @@ export class DomChangeDetector {
 
     if (liveNode.nodeType === Node.ELEMENT_NODE) {
       const snapshotEl = snapshotNode as Element;
-      const liveEl = liveNode as Element;
-      
-      // Tag name changed: replace
-      if (snapshotEl.tagName !== liveEl.tagName) {
-        ops.push({ 
-          op: 'replace', 
-          nodeId: liveNodeId,
-          node: serializeDomNode(liveNode) 
-        });
-        return ops;
-      }
+      const liveEl = liveNode as Element;      
       
       // Attribute diffs
       const oldAttrs = snapshotEl.attributes;
@@ -178,11 +159,17 @@ export class DomChangeDetector {
         }
       }
 
+      // handle children
+
+      // TODO There is an optimization to be made here.  We should be able to
+      // detect when an element in the array has been replaced with a new element
+      // and issue a single replace operation instead of a remove and insert.
+      // As of now we are not using the replace operation at all.
+
       const oldChildren = Array.from(snapshotEl.childNodes);
       const newChildren = Array.from(liveEl.childNodes);
 
       let i = 0, j = 0;
-
       while (i < oldChildren.length || j < newChildren.length) {
         if (i < oldChildren.length && j < newChildren.length && 
           this.liveNodeMap.getNodeId(oldChildren[i]) === this.snapshotNodeMap.getNodeId(newChildren[j])) {
@@ -192,15 +179,20 @@ export class DomChangeDetector {
         } else if (j < newChildren.length && (i >= oldChildren.length || !oldChildren.includes(newChildren[j]))) {
           // element in newChildren[j] is new → insert
           ops.push({ op: "insert", parentId: liveNodeId, index: j, node: serializeDomNode(newChildren[j]) });
+          this.liveNodeMap.assignNodeIdsToSubTree(newChildren[j]);
           j++;
         } else if (i < oldChildren.length && (j >= newChildren.length || !newChildren.includes(oldChildren[i]))) {
           // element in oldChildren[i] is missing → remove
           ops.push({ op: "remove", nodeId: this.liveNodeMap.getNodeId(oldChildren[i])! });
+          this.liveNodeMap.removeNodesInSubtree(oldChildren[i]);
           i++;
         } else {
+          // TODO is there where we want to use the replace operation?
           // fallback: if elements differ but both exist later, remove + insert
           ops.push({ op: "remove", nodeId: this.liveNodeMap.getNodeId(oldChildren[i])! });
+          this.liveNodeMap.removeNodesInSubtree(oldChildren[i]);
           ops.push({ op: "insert", parentId: liveNodeId, index: j, node: serializeDomNode(newChildren[j]) });
+          this.liveNodeMap.assignNodeIdsToSubTree(newChildren[j]);
           i++;
           j++;
         }
