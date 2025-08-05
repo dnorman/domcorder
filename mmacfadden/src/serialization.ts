@@ -1,3 +1,4 @@
+
 export type SerializedDomNode =
   | { type: 'text'; text: string }
   | { type: 'element'; tag: string; attributes: Record<string, string>; children: SerializedDomNode[] }

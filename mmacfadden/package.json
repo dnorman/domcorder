@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": " bun build src/index.ts --outdir dist --target bun",
-    "dev": "bun build src/index.ts --outdir dist --target bun --watch & bun run test-page/server.js"
+    "dev": "bun build src/index.ts --outdir dist --target bun --watch & bun run test-pages/server.js"
   },
   "devDependencies": {
     "@types/bun": "latest",

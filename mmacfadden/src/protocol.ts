@@ -1,4 +1,4 @@
-export interface Frame {
+export type Frame = {
     frameType: FrameType;
     data: TimestampData | KeyframeData | ViewportResizedData | ScrollOffsetChangedData | MouseMovedData | MouseClickedData | KeyPressedData | ElementFocusedData | TextSelectionChangedData | DomNodeAddedData | DomNodeRemovedData | DomAttributeChangedData | DomAttributeRemovedData | DomTextChangedData | DomNodeResizedData | StyleSheetChangedData;
 }
@@ -27,82 +27,95 @@ export enum FrameType {
     StyleSheetChanged = 15,
 }
 
-export interface TimestampData {
+export type TimestampData = {
     timestamp: number;
 }
 
-export interface KeyframeData {
-    document_element: object;
+export type DomNodeData = {
+    nodeType: number;
+    tag?: string;
+    attributes?: Record<string, string>;
+    children: DomNodeData[];
+    text?: string;
 }
 
-export interface ViewportResizedData {
+export type HtmlDocumentData = {
+    docType: string;
+    documentElement: DomNodeData;
+}
+
+export type KeyframeData = {
+    document: HtmlDocumentData;
+}
+
+export type ViewportResizedData = {
     width: number;
     height: number;
 }
 
-export interface ScrollOffsetChangedData {
+export type ScrollOffsetChangedData = {
     scroll_x_offset: number;
     scroll_y_offset: number;
 }
 
-export interface MouseMovedData {
+export type MouseMovedData = {
     x: number;
     y: number;
 }
 
-export interface MouseClickedData {
+export type MouseClickedData = {
     x: number;
     y: number;
 }
 
-export interface KeyPressedData {
+export type KeyPressedData = {
     key: string;
 }
 
-export interface ElementFocusedData {
+export type ElementFocusedData = {
     elementId: string;
 }
 
-export interface TextSelectionChangedData {
+export type TextSelectionChangedData = {
     selectionStartNodeId: string;
     selectionStartOffset: number;
     selectionEndNodeId: string;
     selectionEndOffset: number;
 }
 
-export interface DomNodeAddedData {
+export type DomNodeAddedData = {
     parentNodeId: string;
     index: number;
-    node: object;
+    node: DomNodeData;
 }
 
-export interface DomNodeRemovedData {
+export type DomNodeRemovedData = {
     parentNodeId: string;
     index: number;
 }
 
-export interface DomAttributeChangedData {
+export type DomAttributeChangedData = {
     nodeId: string;
     attributeName: string;
     attributeValue: string;
 }
 
-export interface DomAttributeRemovedData {
+export type DomAttributeRemovedData = {
     nodeId: string;
     attributeName: string;
 }
 
-export interface DomTextChangedData {
+export type DomTextChangedData = {
     nodeId: string;
     text: string;
 }
 
-export interface DomNodeResizedData {
+export type DomNodeResizedData = {
     nodeId: string;
     width: number;
     height: number;
 }
 
-export interface StyleSheetChangedData {
+export type StyleSheetChangedData = {
     // TODO Not sure what data we want here yet.
 }
