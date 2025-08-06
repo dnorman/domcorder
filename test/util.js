@@ -91,7 +91,7 @@ export function compareBinaryFile(filename, actualBuffer, testName) {
 
     writeFileSync(expectedFile, actualBuffer);
     console.log(
-      `✨ BLESSED: Updated expected file (${actualBuffer.length} bytes)`
+      `✨ Updated expected file (${actualBuffer.length} bytes)`
     );
     console.log(`   File: ${expectedFile}`);
 

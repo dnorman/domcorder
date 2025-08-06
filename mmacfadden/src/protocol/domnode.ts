@@ -1,25 +1,32 @@
 import { Writer } from "./writer.ts";
 
-// DOM Node Type Constants
+// DOM Node Type Constants - sequential indices for bincode compatibility
 export enum DomNodeType {
-    Element = 1,
-    Text = 3,
-    Document = 9
+    Element = 0,
+    Text = 1,
+    CData = 2,
+    Comment = 3,
+    Document = 4,
+    DocType = 5
 }
 
 export class ElementNode {
     static readonly nodeType = DomNodeType.Element;
     private constructor() { }
-    static encode(w: Writer, tagName: string, attributes: string[], children: Node[]): void {
-        w.strUtf8(tagName.toLowerCase());
+    static encode(w: Writer, element: Element): void {
+        // Write tag name (enum variant index written by bincode automatically)
+        w.strUtf8(element.tagName.toLowerCase());
 
-        // Encode attributes as Vec<String>
-        w.u64(BigInt(attributes.length));
-        for (const attr of attributes) {
-            w.strUtf8(attr);
+        // Encode attributes as Vec<(String, String)> - name/value pairs
+        w.u64(BigInt(element.attributes.length));
+        for (let i = 0; i < element.attributes.length; i++) {
+            const attr = element.attributes[i];
+            w.strUtf8(attr.name);
+            w.strUtf8(attr.value);
         }
 
         // Encode children as Vec<DomNode>
+        const children = Array.from(element.childNodes);
         w.u64(BigInt(children.length));
         for (const child of children) {
             DomNode.encode(w, child);
@@ -29,34 +36,65 @@ export class ElementNode {
 
 export class TextNode {
     static readonly nodeType = DomNodeType.Text;
-    static readonly tag = "#text";
     private constructor() { }
-    static encode(w: Writer, textContent: string): void {
-        w.strUtf8(this.tag);
+    static encode(w: Writer, textNode: Text): void {
+        // Write text content (enum variant index written by bincode automatically)
+        w.strUtf8(textNode.textContent || '');
+    }
+}
 
-        // Encode text as attribute "value=content"
-        w.u64(1n);
-        w.strUtf8(`value=${textContent}`);
+export class CDataNode {
+    static readonly nodeType = DomNodeType.CData;
+    private constructor() { }
+    static encode(w: Writer, cdataNode: CDATASection): void {
+        // Write CDATA content (enum variant index written by bincode automatically)
+        w.strUtf8(cdataNode.textContent || '');
+    }
+}
 
-        // No children
-        w.u64(0n);
+export class CommentNode {
+    static readonly nodeType = DomNodeType.Comment;
+    private constructor() { }
+    static encode(w: Writer, commentNode: Comment): void {
+        // Write comment content (enum variant index written by bincode automatically)
+        w.strUtf8(commentNode.textContent || '');
     }
 }
 
 export class DocumentNode {
     static readonly nodeType = DomNodeType.Document;
-    static readonly tag = "#document";
     private constructor() { }
-    static encode(w: Writer, children: Node[]): void {
-        w.strUtf8(this.tag);
-
-        // No attributes
-        w.u64(0n);
-
-        // Encode children as Vec<DomNode>
+    static encode(w: Writer, document: Document): void {
+        // Encode children as Vec<DomNode> (enum variant index written by bincode automatically)
+        const children = Array.from(document.childNodes);
         w.u64(BigInt(children.length));
         for (const child of children) {
             DomNode.encode(w, child);
+        }
+    }
+}
+
+export class DocTypeNode {
+    static readonly nodeType = DomNodeType.DocType;
+    private constructor() { }
+    static encode(w: Writer, docType: DocumentType): void {
+        // Write doctype name (enum variant index written by bincode automatically)
+        w.strUtf8(docType.name);
+
+        // Write public ID (optional)
+        if (docType.publicId) {
+            w.u32(1); // Some
+            w.strUtf8(docType.publicId);
+        } else {
+            w.u32(0); // None
+        }
+
+        // Write system ID (optional)
+        if (docType.systemId) {
+            w.u32(1); // Some
+            w.strUtf8(docType.systemId);
+        } else {
+            w.u32(0); // None
         }
     }
 }
@@ -66,27 +104,21 @@ export class DomNode {
 
     /** Encode any DOM node using the appropriate encoder */
     static encode(w: Writer, node: Node): void {
-        if (node.nodeType === DomNodeType.Element) {
-            const element = node as Element;
-            const attributes: string[] = [];
-
-            for (let i = 0; i < element.attributes.length; i++) {
-                const attr = element.attributes[i];
-                attributes.push(`${attr.name}=${attr.value}`);
-            }
-
-            const children = Array.from(element.childNodes);
-            ElementNode.encode(w, element.tagName, attributes, children);
-
-        } else if (node.nodeType === DomNodeType.Text) {
-            const textContent = node.textContent?.trim() || '';
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            ElementNode.encode(w, node as Element);
+        } else if (node.nodeType === Node.TEXT_NODE) {
+            const textContent = (node as Text).textContent?.trim() || '';
             if (textContent) {
-                TextNode.encode(w, textContent);
+                TextNode.encode(w, node as Text);
             }
-
-        } else if (node.nodeType === DomNodeType.Document) {
-            const children = Array.from((node as Document).childNodes);
-            DocumentNode.encode(w, children);
+        } else if (node.nodeType === Node.CDATA_SECTION_NODE) {
+            CDataNode.encode(w, node as CDATASection);
+        } else if (node.nodeType === Node.COMMENT_NODE) {
+            CommentNode.encode(w, node as Comment);
+        } else if (node.nodeType === Node.DOCUMENT_NODE) {
+            DocumentNode.encode(w, node as Document);
+        } else if (node.nodeType === Node.DOCUMENT_TYPE_NODE) {
+            DocTypeNode.encode(w, node as DocumentType);
         }
     }
 }

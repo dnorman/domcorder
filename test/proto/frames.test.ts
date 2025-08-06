@@ -52,7 +52,7 @@ function createSimpleNode(): Element {
 const w = new Writer();
 
 TimestampDataEnc.encode(w, Date.now());
-KeyframeDataEnc.encode(w, "<!DOCTYPE html>", document.documentElement);
+KeyframeDataEnc.encode(w, document);
 ViewportResizedDataEnc.encode(w, 1920, 1080);
 ScrollOffsetChangedDataEnc.encode(w, 0, 240);
 MouseMovedDataEnc.encode(w, 150, 200);
@@ -77,3 +77,4 @@ console.log(`✓ First frame type: ${firstFrameType} (Timestamp)`);
 
 console.log("\n🎉 All frame encoders working correctly with DOM polyfill!");
 console.log("🦀 Binary file ready for Rust parsing tests!");
+

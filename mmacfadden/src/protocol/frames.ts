@@ -11,18 +11,23 @@ export class TimestampDataEnc {
     static readonly tag = FrameType.Timestamp;
     private constructor() { }
     static encode(w: Writer, timestamp: number | bigint): void {
-        w.u32(this.tag);
-        w.u64(toU64(timestamp)); // u64 BE
+        w.u32(this.tag);                    // enum variant index
+        w.u64(toU64(timestamp));            // timestamp value
     }
 }
 
 export class KeyframeDataEnc {
     static readonly tag = FrameType.Keyframe;
     private constructor() { }
-    static encode(w: Writer, docType: string, documentElement: Element): void {
+    static encode(w: Writer, document: Document): void {
         w.u32(this.tag);
-        w.strUtf8(docType); // u64 length + UTF-8 bytes (BE)
-        DomNode.encode(w, documentElement); // Encode the document element directly
+
+        // Extract doctype from document - use full DOCTYPE string to match Rust
+        const docType = "<!DOCTYPE html>";
+        w.strUtf8(docType);
+
+        // Encode the document element
+        DomNode.encode(w, document.documentElement);
     }
 }
 
