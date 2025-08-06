@@ -276,11 +276,7 @@ export class DomInlineTransformer {
 
   private async _findAndInlineStyleSheet(source: HTMLStyleElement | HTMLLinkElement, targetDoc: Document): Promise<HTMLElement> {
     const styleSheet = Array.from(source.ownerDocument.styleSheets).find(
-      sheet => {
-        const same = sheet.ownerNode === source;
-        console.log(sheet.ownerNode, source, same);
-        return same;
-      }
+      sheet => sheet.ownerNode === source
     );
 
     if (styleSheet) {
@@ -320,14 +316,12 @@ export class DomInlineTransformer {
       targetEl = targetDocument.createElement(sourceEl.tagName);
     }
 
-    // Special handling for images
+    await this._cloneAttributes(sourceEl, targetEl);
+
     if (sourceEl instanceof HTMLImageElement && targetEl instanceof HTMLImageElement) {
       await this._inlineImage(sourceEl, targetEl);
-    } else {
-      await this._cloneAttributes(sourceEl, targetEl);
     }
 
-    // Process children
     for (const child of sourceEl.childNodes) {
       if (child instanceof Element) {
         const inlined = await this._processElement(child, targetDocument);
@@ -341,7 +335,7 @@ export class DomInlineTransformer {
       }
     }
 
-    return targetEl
+    return targetEl;
   };
 
   private _processCanvasElement(sourceEl: HTMLCanvasElement, targetDocument: Document): HTMLImageElement {
