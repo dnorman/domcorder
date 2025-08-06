@@ -9,10 +9,13 @@
     "start": "bun run src/server.ts",
     "test": "bun test",
     "test:watch": "bun test --watch",
-    "test:coverage": "bun test --coverage"
+    "test:coverage": "bun test --coverage",
+    "test:proto": "bun run test/proto/frames.test.ts",
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/jsdom": "^21.1.7",
+    "jsdom": "^26.1.0"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
