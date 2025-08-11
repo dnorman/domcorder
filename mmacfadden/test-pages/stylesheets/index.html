@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+  </head>
+  <body>
+    <p>Hello</p>
+    <script type="module">
+      import {StyleSheetWatcher} from "../dist/index.js";
+      const watcher = new StyleSheetWatcher();
+      watcher.on('document-style-sheets', e => console.log('doc sheets', e));
+      watcher.on('adopted-style-sheets', e => console.log('adopted', e));
+      watcher.on('sheet-rules', e => console.log('rules changed', e));
+      
+      watcher.start();
+
+      const style1 = document.createElement("style");
+      style1.innerText = "p { background-color: yellow }";
+
+      const style2 = document.createElement("style");
+      style2.innerText = "p { background-color: blue }";
+
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "style.css";
+
+      setTimeout(() => document.body.appendChild(style1), 1000);
+      setTimeout(() => document.body.appendChild(style2), 2000);
+      setTimeout(() => document.body.removeChild(style2), 3000);
+      setTimeout(() => document.body.appendChild(link), 4000);
+      setTimeout(() => document.body.removeChild(link), 5000);
+      setTimeout(() => {
+        // Will likely cause a childList mutation event on the style element
+        style1.innerText = "p { background-color: green }";
+      }, 6000);
+      setTimeout(() => {
+        // Will likely cause a characterData mutation event on the style element
+        style1.childNodes[0].textContent = "p { background-color: lightgreen }";
+      }, 7000);
+    </script>
+  </body>
+</html>

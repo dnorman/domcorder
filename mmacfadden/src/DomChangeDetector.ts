@@ -178,7 +178,7 @@ export class DomChangeDetector {
           j++;
         } else if (j < newChildren.length && (i >= oldChildren.length || !oldChildren.includes(newChildren[j]))) {
           // element in newChildren[j] is new → insert
-          ops.push({ op: "insert", parentId: liveNodeId, index: j, node: serializeDomNode(newChildren[j]) });
+          ops.push({ op: "insert", parentId: liveNodeId, index: j, node: newChildren[j].cloneNode(true) });
           this.liveNodeMap.assignNodeIdsToSubTree(newChildren[j]);
           j++;
         } else if (i < oldChildren.length && (j >= newChildren.length || !newChildren.includes(oldChildren[i]))) {
@@ -191,7 +191,7 @@ export class DomChangeDetector {
           // fallback: if elements differ but both exist later, remove + insert
           ops.push({ op: "remove", nodeId: this.liveNodeMap.getNodeId(oldChildren[i])! });
           this.liveNodeMap.removeNodesInSubtree(oldChildren[i]);
-          ops.push({ op: "insert", parentId: liveNodeId, index: j, node: serializeDomNode(newChildren[j]) });
+          ops.push({ op: "insert", parentId: liveNodeId, index: j, node: newChildren[j].cloneNode(true) });
           this.liveNodeMap.assignNodeIdsToSubTree(newChildren[j]);
           i++;
           j++;

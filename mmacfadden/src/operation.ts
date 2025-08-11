@@ -1,10 +1,7 @@
-import type { SerializedDomNode } from "./serialization";
-
-
 export type DomOperation =
-  | { op: 'insert'; parentId: number; index: number, node: SerializedDomNode }
+  | { op: 'insert'; parentId: number; index: number, node: Node }
   | { op: 'remove'; nodeId: number; }
-  | { op: 'replace'; nodeId: number; node: SerializedDomNode }
+  | { op: 'replace'; nodeId: number; node: Node }
   | { op: 'updateAttribute'; nodeId: number; name: string; value: string }
   | { op: 'removeAttribute'; nodeId: number; name: string; }
   | { op: 'updateText'; nodeId: number; value: string };

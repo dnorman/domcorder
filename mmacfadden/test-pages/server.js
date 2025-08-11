@@ -18,6 +18,7 @@ app.use('/dist', express.static(path.join(__dirname, "..", "dist")));
 // });
 
 app.listen(port, () => {
-  console.log(`Server is running at http://localhost:${port}/mutation/`);
-  console.log(`Server is running at http://localhost:${port}/keyframe/`);
+  console.log(`Test page @ http://localhost:${port}/mutation/`);
+  console.log(`Test page @ http://localhost:${port}/keyframe/`);
+  console.log(`Test page @ http://localhost:${port}/stylesheets/`);
 });

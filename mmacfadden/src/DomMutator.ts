@@ -16,7 +16,7 @@ export class DomMutator {
       switch (op.op) {
         case 'insert': {
           const parent = this.nodeMap.getNodeById(op.parentId)!;
-          const node = deserializeDomNode(this.root.ownerDocument!, op.node);
+          const node = op.node;
           parent.insertBefore(node, parent.childNodes[op.index] || null);
           this.nodeMap.assignNodeIdsToSubTree(node);
           break;
@@ -30,7 +30,7 @@ export class DomMutator {
         case 'replace': {
           const oldChild = this.nodeMap.getNodeById(op.nodeId)!;
           if (oldChild?.parentNode) {
-            const newChild = deserializeDomNode(this.root.ownerDocument!, op.node);
+            const newChild = op.node;
             oldChild.parentNode.replaceChild(newChild, oldChild);
             this.nodeMap.removeNodesInSubtree(oldChild);
             this.nodeMap.assignNodeIdsToSubTree(newChild);
