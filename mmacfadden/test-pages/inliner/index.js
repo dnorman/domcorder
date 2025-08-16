@@ -18,12 +18,14 @@ async function screenshot() {
   });
   transformer.events.on("snapshotComplete", (ev) => {
     console.log("event", ev);
-    const materializer = new DomMaterializer();
-    const inlined = materializer.materialize(vdoc, assets);
-    console.log("doc", inlined);
     const ifrm = document.getElementById('screenshot');
-    const subDoc = ifrm.contentWindow.document;
-    subDoc.documentElement.innerHTML = inlined.documentElement.innerHTML;
+
+    const materializer = new DomMaterializer(ifrm.contentWindow.document);
+    materializer.materialize(vdoc, assets);
+    // console.log("doc", inlined);
+    
+    // const subDoc = ifrm.contentWindow.document;
+    // subDoc.documentElement.outerHTML = inlined.documentElement.outerHTML;
   });
   await transformer.start();
 

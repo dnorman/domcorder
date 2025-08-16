@@ -20,8 +20,8 @@ export class DomMaterializer {
   private document: Document;
   private assetMap: Map<number, Asset>;
 
-  constructor() {
-    this.document = new Document();
+  constructor(document: Document) {
+    this.document = document;
     this.assetMap = new Map();
   }
 
@@ -31,7 +31,7 @@ export class DomMaterializer {
    * @param assets Array of asset events containing binary data
    * @returns A fully materialized Document instance
    */
-  materialize(vdoc: VDocument, assets: Asset[]): Document {
+  public materialize(vdoc: VDocument, assets: Asset[]): void {
     // Build asset map for quick lookup
     this.buildAssetMap(assets);
     
@@ -40,12 +40,11 @@ export class DomMaterializer {
     
     // Create and append the document element
     const documentElement = this.createElement(vdoc.documentElement);
+    this.document.removeChild(this.document.documentElement);
     this.document.appendChild(documentElement);
     
     // Apply stylesheets
     this.applyStylesheets(vdoc.styleSheets);
-    
-    return this.document;
   }
 
   /**
@@ -81,12 +80,12 @@ export class DomMaterializer {
   /**
    * Recursively creates a DOM element from a VElement
    */
-  private createElement(velement: VElement): Element {
-    const element = this.document.createElementNS(velement.ns || null, velement.tag);
+  private createElement(vElement: VElement): Element {
+    const element = this.document.createElementNS(vElement.ns || null, vElement.tag);
     
     // Set attributes
-    if (velement.attrs) {
-      for (const [key, value] of Object.entries(velement.attrs)) {
+    if (vElement.attrs) {
+      for (const [key, value] of Object.entries(vElement.attrs)) {
         // Handle "asset:" URLs in attributes
         const processedValue = this.processAttributeValue(key, value);
         element.setAttribute(key, processedValue);
@@ -94,8 +93,8 @@ export class DomMaterializer {
     }
     
     // Process children
-    if (velement.children) {
-      for (const child of velement.children) {
+    if (vElement.children) {
+      for (const child of vElement.children) {
         const childNode = this.createNode(child);
         if (childNode) {
           element.appendChild(childNode);
@@ -104,9 +103,9 @@ export class DomMaterializer {
     }
     
     // Handle shadow DOM
-    if (velement.shadow) {
+    if (vElement.shadow) {
       const shadowRoot = element.attachShadow({ mode: 'closed' });
-      for (const shadowChild of velement.shadow) {
+      for (const shadowChild of vElement.shadow) {
         const shadowNode = this.createNode(shadowChild);
         if (shadowNode) {
           shadowRoot.appendChild(shadowNode);
@@ -188,27 +187,56 @@ export class DomMaterializer {
   }
 
   /**
-   * Applies stylesheets to the document, inlining asset data where needed
+   * Applies stylesheets to the document programmatically, inlining asset data where needed
    */
   private applyStylesheets(styleSheets: VStyleSheet[]): void {
     for (const sheet of styleSheets) {
-      const styleElement = this.document.createElement('style');
+      if (!sheet.text) continue;
       
-      if (sheet.id) {
-        styleElement.id = sheet.id;
+      // Process the CSS text to inline asset data
+      const processedText = this.processCssText(sheet.text);
+      
+      // Create a new stylesheet using CSSOM API
+      const win = this.document.defaultView!;
+
+      if (win.CSSStyleSheet) {
+        const stylesheet = new win.CSSStyleSheet();
+        
+        // Set the CSS text content
+        try {
+          stylesheet.replaceSync(processedText);
+        } catch (error) {
+          console.warn('Failed to parse CSS stylesheet:', error);
+          continue;
+        }
+        
+        // Set media if specified
+        if (sheet.media) {
+          stylesheet.media.mediaText = sheet.media;
+        }
+        
+        // Add the stylesheet to the document's stylesheet collection
+        this.document.adoptedStyleSheets = [
+          ...this.document.adoptedStyleSheets,
+          stylesheet
+        ];
+      } else {
+        const styleElement = this.document.createElement('style');
+      
+        if (sheet.id) {
+          styleElement.id = sheet.id;
+        }
+        
+        if (sheet.media) {
+          styleElement.setAttribute('media', sheet.media);
+        }
+        
+        if (processedText) {
+          styleElement.textContent = processedText;
+        }
+        
+        this.document.head?.appendChild(styleElement);
       }
-      
-      if (sheet.media) {
-        styleElement.setAttribute('media', sheet.media);
-      }
-      
-      if (sheet.text) {
-        // Process the CSS text to inline asset data
-        const processedText = this.processCssText(sheet.text);
-        styleElement.textContent = processedText;
-      }
-      
-      this.document.head?.appendChild(styleElement);
     }
   }
 
