@@ -21,8 +21,10 @@ export class DomChangeDetector {
   constructor(root: Node, callback: (ops: DomOperation[]) => void) {
     this.liveDomRoot = root;
     this.snapshotDomRoot = root.cloneNode(true);
-    this.liveNodeMap = new NodeIdBiMap(this.liveDomRoot);
-    this.snapshotNodeMap = new NodeIdBiMap(this.snapshotDomRoot);
+    this.liveNodeMap = new NodeIdBiMap();
+    this.liveNodeMap.assignNodeIdsToSubTree(this.liveDomRoot);
+    this.snapshotNodeMap = new NodeIdBiMap();
+    this.snapshotNodeMap.assignNodeIdsToSubTree(this.snapshotDomRoot);
     this.snapshotMutator = new DomMutator(this.snapshotDomRoot, this.snapshotNodeMap);
     this.callback = callback;
 

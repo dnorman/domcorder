@@ -46,7 +46,7 @@ export type VNode = VTextNode | VElement | VCDATASection | VComment | VProcessin
 export type VStyleSheet = {id: string; media?: string; text?: string };
 
 export interface VDocument {
-  baseURI: string;
+  id: number;
   adoptedStyleSheets: VStyleSheet[];
   children: VNode[];
 }

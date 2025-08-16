@@ -1,19 +1,44 @@
 export class NodeIdBiMap {
   private static readonly NODE_ID_PROPERTY = "__node_id__";
+
+  public static setNodeId(node: Node, id: number) {
+    (node as any)[NodeIdBiMap.NODE_ID_PROPERTY] = id;
+  }
+
+  public static getNodeId(node: Node): number | undefined {
+    return (node as any)[NodeIdBiMap.NODE_ID_PROPERTY];
+  }
+
+  public static removeNodeId(node: Node) {
+    delete (node as any)[NodeIdBiMap.NODE_ID_PROPERTY];
+  }
   
   private readonly idToNodeMap;
   private maxNodeId: number;
 
-  constructor(root: Node) {
+  constructor() {
     this.maxNodeId = 0;
     this.idToNodeMap = new Map<number, Node>();
-    this.assignNodeIdsToSubTree(root);
+  }
+
+  public adoptNodesFromSubTree(node: Node) {
+    const id = NodeIdBiMap.getNodeId(node);
+    if (id === undefined) {
+      throw new Error("Can not adopt node without an ID");
+    }
+
+    this.idToNodeMap.set(id, node);
+
+    for (const child of node.childNodes) {
+      this.adoptNodesFromSubTree(child);
+    }
   }
 
   public assignNodeIdsToSubTree(node: Node) {
     const id = ++this.maxNodeId;
     this.idToNodeMap.set(id, node);
-    (node as any)[NodeIdBiMap.NODE_ID_PROPERTY] = id;
+
+    NodeIdBiMap.setNodeId(node, id);
 
     for (const child of node.childNodes) {
       this.assignNodeIdsToSubTree(child);
@@ -21,7 +46,7 @@ export class NodeIdBiMap {
   }
 
   public getNodeId(node: Node): number | undefined {
-    return (node as any)[NodeIdBiMap.NODE_ID_PROPERTY];
+    return NodeIdBiMap.getNodeId(node);
   }
 
   public getNodeById(id: number): Node | undefined {
@@ -33,7 +58,8 @@ export class NodeIdBiMap {
     if (id !== undefined) {
       this.idToNodeMap.delete(id);
     }
-    delete (node as any)[NodeIdBiMap.NODE_ID_PROPERTY];
+
+    NodeIdBiMap.removeNodeId(node);
     
     for (const child of node.childNodes) {
       this.removeNodesInSubtree(child);

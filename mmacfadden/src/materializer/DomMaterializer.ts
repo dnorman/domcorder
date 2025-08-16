@@ -1,3 +1,4 @@
+import { NodeIdBiMap } from '../dom/NodeIdBiMap';
 import type { VDocument, VNode, VElement, VTextNode, VCDATASection, VComment, VProcessingInstruction, VDocumentType, VStyleSheet } from '../dom/vdom';
 import type { Asset } from '../inliner/events';
 
@@ -42,13 +43,13 @@ export class DomMaterializer {
     this.clearDocumentChildren();
     
     // Process all document children
-    this.processDocumentChildren(vdoc);
+    this.processDocument(vdoc);
 
     // This is a bit of a hack, to force the browser to re process stylesheets
     // etc.  Otherwise, the stylesheets are not processed correctly. The style
     // elements will be in the document, but they will not make therr way into
     // document.styleSheets.
-    this.document.documentElement.innerHTML = this.document.documentElement.innerHTML;
+    // this.document.documentElement.innerHTML = this.document.documentElement.innerHTML;
     
     // Apply adopted stylesheets
     this.applyAdoptedStylesheets(vdoc.adoptedStyleSheets);
@@ -78,8 +79,8 @@ export class DomMaterializer {
    * Recursively creates a DOM element from a VElement
    */
   private createElement(vElement: VElement): Element {
-    const element = this.document.createElementNS(vElement.ns || null, vElement.tag);
-    
+    const element = vElement.ns ? this.document.createElementNS(vElement.ns, vElement.tag) : this.document.createElement(vElement.tag);
+
     // Set attributes
     if (vElement.attrs) {
       for (const [key, value] of Object.entries(vElement.attrs)) {
@@ -183,7 +184,9 @@ export class DomMaterializer {
   /**
    * Processes all document children and adds them to the document
    */
-  private processDocumentChildren(vdoc: VDocument): void {
+  private processDocument(vdoc: VDocument): void {
+    NodeIdBiMap.setNodeId(this.document, vdoc.id);
+    
     for (const child of vdoc.children) {
       const node = this.createNode(child);
       if (node) {
@@ -208,24 +211,37 @@ export class DomMaterializer {
   /**
    * Creates a DOM node from a VNode (handles all node types)
    */
-  private createNode(vnode: VNode): Node | null {
-    switch (vnode.nodeType) {
+  private createNode(vNode: VNode): Node | null {
+    let node: Node | null = null;
+
+    switch (vNode.nodeType) {
       case 'text':
-        // Check if this text node is inside a style element and process CSS
-        return this.createTextNode(vnode);
+        node = this.createTextNode(vNode);
+        break;
       case 'element':
-        return this.createElement(vnode);
+        node = this.createElement(vNode);
+        break;
       case 'cdata':
-        return this.document.createCDATASection(vnode.data);
+        node =  this.document.createCDATASection(vNode.data);
+        break;
       case 'comment':
-        return this.document.createComment(vnode.data);
+        node =  this.document.createComment(vNode.data);
+        break;
       case 'processingInstruction':
-        return this.document.createProcessingInstruction(vnode.target, vnode.data);
+        node =  this.document.createProcessingInstruction(vNode.target, vNode.data);
+        break;
       case 'documentType':
-        return this.document.implementation.createDocumentType(vnode.name, vnode.publicId || '', vnode.systemId || '');
+        node =  this.document.implementation.createDocumentType(vNode.name, vNode.publicId || '', vNode.systemId || '');
+        break;
       default:
         return null;
     }
+
+    if (node) {
+      NodeIdBiMap.setNodeId(node, vNode.id);
+    }
+
+    return node;
   }
 
   /**

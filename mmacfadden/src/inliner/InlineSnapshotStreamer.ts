@@ -59,7 +59,7 @@ export class InlineSnapshotStreamer {
 
       // Phase 1: synchronous snapshot + assign ids + rewrite to asset:<id>
       const snap = snapshotVDomStreaming(doc, this.nodeIdMap);
-      rewriteAllRefsToPendingIds(snap, this._pending); // proactive rewrite
+      rewriteAllRefsToPendingIds(snap, this.doc.baseURI, this._pending); // proactive rewrite
 
       // Emit the structural snapshot right away
       this.events.emit({ type: "snapshotStarted", snapshot: snapshotView(snap) });
@@ -220,7 +220,7 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap): VDocument
   }
 
   return {
-    baseURI: doc.baseURI,
+    id: nodeIdMap.getNodeId(doc)!,
     adoptedStyleSheets: adoptedStyleSheets,
     children: vChildren
   };
@@ -334,7 +334,7 @@ function snapElement(el: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap
     nodeType: "element",
     tag: el.tagName.toLowerCase(),
     ns: el.namespaceURI || undefined,
-    attrs: Object.keys(attrs).length ? attrs : undefined,
+    attrs: Object.keys(attrs).length ? attrs : {},
     children: [],
   };
 
@@ -359,12 +359,12 @@ function snapShadow(sr: ShadowRoot, pending: PendingAssets, nodeIdMap: NodeIdBiM
 }
 
 // Rewrite using provisional ids (before fetch)
-function rewriteAllRefsToPendingIds(snap: VDocument, pending: PendingAssets) {
+function rewriteAllRefsToPendingIds(snap: VDocument, baseURI: string, pending: PendingAssets) {
   // CSS - process adopted stylesheets
   snap.adoptedStyleSheets = snap.adoptedStyleSheets.map((s) => {
     if (!("text" in s) || !s.text) return s;
     const text = s.text.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m: string, q: string, raw: string) => {
-      const id = idForUrl(raw, snap.baseURI, pending);
+      const id = idForUrl(raw, baseURI, pending);
       return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
     });
     return { ...s, text } as VStyleSheet;
@@ -373,7 +373,7 @@ function rewriteAllRefsToPendingIds(snap: VDocument, pending: PendingAssets) {
   // Process all document children to rewrite URLs in style elements
   for (const child of snap.children) {
     if (child.nodeType === "element") {
-      rewriteTreeUrlsToPendingIds(child, snap.baseURI, pending);
+      rewriteTreeUrlsToPendingIds(child, baseURI, pending);
     }
   }
 }

@@ -8,7 +8,12 @@ export class DomMutator {
 
   constructor(root: Node, nodeMap?: NodeIdBiMap) {
     this.root = root;
-    this.nodeMap = nodeMap ?? new NodeIdBiMap(root);
+    if (nodeMap) {
+      this.nodeMap = nodeMap;
+    } else{
+      this.nodeMap = new NodeIdBiMap();
+      this.nodeMap.assignNodeIdsToSubTree(root);
+    } 
   }
 
   applyOps(ops: DomOperation[]): void {

@@ -1,6 +1,8 @@
 import { InlineSnapshotStreamer, DomMaterializer, NodeIdBiMap } from "../../dist/index.js";
 
-const nodeIdMap = new NodeIdBiMap(document);
+const nodeIdMap = new NodeIdBiMap();
+nodeIdMap.assignNodeIdsToSubTree(document);
+
 const transformer = new InlineSnapshotStreamer(document, nodeIdMap);
 
 async function screenshot() {
@@ -22,9 +24,11 @@ async function screenshot() {
   
     const materializer = new DomMaterializer(ifrm.contentWindow.document);
     materializer.materialize(vdoc, assets);
-    // const map = new NodeIdBiMap(ifrm.contentWindow.document);
+    
+    const adoptedMap = new NodeIdBiMap();
+    // adoptedMap.adoptNodesFromSubTree(ifrm.contentWindow.document);
+    // console.log("adoptedMap", adoptedMap);
 
-    // window.target = ifrm.contentWindow.document.documentElement;
   });
   await transformer.start();
 }
