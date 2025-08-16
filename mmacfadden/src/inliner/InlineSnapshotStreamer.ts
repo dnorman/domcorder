@@ -16,7 +16,7 @@ import type { AssetType } from "./AssetType";
 import { Emitter } from "./Emitter";
 import type { InlineEvent } from "./events";
 import { PendingAssets } from "./PendingAssets";
-import type { VDocument, VElement, VNode, VStyleSheet, VTextNode } from "../dom/vdom";
+import type { VCDATASection, VComment, VDocument, VDocumentType, VElement, VNode, VProcessingInstruction, VStyleSheet, VTextNode } from "../dom/vdom";
 
 
 export interface InlineOptions {
@@ -117,12 +117,91 @@ function snapshotView(snap: VDocument): VDocument {
   return pub as VDocument;
 }
 
+function snapshotNode(node: Node, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VNode {
+  switch (node.nodeType) {
+    case Node.ELEMENT_NODE: {
+      return snapElement(node as Element, pending, nodeIdMap);
+    }
+    
+    case Node.TEXT_NODE: {
+      const textNode: VTextNode = {
+        id: nodeIdMap.getNodeId(node)!, nodeType: "text", text: node.nodeValue ?? ""
+      } 
+      return textNode;
+    }
+    
+    case Node.DOCUMENT_NODE: {
+      throw new Error("Not implemented");
+    }
+
+    case Node.DOCUMENT_FRAGMENT_NODE: {
+      throw new Error("Not implemented");
+    }
+
+    case Node.ATTRIBUTE_NODE: {
+      throw new Error("Not implemented");
+    }
+
+    case Node.CDATA_SECTION_NODE: {
+      const cdataNode: VCDATASection = {
+        id: nodeIdMap.getNodeId(node)!, nodeType: "cdata", data: node.nodeValue ?? ""
+      }
+      return cdataNode;
+    }
+
+    case Node.COMMENT_NODE: {
+      const commentNode: VComment = {
+        id: nodeIdMap.getNodeId(node)!, nodeType: "comment", data: node.nodeValue ?? ""
+      }
+      return commentNode;
+    }
+
+    case Node.PROCESSING_INSTRUCTION_NODE: {
+      const piNode = node as ProcessingInstruction;
+      const processingInstruction: VProcessingInstruction = {
+        id: nodeIdMap.getNodeId(node)!, 
+        nodeType: "processingInstruction", 
+        target: piNode.target, 
+        data: piNode.data
+      }
+      return processingInstruction;
+    }
+
+    case Node.DOCUMENT_TYPE_NODE: {
+      const docTypeNode = node as DocumentType;
+      const docType: VDocumentType = {
+        id: nodeIdMap.getNodeId(node)!,
+        nodeType: "documentType",
+        name: docTypeNode.name,
+        publicId: docTypeNode.publicId,
+        systemId: docTypeNode.systemId
+      }
+      return docType;
+    }
+
+    case Node.NOTATION_NODE: {
+      throw new Error("Not implemented");
+    }
+
+    default: {
+      throw new Error("Not implemented");
+    }
+  }
+}
+
 // -------------------- Phase 1 (streaming variant) --------------------
 function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap): VDocument {
   const pending = new PendingAssets();
 
+  const children = Array.from(doc.childNodes);
+  const vChildren: VNode[] = [];
+  for (const child of children) {
+    vChildren.push(snapshotNode(child, pending, nodeIdMap));
+  }
+
   const rootEl = doc.documentElement;
   const tree = snapElement(rootEl, pending, nodeIdMap);
+  tree.children = vChildren;
 
   const styleSheets: VStyleSheet[] = [];
   for (const el of Array.from(doc.querySelectorAll('style,link[rel~="stylesheet"]'))) {
@@ -145,10 +224,8 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap): VDocument
 
   return {
     baseURI: doc.baseURI,
-    lang: doc.documentElement.getAttribute("lang"),
-    dir: doc.documentElement.getAttribute("dir"),
     styleSheets: styleSheets,
-    documentElement: tree
+    children: vChildren
   };
 }
 
@@ -233,12 +310,16 @@ function rewriteAllRefsToPendingIds(snap: VDocument, pending: PendingAssets) {
     });
     return { ...s, text } as VStyleSheet;
   });
-  // HTML
-  rewriteTreeUrlsToPendingIds(snap.documentElement, snap.baseURI, pending);
+  let docEl: VElement | undefined = snap.children.find(c => c.nodeType === "element") as VElement | undefined;
+
+  if (docEl) {
+    // HTML
+    rewriteTreeUrlsToPendingIds(docEl, snap.baseURI, pending);
+  }
 }
 
 function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: PendingAssets): void {
-  if (node.nodeType === "text") return;
+  if (node.nodeType !== "element") return;
   if (node.attrs) {
     for (const key of ["src", "poster", "href", "xlink:href", "data-src"]) {
       const v = node.attrs[key];

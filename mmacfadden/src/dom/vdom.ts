@@ -4,6 +4,33 @@ export type VTextNode = {
   text: string
 };
 
+export type VCDATASection = {
+  id: number;
+  nodeType: "cdata"; 
+  data: string
+};
+
+export type VComment = {
+  id: number;
+  nodeType: "comment"; 
+  data: string
+};
+
+export type VProcessingInstruction = {
+  id: number;
+  nodeType: "processingInstruction"; 
+  target: string;
+  data: string
+};
+
+export type VDocumentType = {
+  id: number;
+  nodeType: "documentType"; 
+  name: string;
+  publicId?: string;
+  systemId?: string;
+};
+
 export type VElement = {
   id: number;
   nodeType: "element";
@@ -14,14 +41,12 @@ export type VElement = {
   shadow?: VNode[];
 };
 
-export type VNode = VTextNode | VElement;
+export type VNode = VTextNode | VElement | VCDATASection | VComment | VProcessingInstruction | VDocumentType;
 
 export type VStyleSheet = {id: string; media?: string; text?: string };
 
 export interface VDocument {
   baseURI: string;
-  lang?: string | null;
-  dir?: string | null;
   styleSheets: VStyleSheet[];
-  documentElement: VElement;
+  children: VNode[];
 }

@@ -1,4 +1,4 @@
-import type { VDocument, VNode, VElement, VTextNode, VStyleSheet } from '../dom/vdom';
+import type { VDocument, VNode, VElement, VTextNode, VCDATASection, VComment, VProcessingInstruction, VDocumentType, VStyleSheet } from '../dom/vdom';
 import type { Asset } from '../inliner/events';
 
 /**
@@ -29,19 +29,19 @@ export class DomMaterializer {
    * Materializes a VDocument into a real DOM Document
    * @param vdoc The virtual document representation
    * @param assets Array of asset events containing binary data
-   * @returns A fully materialized Document instance
    */
   public materialize(vdoc: VDocument, assets: Asset[]): void {
     // Build asset map for quick lookup
     this.buildAssetMap(assets);
     
+    // Clear existing document children
+    this.clearDocumentChildren();
+    
     // Set document properties
     this.setDocumentProperties(vdoc);
     
-    // Create and append the document element
-    const documentElement = this.createElement(vdoc.documentElement);
-    this.document.removeChild(this.document.documentElement);
-    this.document.appendChild(documentElement);
+    // Process all document children
+    this.processDocumentChildren(vdoc.children, vdoc);
     
     // Apply stylesheets
     this.applyStylesheets(vdoc.styleSheets);
@@ -58,6 +58,16 @@ export class DomMaterializer {
   }
 
   /**
+   * Clears all existing children from the document
+   */
+  private clearDocumentChildren(): void {
+    // Remove all child nodes from the document
+    while (this.document.firstChild) {
+      this.document.removeChild(this.document.firstChild);
+    }
+  }
+
+  /**
    * Sets document-level properties like base URI, language, and direction
    */
   private setDocumentProperties(vdoc: VDocument): void {
@@ -68,19 +78,14 @@ export class DomMaterializer {
       this.document.head?.appendChild(baseElement);
     }
 
-    // Set document language and direction
-    if (vdoc.lang) {
-      this.document.documentElement?.setAttribute('lang', vdoc.lang);
-    }
-    if (vdoc.dir) {
-      this.document.documentElement?.setAttribute('dir', vdoc.dir);
-    }
+    // Note: Language and direction attributes will be set on the document element
+    // when it's created during the children processing phase
   }
 
   /**
    * Recursively creates a DOM element from a VElement
    */
-  private createElement(vElement: VElement): Element {
+  private createElement(vElement: VElement, vdoc: VDocument): Element {
     const element = this.document.createElementNS(vElement.ns || null, vElement.tag);
     
     // Set attributes
@@ -95,7 +100,7 @@ export class DomMaterializer {
     // Process children
     if (vElement.children) {
       for (const child of vElement.children) {
-        const childNode = this.createNode(child);
+        const childNode = this.createNode(child, vdoc);
         if (childNode) {
           element.appendChild(childNode);
         }
@@ -106,7 +111,7 @@ export class DomMaterializer {
     if (vElement.shadow) {
       const shadowRoot = element.attachShadow({ mode: 'closed' });
       for (const shadowChild of vElement.shadow) {
-        const shadowNode = this.createNode(shadowChild);
+        const shadowNode = this.createNode(shadowChild, vdoc);
         if (shadowNode) {
           shadowRoot.appendChild(shadowNode);
         }
@@ -173,14 +178,34 @@ export class DomMaterializer {
   }
 
   /**
-   * Creates a DOM node from a VNode (either text or element)
+   * Processes all document children and adds them to the document
    */
-  private createNode(vnode: VNode): Node | null {
+  private processDocumentChildren(children: VNode[], vdoc: VDocument): void {
+    for (const child of children) {
+      const node = this.createNode(child, vdoc);
+      if (node) {
+        this.document.appendChild(node);
+      }
+    }
+  }
+
+  /**
+   * Creates a DOM node from a VNode (handles all node types)
+   */
+  private createNode(vnode: VNode, vdoc: VDocument): Node | null {
     switch (vnode.nodeType) {
       case 'text':
         return this.document.createTextNode(vnode.text);
       case 'element':
-        return this.createElement(vnode);
+        return this.createElement(vnode, vdoc);
+      case 'cdata':
+        return this.document.createCDATASection(vnode.data);
+      case 'comment':
+        return this.document.createComment(vnode.data);
+      case 'processingInstruction':
+        return this.document.createProcessingInstruction(vnode.target, vnode.data);
+      case 'documentType':
+        return this.document.implementation.createDocumentType(vnode.name, vnode.publicId || '', vnode.systemId || '');
       default:
         return null;
     }

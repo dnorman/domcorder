@@ -22,10 +22,7 @@ async function screenshot() {
 
     const materializer = new DomMaterializer(ifrm.contentWindow.document);
     materializer.materialize(vdoc, assets);
-    // console.log("doc", inlined);
-    
-    // const subDoc = ifrm.contentWindow.document;
-    // subDoc.documentElement.outerHTML = inlined.documentElement.outerHTML;
+    const map = new NodeIdBiMap(ifrm.contentWindow.document);
   });
   await transformer.start();
 
