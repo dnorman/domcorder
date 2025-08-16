@@ -7,15 +7,19 @@ body {
   background: lightblue;
 }
 
+.red {
+  background: var(--pink-color);
+  color: var(--red-color);
+}
+
+span.unicode:after {
+  content: "\2193";
+}
+
 .bg-image{
   background-image: url('x-wing.png');
   height: 150px;
   width: 150px;
-}
-
-.red {
-  background: var(--pink-color);
-  color: var(--red-color);
 }
 
 @media screen and (min-width: 20px) {
@@ -25,8 +29,4 @@ body {
       height: 150px;
       width: 110px;
   }
-}
-
-span.unicode:after {
-  content: "\2193";
 }

@@ -47,6 +47,6 @@ export type VStyleSheet = {id: string; media?: string; text?: string };
 
 export interface VDocument {
   baseURI: string;
-  styleSheets: VStyleSheet[];
+  adoptedStyleSheets: VStyleSheet[];
   children: VNode[];
 }

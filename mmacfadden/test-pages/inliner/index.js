@@ -19,24 +19,14 @@ async function screenshot() {
   transformer.events.on("snapshotComplete", (ev) => {
     console.log("event", ev);
     const ifrm = document.getElementById('screenshot');
-
+  
     const materializer = new DomMaterializer(ifrm.contentWindow.document);
     materializer.materialize(vdoc, assets);
-    const map = new NodeIdBiMap(ifrm.contentWindow.document);
+    // const map = new NodeIdBiMap(ifrm.contentWindow.document);
+
+    // window.target = ifrm.contentWindow.document.documentElement;
   });
   await transformer.start();
-
-  // var ifrm = document.getElementById('screenshot');
-  // const subDoc = ifrm.contentWindow.document;
-  // subDoc.documentElement.innerHTML = inlined.documentElement.innerHTML;
-  // const links = [];
-  // for (const child of subDoc.head.children) {
-  //   if (child.tagName === "LINK") {
-  //     links.push(child);
-  //   }
-  // }
-
-  // links.forEach(l => subDoc.head.removeChild(l));
 }
 
 screenshot();

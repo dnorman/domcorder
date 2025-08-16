@@ -9,16 +9,20 @@ import type { Asset } from '../inliner/events';
  * 
  * The materialization process:
  * 1. Creates a new Document instance
- * 2. Reconstructs the document element and all child nodes
- * 3. Applies stylesheets with inlined asset data
+ * 2. Reconstructs all document children (including DOCTYPE, HTML element, etc.)
+ * 3. Applies adopted stylesheets with inlined asset data
  * 4. Handles "asset:<id>" references by creating data URLs from binary buffers
  * 
  * The VDocument contains "asset:<id>" URLs that reference assets by their ID,
  * which are resolved to actual binary data from the AssetEvt array.
+ * 
+ * Regular stylesheets from <style> and <link> elements are processed and kept as
+ * <style> elements in the DOM with their processed CSS content.
  */
 export class DomMaterializer {
   private document: Document;
   private assetMap: Map<number, Asset>;
+  private isInStyleElement: boolean = false;
 
   constructor(document: Document) {
     this.document = document;
@@ -42,9 +46,15 @@ export class DomMaterializer {
     
     // Process all document children
     this.processDocumentChildren(vdoc.children, vdoc);
+
+    // This is a bit of a hack, to force the browser to re process stylesheets
+    // etc.  Otherwise, the stylesheets are not processed correctly. The style
+    // elements will be in the document, but they will not make therr way into
+    // document.styleSheets.
+    this.document.documentElement.innerHTML = this.document.documentElement.innerHTML;
     
-    // Apply stylesheets
-    this.applyStylesheets(vdoc.styleSheets);
+    // Apply adopted stylesheets
+    this.applyAdoptedStylesheets(vdoc.adoptedStyleSheets);
   }
 
   /**
@@ -97,6 +107,12 @@ export class DomMaterializer {
       }
     }
     
+    // Track if we're entering a style element
+    const wasInStyleElement = this.isInStyleElement;
+    if (vElement.tag === 'style') {
+      this.isInStyleElement = true;
+    }
+    
     // Process children
     if (vElement.children) {
       for (const child of vElement.children) {
@@ -106,6 +122,9 @@ export class DomMaterializer {
         }
       }
     }
+    
+    // Restore previous state
+    this.isInStyleElement = wasInStyleElement;
     
     // Handle shadow DOM
     if (vElement.shadow) {
@@ -177,6 +196,8 @@ export class DomMaterializer {
       .join(', ');
   }
 
+
+
   /**
    * Processes all document children and adds them to the document
    */
@@ -190,12 +211,26 @@ export class DomMaterializer {
   }
 
   /**
+   * Creates a text node, processing CSS if inside a style element
+   */
+  private createTextNode(vnode: VTextNode): Node {
+    if (this.isInStyleElement) {
+      // Process CSS content to replace asset URLs
+      const processedText = this.processCssText(vnode.text);
+      return this.document.createTextNode(processedText);
+    } else {
+      return this.document.createTextNode(vnode.text);
+    }
+  }
+
+  /**
    * Creates a DOM node from a VNode (handles all node types)
    */
   private createNode(vnode: VNode, vdoc: VDocument): Node | null {
     switch (vnode.nodeType) {
       case 'text':
-        return this.document.createTextNode(vnode.text);
+        // Check if this text node is inside a style element and process CSS
+        return this.createTextNode(vnode);
       case 'element':
         return this.createElement(vnode, vdoc);
       case 'cdata':
@@ -212,10 +247,10 @@ export class DomMaterializer {
   }
 
   /**
-   * Applies stylesheets to the document programmatically, inlining asset data where needed
+   * Applies adopted stylesheets to the document programmatically, inlining asset data where needed
    */
-  private applyStylesheets(styleSheets: VStyleSheet[]): void {
-    for (const sheet of styleSheets) {
+  private applyAdoptedStylesheets(adoptedStyleSheets: VStyleSheet[]): void {
+    for (const sheet of adoptedStyleSheets) {
       if (!sheet.text) continue;
       
       // Process the CSS text to inline asset data

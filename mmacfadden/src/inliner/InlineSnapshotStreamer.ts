@@ -199,37 +199,116 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap): VDocument
     vChildren.push(snapshotNode(child, pending, nodeIdMap));
   }
 
-  const rootEl = doc.documentElement;
-  const tree = snapElement(rootEl, pending, nodeIdMap);
-  tree.children = vChildren;
-
-  const styleSheets: VStyleSheet[] = [];
-  for (const el of Array.from(doc.querySelectorAll('style,link[rel~="stylesheet"]'))) {
-    if (el.tagName === "STYLE") {
-      const styleEl = el as HTMLStyleElement;
-      const text = readStyleText(styleEl);
-      styleSheets.push({ id: makeId(), media: mediaText(styleEl), text });
-      collectCssUrlsAssign(text, doc.baseURI, pending);
-    } else {
-      const linkEl = el as HTMLLinkElement;
-      let text: string | undefined;
+  // Handle adopted stylesheets
+  const adoptedStyleSheets: VStyleSheet[] = [];
+  if (doc.adoptedStyleSheets && doc.adoptedStyleSheets.length > 0) {
+    for (let i = 0; i < doc.adoptedStyleSheets.length; i++) {
+      const sheet = doc.adoptedStyleSheets[i];
       try {
-        const sheet = linkEl.sheet as CSSStyleSheet | null;
-        if (sheet) text = cssRulesToText(sheet);
-      } catch {}
-      styleSheets.push({ id: makeId(), media: mediaText(linkEl), text });
-      if (text) collectCssUrlsAssign(text, doc.baseURI, pending);
+        const rules = Array.from(sheet.cssRules);
+        const text = rules.map(rule => rule.cssText).join('\n');
+        adoptedStyleSheets.push({ 
+          id: makeId(), 
+          media: sheet.media.mediaText || undefined, 
+          text 
+        });
+        collectCssUrlsAssign(text, doc.baseURI, pending);
+      } catch (error) {
+        console.warn('Failed to process adopted stylesheet:', error);
+      }
     }
   }
 
   return {
     baseURI: doc.baseURI,
-    styleSheets: styleSheets,
+    adoptedStyleSheets: adoptedStyleSheets,
     children: vChildren
   };
 }
 
+function snapshotScriptElement(el: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
+  const vEl: VElement = {
+    id: nodeIdMap.getNodeId(el)!,
+    nodeType: "element",
+    tag: "script",
+    attrs: { },
+    children: Array.from(el.childNodes).map(c => snapshotNode(c, pending, nodeIdMap))
+  };
+  
+  for (const c of vEl.children!) {
+    if (c.nodeType === "text") {
+      c.text = "";
+    }
+  }
+
+  return vEl;
+}
+
+function snapshotStyleElement(styleElement: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
+  const vElement: VElement = {
+    id: nodeIdMap.getNodeId(styleElement)!,
+    nodeType: "element",
+    tag: "style",
+    attrs: { },
+    children: Array.from(styleElement.childNodes).map(c => snapshotNode(c, pending, nodeIdMap))
+  };
+  
+  const originalText = readStyleText(styleElement as HTMLStyleElement);
+  if (originalText) {
+    collectCssUrlsAssign(originalText, styleElement.baseURI || document.baseURI, pending);
+    // Replace the text content with processed CSS
+    for (const c of vElement.children!) {
+      if (c.nodeType === "text") {
+        c.text = originalText;
+      }
+    }
+  }
+  return vElement;
+}
+
+function snapshotLinkElement(linkElement: HTMLLinkElement, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
+  // Convert link element to style element with processed CSS
+  let cssText: string | undefined;
+  try {
+    const sheet = linkElement.sheet as CSSStyleSheet | null;
+    if (sheet) {
+      cssText = cssRulesToText(sheet);
+      if (cssText) {
+        collectCssUrlsAssign(cssText, linkElement.baseURI || document.baseURI, pending);
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to process stylesheet from link:', error);
+  }
+
+  // Create a style element instead of link
+  const vElement: VElement = {
+    id: nodeIdMap.getNodeId(linkElement)!,
+    nodeType: "element",
+    tag: "style",
+    attrs: linkElement.media ? {
+      media: linkElement.media
+    } : undefined,
+    children: cssText ? [{
+      id: -1,
+      nodeType: "text",
+      text: cssText
+    }] : []
+  };
+
+  return vElement;
+}
+
 function snapElement(el: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
+  // Handling of special element types
+  if (el instanceof HTMLScriptElement) {
+    return snapshotScriptElement(el, pending, nodeIdMap);
+  } else if (el instanceof HTMLStyleElement) {
+    return snapshotStyleElement(el, pending, nodeIdMap);
+  } else if (el instanceof HTMLLinkElement && el.rel === "stylesheet") {
+    return snapshotLinkElement(el, pending, nodeIdMap);
+  }
+
   const attrs: Record<string, string> = {};
   for (const a of Array.from(el.attributes)) attrs[a.name] = a.value;
 
@@ -247,6 +326,7 @@ function snapElement(el: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap
   if (attrs["style"]) {
     collectCssUrlsAssign(attrs["style"], el.baseURI || document.baseURI, pending);
   }
+  
   const id = nodeIdMap.getNodeId(el)!;
   const node: VElement = {
     id,
@@ -258,30 +338,8 @@ function snapElement(el: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap
   };
 
   for (const child of Array.from(el.childNodes)) {
-    if (child.nodeType === Node.TEXT_NODE) {
-      const childVNode: VTextNode = {
-        id: nodeIdMap.getNodeId(child)!, nodeType: "text", text: child.nodeValue ?? ""
-      }
-      node.children!.push(childVNode);
-    } else if (child.nodeType === Node.ELEMENT_NODE) {
-      if (child instanceof HTMLScriptElement || 
-          child instanceof HTMLStyleElement) {
-        const el = snapElement(child as Element, pending, nodeIdMap);
-        el.attrs = { };
-        for (const c of el.children!) {
-          if (c.nodeType === "text") {
-            c.text = "";
-          }
-        }
-        node.children!.push(el);
-      } else if (child instanceof HTMLLinkElement && child.rel === "stylesheet") {
-        const el = snapElement(child as Element, pending, nodeIdMap);
-        el.attrs = { rel: "stylesheet" };
-        node.children!.push(el);
-      } else {
-        node.children!.push(snapElement(child as Element, pending, nodeIdMap));
-      }
-    }
+    const vChild = snapshotNode(child, pending, nodeIdMap);
+    node.children!.push(vChild);
   }
 
   const sr = (el as HTMLElement).shadowRoot;
@@ -301,25 +359,42 @@ function snapShadow(sr: ShadowRoot, pending: PendingAssets, nodeIdMap: NodeIdBiM
 
 // Rewrite using provisional ids (before fetch)
 function rewriteAllRefsToPendingIds(snap: VDocument, pending: PendingAssets) {
-  // CSS
-  snap.styleSheets = snap.styleSheets.map((s) => {
+  // CSS - process adopted stylesheets
+  snap.adoptedStyleSheets = snap.adoptedStyleSheets.map((s) => {
     if (!("text" in s) || !s.text) return s;
-    const text = s.text.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m, q, raw) => {
+    const text = s.text.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m: string, q: string, raw: string) => {
       const id = idForUrl(raw, snap.baseURI, pending);
       return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
     });
     return { ...s, text } as VStyleSheet;
   });
-  let docEl: VElement | undefined = snap.children.find(c => c.nodeType === "element") as VElement | undefined;
-
-  if (docEl) {
-    // HTML
-    rewriteTreeUrlsToPendingIds(docEl, snap.baseURI, pending);
+  
+  // Process all document children to rewrite URLs in style elements
+  for (const child of snap.children) {
+    if (child.nodeType === "element") {
+      rewriteTreeUrlsToPendingIds(child, snap.baseURI, pending);
+    }
   }
 }
 
 function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: PendingAssets): void {
   if (node.nodeType !== "element") return;
+  
+  // Handle style elements specifically
+  if (node.tag === "style") {
+    // Process CSS content in style elements
+    if (node.children) {
+      for (const child of node.children) {
+        if (child.nodeType === "text" && child.text) {
+          child.text = child.text.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m: string, q: string, raw: string) => {
+            const id = idForUrl(raw, base, pending);
+            return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
+          });
+        }
+      }
+    }
+  }
+  
   if (node.attrs) {
     for (const key of ["src", "poster", "href", "xlink:href", "data-src"]) {
       const v = node.attrs[key];
