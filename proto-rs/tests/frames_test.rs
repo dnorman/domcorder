@@ -1,0 +1,175 @@
+use domcorder_proto::*;
+use bincode::Options;
+use std::fs;
+
+#[test]
+fn test_parse_typescript_generated_frames() {
+    let config = bincode::config::DefaultOptions::new()
+        .with_big_endian()
+        .with_fixint_encoding();
+
+    // Read the TypeScript-generated binary file
+    let binary_data = fs::read("../.sample_data/proto/frames-basic.bin")
+        .expect("Failed to read TypeScript-generated binary file");
+
+    println!("Reading TypeScript-generated file ({} bytes)...", binary_data.len());
+
+    // Parse all frames
+    let mut cursor = std::io::Cursor::new(&binary_data);
+    let mut parsed_frames: Vec<Frame> = Vec::new();
+
+    while cursor.position() < binary_data.len() as u64 {
+        match config.deserialize_from(&mut cursor) {
+            Ok(frame) => {
+                parsed_frames.push(frame);
+            }
+            Err(e) => {
+                println!("Failed to deserialize frame at position {}: {}", cursor.position(), e);
+                break;
+            }
+        }
+    }
+
+    println!("✓ Successfully parsed {} frames from TypeScript binary", parsed_frames.len());
+
+    // Expected frames that should match the TypeScript test
+    let expected_frames = vec![
+        Frame::Timestamp(TimestampData {
+            timestamp: 1722550000000, // Use a fixed timestamp to match
+        }),
+        Frame::Keyframe(KeyframeData {
+            doc_type: "<!DOCTYPE html>".to_string(),
+            document_element: DomNode::Element(ElementNode {
+                tag_name: "html".to_string(),
+                attributes: vec![],
+                children: vec![
+                    // Child 0: HEAD element
+                    DomNode::Element(ElementNode {
+                        tag_name: "head".to_string(),
+                        attributes: vec![],
+                        children: vec![
+                            // Child 0: whitespace text node
+                            DomNode::Text(TextNode { content: "\n    ".to_string() }),
+                            // Child 1: META element
+                            DomNode::Element(ElementNode {
+                                tag_name: "meta".to_string(),
+                                attributes: vec![("charset".to_string(), "utf-8".to_string())],
+                                children: vec![],
+                            }),
+                            // Child 2: whitespace text node
+                            DomNode::Text(TextNode { content: "\n    ".to_string() }),
+                            // Child 3: TITLE element
+                            DomNode::Element(ElementNode {
+                                tag_name: "title".to_string(),
+                                attributes: vec![],
+                                children: vec![DomNode::Text(TextNode {
+                                    content: "Test Document".to_string(),
+                                })],
+                            }),
+                            // Child 4: whitespace text node
+                            DomNode::Text(TextNode { content: "\n".to_string() }),
+                        ],
+                    }),
+                    // Child 1: whitespace text node between head and body
+                    DomNode::Text(TextNode { content: "\n".to_string() }),
+                    // Child 2: BODY element
+                    DomNode::Element(ElementNode {
+                        tag_name: "body".to_string(),
+                        attributes: vec![("class".to_string(), "app".to_string())],
+                        children: vec![
+                            // Child 0: whitespace text node
+                            DomNode::Text(TextNode { content: "\n    ".to_string() }),
+                            // Child 1: DIV element
+                            DomNode::Element(ElementNode {
+                                tag_name: "div".to_string(),
+                                attributes: vec![("id".to_string(), "root".to_string())],
+                                children: vec![
+                                    DomNode::Text(TextNode { content: "\n        ".to_string() }),
+                                    DomNode::Element(ElementNode {
+                                        tag_name: "h1".to_string(),
+                                        attributes: vec![],
+                                        children: vec![DomNode::Text(TextNode {
+                                            content: "Hello World".to_string(),
+                                        })],
+                                    }),
+                                    DomNode::Text(TextNode { content: "\n        ".to_string() }),
+                                    DomNode::Element(ElementNode {
+                                        tag_name: "p".to_string(),
+                                        attributes: vec![],
+                                        children: vec![DomNode::Text(TextNode {
+                                            content: "This is a test paragraph.".to_string(),
+                                        })],
+                                    }),
+                                    DomNode::Text(TextNode { content: "\n        ".to_string() }),
+                                    DomNode::Element(ElementNode {
+                                        tag_name: "button".to_string(),
+                                        attributes: vec![("onclick".to_string(), "alert('clicked')".to_string())],
+                                        children: vec![DomNode::Text(TextNode {
+                                            content: "Click me".to_string(),
+                                        })],
+                                    }),
+                                    DomNode::Text(TextNode { content: "\n    ".to_string() }),
+                                ],
+                            }),
+                            // Child 2: whitespace text node
+                            DomNode::Text(TextNode { content: "\n\n\n".to_string() }),
+                        ],
+                    }),
+                ],
+            }),
+        }),
+        Frame::ViewportResized(ViewportResizedData {
+            width: 1920,
+            height: 1080,
+        }),
+        Frame::ScrollOffsetChanged(ScrollOffsetChangedData {
+            scroll_x_offset: 0,
+            scroll_y_offset: 240,
+        }),
+        Frame::MouseMoved(MouseMovedData {
+            x: 150,
+            y: 200,
+        }),
+        Frame::MouseClicked(MouseClickedData {
+            x: 150,
+            y: 200,
+        }),
+        Frame::KeyPressed(KeyPressedData {
+            key: "Enter".to_string(),
+        }),
+        Frame::ElementFocused(ElementFocusedData {
+            element_id: 42,
+        }),
+        Frame::DomTextChanged(DomTextChangedData {
+            node_id: 42,
+            text: "Updated text content".to_string(),
+        }),
+        Frame::DomNodeAdded(DomNodeAddedData {
+            parent_node_id: 1,
+            index: 0,
+            node: DomNode::Element(ElementNode {
+                tag_name: "span".to_string(),
+                attributes: vec![("class".to_string(), "new-element".to_string())],
+                children: vec![DomNode::Text(TextNode {
+                    content: "New content".to_string(),
+                })],
+            }),
+        }),
+        Frame::DomAttributeChanged(DomAttributeChangedData {
+            node_id: 42,
+            attribute_name: "class".to_string(),
+            attribute_value: "updated-class".to_string(),
+        }),
+    ];
+
+    // Assert that we parsed the expected number of frames
+    assert_eq!(parsed_frames.len(), expected_frames.len(), 
+        "Should parse {} frames, got {}", expected_frames.len(), parsed_frames.len());
+
+    // Assert each frame matches expectations
+    for (i, (parsed, expected)) in parsed_frames.iter().zip(expected_frames.iter()).enumerate() {
+        assert_eq!(parsed, expected, "Frame {} should match expected frame", i);
+    }
+
+    println!("🎉 All {} frames match expected values!", parsed_frames.len());
+}

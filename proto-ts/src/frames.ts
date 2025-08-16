@@ -1,5 +1,5 @@
 import { Writer } from "./writer.ts";
-import { FrameType } from "../protocol.ts";
+import { FrameType } from "./protocol.ts";
 import { DomNode } from "./domnode.ts";
 
 
@@ -11,7 +11,7 @@ export class TimestampDataEnc {
     static readonly tag = FrameType.Timestamp;
     private constructor() { }
     static encode(w: Writer, timestamp: number | bigint): void {
-        w.u32(this.tag);                    // enum variant index
+        w.u32(FrameType.Timestamp);         // enum variant index
         w.u64(toU64(timestamp));            // timestamp value
     }
 }

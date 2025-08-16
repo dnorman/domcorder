@@ -1,29 +1,36 @@
 {
-  "name": "domcorder",
-  "module": "src/index.ts",
+  "name": "domcorder-workspace",
+  "version": "0.1.0",
+  "description": "DomCorder workspace - captures web pages as videos with full fidelity",
+  "private": true,
   "type": "module",
+  "workspaces": [
+    "demo-app",
+    "proto-ts"
+  ],
   "scripts": {
-    "build": "bun run build.ts",
-    "build:watch": "bun run build.ts --watch",
-    "dev": "bun run build.ts --watch & bun run src/server.ts",
-    "start": "bun run src/server.ts",
-    "test": "bun test",
-    "test:watch": "bun test --watch",
-    "test:coverage": "bun test --coverage",
-    "test:proto": "bun run test/proto/frames.test.ts",
+    "dev": "cd demo-app && bun run dev",
+    "build": "cd demo-app && bun run build",
+    "test:proto-ts": "cd proto-ts && bun run test",
+    "test:proto-rs": "cd proto-rs && cargo test",
+    "test:all": "bun run test:proto-ts && bun run test:proto-rs",
+    "clean": "rm -rf demo-app/node_modules proto-ts/node_modules node_modules && rm -rf proto-rs/target"
   },
+  "keywords": [
+    "dom",
+    "recording", 
+    "capture",
+    "video",
+    "web",
+    "browser",
+    "serialization"
+  ],
+  "author": "Domcorder Team",
+  "license": "MIT",
   "devDependencies": {
-    "@types/bun": "latest",
-    "@types/jsdom": "^21.1.7",
-    "jsdom": "^26.1.0"
+    "@types/node": "^20.0.0"
   },
-  "peerDependencies": {
-    "typescript": "^5.0.0"
-  },
-  "dependencies": {
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+  "engines": {
+    "bun": ">=1.0.0"
   }
 }

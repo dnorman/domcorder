@@ -1,0 +1,29 @@
+{
+  "name": "domcorder",
+  "module": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "build": "bun run build.ts",
+    "build:watch": "bun run build.ts --watch",
+    "dev": "bun run build.ts --watch & bun run src/server.ts",
+    "start": "bun run src/server.ts",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "test:proto": "bun run test/proto/frames.test.ts",
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/jsdom": "^21.1.7",
+    "jsdom": "^26.1.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}

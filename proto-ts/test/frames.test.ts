@@ -1,5 +1,5 @@
 import { JSDOM } from 'jsdom';
-import { Writer } from "../../mmacfadden/src/protocol/writer.ts";
+import { Writer } from "../src/writer.ts";
 import {
     TimestampDataEnc,
     KeyframeDataEnc,
@@ -12,9 +12,9 @@ import {
     DomTextChangedDataEnc,
     DomNodeAddedDataEnc,
     DomAttributeChangedDataEnc
-} from "../../mmacfadden/src/protocol/frames.ts";
+} from "../src/frames.ts";
 
-import { compareBinaryFile, hexDump } from '../util.js';
+import { compareBinaryFile, hexDump } from './util.js';
 
 // Set up DOM polyfill
 const dom = new JSDOM(`
@@ -51,8 +51,8 @@ function createSimpleNode(): Element {
 // Test the encoding with realistic data
 const w = new Writer();
 
-TimestampDataEnc.encode(w, Date.now());
-KeyframeDataEnc.encode(w, document);
+TimestampDataEnc.encode(w, 1722550000000); // Fixed timestamp to match Rust
+KeyframeDataEnc.encode(w, document);  // Contains DomNode - now uncommented
 ViewportResizedDataEnc.encode(w, 1920, 1080);
 ScrollOffsetChangedDataEnc.encode(w, 0, 240);
 MouseMovedDataEnc.encode(w, 150, 200);
@@ -60,15 +60,33 @@ MouseClickedDataEnc.encode(w, 150, 200);
 KeyPressedDataEnc.encode(w, "Enter");
 ElementFocusedDataEnc.encode(w, 42n);
 DomTextChangedDataEnc.encode(w, 42n, "Updated text content");
-DomNodeAddedDataEnc.encode(w, 1n, 0, createSimpleNode());
+DomNodeAddedDataEnc.encode(w, 1n, 0, createSimpleNode());  // Contains DomNode - now uncommented
 DomAttributeChangedDataEnc.encode(w, 42n, "class", "updated-class");
 
 export const streamBytes = w.finish();
 
 console.log(`\n✅ Successfully encoded ${streamBytes.length} bytes`);
 
+// Debug: Let's see what JSDOM structure we're actually encoding
+console.log('\n=== JSDOM Structure Analysis ===');
+console.log('Document element:', document.documentElement.tagName);
+console.log('HTML children count:', document.documentElement.childNodes.length);
+for (let i = 0; i < document.documentElement.childNodes.length; i++) {
+    const child = document.documentElement.childNodes[i];
+    console.log(`  Child ${i}: ${child.nodeType} (${child.nodeName}) - "${child.textContent?.trim() || 'no text'}"`);
+    if (child.nodeType === Node.ELEMENT_NODE) {
+        const elem = child as Element;
+        console.log(`    Attributes: ${elem.attributes.length}`);
+        console.log(`    Children: ${elem.childNodes.length}`);
+        for (let j = 0; j < elem.childNodes.length; j++) {
+            const grandchild = elem.childNodes[j];
+            console.log(`      Child ${j}: ${grandchild.nodeType} (${grandchild.nodeName}) - "${grandchild.textContent?.trim() || 'no text'}" RAW: "${JSON.stringify(grandchild.textContent)}"`);
+        }
+    }
+}
+
 // Compare against expected file using utility function
-compareBinaryFile('frames-basic.bin', streamBytes, 'frames-encoding');
+compareBinaryFile('frames-basic.bin', streamBytes, 'frames-encoding-with-domnodes');
 
 // Frame type validation
 const view = new DataView(streamBytes.buffer);

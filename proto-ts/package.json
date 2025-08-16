@@ -1,0 +1,20 @@
+{
+  "name": "@domcorder/proto-ts",
+  "version": "0.1.0",
+  "description": "TypeScript implementation of the domcorder binary protocol",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "bun run test/*.test.ts",
+    "test:watch": "bun run --watch test/*.test.ts"
+  },
+  "keywords": ["domcorder", "protocol", "binary", "serialization"],
+  "author": "Domcorder Team",
+  "license": "MIT",
+  "devDependencies": {
+    "jsdom": "^22.1.0"
+  },
+  "files": [
+    "src/"
+  ]
+}

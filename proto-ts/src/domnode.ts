@@ -65,7 +65,7 @@ export class DocumentNode {
     static readonly nodeType = DomNodeType.Document;
     private constructor() { }
     static encode(w: Writer, document: Document): void {
-        // Encode children as Vec<DomNode> (enum variant index written by bincode automatically)
+        // Encode children as Vec<DomNode>
         const children = Array.from(document.childNodes);
         w.u64(BigInt(children.length));
         for (const child of children) {
@@ -105,19 +105,22 @@ export class DomNode {
     /** Encode any DOM node using the appropriate encoder */
     static encode(w: Writer, node: Node): void {
         if (node.nodeType === Node.ELEMENT_NODE) {
+            w.u32(DomNodeType.Element);  // Write enum variant index
             ElementNode.encode(w, node as Element);
         } else if (node.nodeType === Node.TEXT_NODE) {
-            const textContent = (node as Text).textContent?.trim() || '';
-            if (textContent) {
-                TextNode.encode(w, node as Text);
-            }
+            w.u32(DomNodeType.Text);  // Write enum variant index
+            TextNode.encode(w, node as Text);
         } else if (node.nodeType === Node.CDATA_SECTION_NODE) {
+            w.u32(DomNodeType.CData);  // Write enum variant index
             CDataNode.encode(w, node as CDATASection);
         } else if (node.nodeType === Node.COMMENT_NODE) {
+            w.u32(DomNodeType.Comment);  // Write enum variant index
             CommentNode.encode(w, node as Comment);
         } else if (node.nodeType === Node.DOCUMENT_NODE) {
+            w.u32(DomNodeType.Document);  // Write enum variant index
             DocumentNode.encode(w, node as Document);
         } else if (node.nodeType === Node.DOCUMENT_TYPE_NODE) {
+            w.u32(DomNodeType.DocType);  // Write enum variant index
             DocTypeNode.encode(w, node as DocumentType);
         }
     }

@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { mkdirSync } from "fs";
+import { fileURLToPath } from "url";
 
 /**
  * Compare a buffer against an expected binary file, with optional blessing mode
@@ -11,8 +12,11 @@ import { mkdirSync } from "fs";
  * @returns {boolean} - True if comparison passes, false otherwise
  */
 export function compareBinaryFile(filename, actualBuffer, testName) {
-  const testDir = join(process.cwd(), "test");
-  const expectedFile = join(testDir, "proto", ".sample_binaries", filename);
+  // Get project root by going up from this util.js file location
+  const currentDir = dirname(fileURLToPath(import.meta.url));  // .../proto-ts/test/
+  const protoTsDir = dirname(currentDir);  // .../proto-ts/
+  const projectRoot = dirname(protoTsDir);  // .../ (project root)
+  const expectedFile = join(projectRoot, ".sample_data", "proto", filename);
   const shouldUpdate = process.env.PROTO_TEST_UPDATE === testName;
 
   console.log(`\n🔍 Comparing binary file: ${testName}`);
