@@ -32,6 +32,7 @@ export class InlineSnapshotStreamer {
   readonly events = new Emitter<InlineEvent>();
   private _pending: PendingAssets;
   private nodeIdMap: NodeIdBiMap;
+  private antiAnimationStylesheet: CSSStyleSheet | null = null;
 
   constructor(doc: Document = document, nodeIdMap: NodeIdBiMap, opts: InlineOptions = {}) {
     this.doc = doc;
@@ -53,12 +54,12 @@ export class InlineSnapshotStreamer {
   async start(): Promise<void> {
     const { doc, opts } = this;
 
-    // const antiAnim = opts.freezeAnimations ? injectAntiAnimationStyle(doc) : null;
+    this.antiAnimationStylesheet = opts.freezeAnimations ? injectAntiAnimationStyle(doc) : null;
     try {
       await waitForQuietWindow(doc, opts.quietWindowMs);
 
       // Phase 1: synchronous snapshot + assign ids + rewrite to asset:<id>
-      const snap = snapshotVDomStreaming(doc, this.nodeIdMap);
+      const snap = snapshotVDomStreaming(doc, this.nodeIdMap, this.antiAnimationStylesheet);
       rewriteAllRefsToPendingIds(snap, this.doc.baseURI, this._pending); // proactive rewrite
 
       // Emit the structural snapshot right away
@@ -70,7 +71,10 @@ export class InlineSnapshotStreamer {
       // All assets processed; signal completion (no payload)
       this.events.emit({ type: "snapshotComplete" });
     } finally {
-      // if (antiAnim) antiAnim.remove();
+      if (this.antiAnimationStylesheet) {
+        // Remove the anti-animation stylesheet from adopted stylesheets
+        doc.adoptedStyleSheets = doc.adoptedStyleSheets.filter(sheet => sheet !== this.antiAnimationStylesheet);
+      }
     }
   }
 
@@ -190,7 +194,7 @@ function snapshotNode(node: Node, pending: PendingAssets, nodeIdMap: NodeIdBiMap
 }
 
 // -------------------- Phase 1 (streaming variant) --------------------
-function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap): VDocument {
+function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, antiAnimationStylesheet: CSSStyleSheet | null = null): VDocument {
   const pending = new PendingAssets();
 
   const children = Array.from(doc.childNodes);
@@ -199,11 +203,17 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap): VDocument
     vChildren.push(snapshotNode(child, pending, nodeIdMap));
   }
 
-  // Handle adopted stylesheets
+  // Handle adopted stylesheets (excluding anti-animation stylesheet)
   const adoptedStyleSheets: VStyleSheet[] = [];
   if (doc.adoptedStyleSheets && doc.adoptedStyleSheets.length > 0) {
     for (let i = 0; i < doc.adoptedStyleSheets.length; i++) {
       const sheet = doc.adoptedStyleSheets[i];
+      
+      // Skip the anti-animation stylesheet
+      if (antiAnimationStylesheet && sheet === antiAnimationStylesheet) {
+        continue;
+      }
+      
       try {
         const rules = Array.from(sheet.cssRules);
         const text = rules.map(rule => rule.cssText).join('\n');
@@ -534,11 +544,14 @@ function safeAbs(raw: string, base: string): string {
 
 function makeId() { return Math.random().toString(36).slice(2); }
 
-function injectAntiAnimationStyle(doc: Document): HTMLStyleElement {
-  const style = doc.createElement("style");
-  style.textContent = `*{animation:none!important;transition:none!important}`;
-  doc.documentElement.appendChild(style);
-  return style;
+function injectAntiAnimationStyle(doc: Document): CSSStyleSheet {
+  const stylesheet = new CSSStyleSheet();
+  stylesheet.replaceSync(`*{animation:none!important;transition:none!important}`);
+  
+  // Add to adopted stylesheets
+  doc.adoptedStyleSheets = [...doc.adoptedStyleSheets, stylesheet];
+  
+  return stylesheet;
 }
 
 async function waitForQuietWindow(doc: Document, ms: number): Promise<void> {
