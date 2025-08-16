@@ -26,6 +26,10 @@ export class NodeIdBiMap {
     if (id === undefined) {
       throw new Error("Can not adopt node without an ID");
     }
+    
+    if (id > this.maxNodeId) {
+      this.maxNodeId = id;
+    }
 
     this.idToNodeMap.set(id, node);
 

@@ -53,7 +53,7 @@ export class InlineSnapshotStreamer {
   async start(): Promise<void> {
     const { doc, opts } = this;
 
-    const antiAnim = opts.freezeAnimations ? injectAntiAnimationStyle(doc) : null;
+    // const antiAnim = opts.freezeAnimations ? injectAntiAnimationStyle(doc) : null;
     try {
       await waitForQuietWindow(doc, opts.quietWindowMs);
 
@@ -70,7 +70,7 @@ export class InlineSnapshotStreamer {
       // All assets processed; signal completion (no payload)
       this.events.emit({ type: "snapshotComplete" });
     } finally {
-      if (antiAnim) antiAnim.remove();
+      // if (antiAnim) antiAnim.remove();
     }
   }
 

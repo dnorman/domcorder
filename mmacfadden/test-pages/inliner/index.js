@@ -26,8 +26,8 @@ async function screenshot() {
     materializer.materialize(vdoc, assets);
     
     const adoptedMap = new NodeIdBiMap();
-    // adoptedMap.adoptNodesFromSubTree(ifrm.contentWindow.document);
-    // console.log("adoptedMap", adoptedMap);
+    adoptedMap.adoptNodesFromSubTree(ifrm.contentWindow.document);
+    console.log("adoptedMap", adoptedMap);
 
   });
   await transformer.start();
