@@ -286,9 +286,10 @@ function snapshotLinkElement(linkElement: HTMLLinkElement, pending: PendingAsset
     id: nodeIdMap.getNodeId(linkElement)!,
     nodeType: "element",
     tag: "style",
-    attrs: linkElement.media ? {
-      media: linkElement.media
-    } : undefined,
+    attrs: {
+      "data-link-href": linkElement.href,
+      ...(linkElement.media ? { media: linkElement.media } : {})
+    },
     children: cssText ? [{
       id: -1,
       nodeType: "text",
@@ -400,7 +401,13 @@ function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: Pending
       const v = node.attrs[key];
       if (!v) continue;
       const id = idForUrl(v, base, pending);
-      if (id) node.attrs[key] = `asset:${id}`;
+      if (id) {
+        // Store original URL in data attribute for img elements
+        if (key === "src" && node.tag === "img") {
+          node.attrs["data-original-src"] = v;
+        }
+        node.attrs[key] = `asset:${id}`;
+      }
     }
     if (node.attrs["srcset"]) node.attrs["srcset"] = rewriteSrcsetToPending(node.attrs["srcset"], base, pending);
     if (node.attrs["style"]) node.attrs["style"] = rewriteInlineStyleToPending(node.attrs["style"], base, pending);
