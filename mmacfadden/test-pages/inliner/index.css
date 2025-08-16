@@ -16,17 +16,22 @@ span.unicode:after {
   content: "\2193";
 }
 
+.bg-image-container div {
+  display: inline-block;
+}
+
 .bg-image{
   background-image: url('x-wing.png');
-  height: 150px;
-  width: 150px;
+  background-size: 75px;
+  height: 75px;
+  width: 75px;
 }
 
 @media screen and (min-width: 20px) {
   .r2d2 {
       background: url(r2d2.png) center bottom / cover no-repeat;
       position: relative;
-      height: 150px;
-      width: 110px;
+      height: 100px;
+      width: 75px;
   }
 }
