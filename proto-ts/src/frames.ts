@@ -11,6 +11,7 @@ export class TimestampDataEnc {
     static readonly tag = FrameType.Timestamp;
     private constructor() { }
     static encode(w: Writer, timestamp: number | bigint): void {
+        if ((w as any).debug) console.log(`\n=== FRAME ${FrameType.Timestamp}: Timestamp ===`);
         w.u32(FrameType.Timestamp);         // enum variant index
         w.u64(toU64(timestamp));            // timestamp value
     }
