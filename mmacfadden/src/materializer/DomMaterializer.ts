@@ -41,11 +41,8 @@ export class DomMaterializer {
     // Clear existing document children
     this.clearDocumentChildren();
     
-    // Set document properties
-    this.setDocumentProperties(vdoc);
-    
     // Process all document children
-    this.processDocumentChildren(vdoc.children, vdoc);
+    this.processDocumentChildren(vdoc);
 
     // This is a bit of a hack, to force the browser to re process stylesheets
     // etc.  Otherwise, the stylesheets are not processed correctly. The style
@@ -78,24 +75,9 @@ export class DomMaterializer {
   }
 
   /**
-   * Sets document-level properties like base URI, language, and direction
-   */
-  private setDocumentProperties(vdoc: VDocument): void {
-    // Set base URI
-    if (vdoc.baseURI) {
-      const baseElement = this.document.createElement('base');
-      baseElement.href = vdoc.baseURI;
-      this.document.head?.appendChild(baseElement);
-    }
-
-    // Note: Language and direction attributes will be set on the document element
-    // when it's created during the children processing phase
-  }
-
-  /**
    * Recursively creates a DOM element from a VElement
    */
-  private createElement(vElement: VElement, vdoc: VDocument): Element {
+  private createElement(vElement: VElement): Element {
     const element = this.document.createElementNS(vElement.ns || null, vElement.tag);
     
     // Set attributes
@@ -116,7 +98,7 @@ export class DomMaterializer {
     // Process children
     if (vElement.children) {
       for (const child of vElement.children) {
-        const childNode = this.createNode(child, vdoc);
+        const childNode = this.createNode(child);
         if (childNode) {
           element.appendChild(childNode);
         }
@@ -130,7 +112,7 @@ export class DomMaterializer {
     if (vElement.shadow) {
       const shadowRoot = element.attachShadow({ mode: 'closed' });
       for (const shadowChild of vElement.shadow) {
-        const shadowNode = this.createNode(shadowChild, vdoc);
+        const shadowNode = this.createNode(shadowChild);
         if (shadowNode) {
           shadowRoot.appendChild(shadowNode);
         }
@@ -201,9 +183,9 @@ export class DomMaterializer {
   /**
    * Processes all document children and adds them to the document
    */
-  private processDocumentChildren(children: VNode[], vdoc: VDocument): void {
-    for (const child of children) {
-      const node = this.createNode(child, vdoc);
+  private processDocumentChildren(vdoc: VDocument): void {
+    for (const child of vdoc.children) {
+      const node = this.createNode(child);
       if (node) {
         this.document.appendChild(node);
       }
@@ -226,13 +208,13 @@ export class DomMaterializer {
   /**
    * Creates a DOM node from a VNode (handles all node types)
    */
-  private createNode(vnode: VNode, vdoc: VDocument): Node | null {
+  private createNode(vnode: VNode): Node | null {
     switch (vnode.nodeType) {
       case 'text':
         // Check if this text node is inside a style element and process CSS
         return this.createTextNode(vnode);
       case 'element':
-        return this.createElement(vnode, vdoc);
+        return this.createElement(vnode);
       case 'cdata':
         return this.document.createCDATASection(vnode.data);
       case 'comment':
