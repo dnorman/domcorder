@@ -1,0 +1,10 @@
+.mdi-home:before {
+  content: "\F02DC";
+}
+
+@font-face {
+  font-family: Material Design Icons;
+  font-weight: 400;
+  font-style: normal;
+  src: url(materialdesignicons-webfont.ttf) format("truetype");
+}

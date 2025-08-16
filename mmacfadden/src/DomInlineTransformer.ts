@@ -97,7 +97,6 @@ export class DomInlineTransformer {
       
       const charCode = char.codePointAt(0)!;
       if (charCode > 255) {
-      
         const hexString = charCode.toString(16).padStart(4, '0').toUpperCase();
         result += '\\' + hexString;
       } else {

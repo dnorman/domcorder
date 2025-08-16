@@ -11,77 +11,14 @@
  * Goal: do not keep all assets in memory at once.
  */
 
-// -------------------- Event types --------------------
-export type SnapshotStartedEvt = { type: "snapshotStarted"; snapshot: VDomSnapshot };
-export type AssetEvt = {
-  type: "asset";
-  id: number;                    // monotonic id assigned in Phase 1
-  url: string;                   // resolved absolute
-  assetType: AssetType;
-  mime?: string;
-  bytes?: number;
-  buf: ArrayBuffer;              // raw data for this asset (not retained by streamer)
-  index: number;                 // completion index (1..total)
-  total: number;                 // total pending assets
-};
-export type SnapshotCompleteEvt = { type: "snapshotComplete" };
-export type InlineEvent = SnapshotStartedEvt | AssetEvt | SnapshotCompleteEvt;
+import type { NodeIdBiMap } from "../dom/NodeIdBiMap";
+import type { AssetType } from "./AssetType";
+import { Emitter } from "./Emitter";
+import type { InlineEvent } from "./events";
+import { PendingAssets } from "./PendingAssets";
+import type { VDocument, VElement, VNode, VStyleSheet, VTextNode } from "../dom/vdom";
 
-// Typed emitter (EventTarget-based)
-class Emitter<T extends { type: string }> extends EventTarget {
-  emit(payload: T) { this.dispatchEvent(new CustomEvent(payload.type, { detail: payload })); }
-  on<K extends T["type"]>(type: K, fn: (ev: Extract<T, { type: K }>) => void) {
-    const handler = (e: Event) => fn((e as CustomEvent).detail);
-    this.addEventListener(type as string, handler as EventListener);
-    return () => this.removeEventListener(type as string, handler as EventListener);
-  }
-}
 
-// -------------------- Core types --------------------
-export type VNode =
-  | { kind: "text"; text: string }
-  | {
-      kind: "element";
-      tag: string;
-      ns?: string;
-      attrs?: Record<string, string>;
-      children?: VNode[];
-      shadow?: VNode[]; // optional shadow DOM capture
-    };
-
-export type VStyle =
-  | { kind: "inline"; id: string; media?: string; text: string }
-  | { kind: "link"; id: string; media?: string; href: string; text?: string };
-
-export type AssetType = "image" | "font" | "binary";
-
-export interface VDomSnapshot {
-  version: 3;                  // bump for zero-retention behavior
-  baseURI: string;
-  lang?: string | null;
-  dir?: string | null;
-  styles: VStyle[];
-  tree: VNode;                 // rooted at <html>
-  // Internal only:
-  _pending?: PendingAssets;
-}
-
-type PendingAsset = { id: number; url: string; type: AssetType };
-class PendingAssets {
-  nextId = 1;
-  byUrl = new Map<string, PendingAsset>();
-  order: PendingAsset[] = [];
-  assign(url: string, type: AssetType): PendingAsset {
-    const existing = this.byUrl.get(url);
-    if (existing) return existing;
-    const pa = { id: this.nextId++, url, type };
-    this.byUrl.set(url, pa);
-    this.order.push(pa);
-    return pa;
-  }
-}
-
-// -------------------- Public streaming API --------------------
 export interface InlineOptions {
   concurrency?: number;        // Max parallel fetches
   inlineCrossOrigin?: boolean; // Allow CORS inlining (default false)
@@ -93,15 +30,20 @@ export class InlineSnapshotStreamer {
   private doc: Document;
   private opts: Required<InlineOptions>;
   readonly events = new Emitter<InlineEvent>();
+  private _pending: PendingAssets;
+  private nodeIdMap: NodeIdBiMap;
 
-  constructor(doc: Document = document, opts: InlineOptions = {}) {
+  constructor(doc: Document = document, nodeIdMap: NodeIdBiMap, opts: InlineOptions = {}) {
     this.doc = doc;
+    this.nodeIdMap = nodeIdMap;
+
     this.opts = {
       concurrency: opts.concurrency ?? 6,
       inlineCrossOrigin: !!opts.inlineCrossOrigin,
       quietWindowMs: opts.quietWindowMs ?? 200,
       freezeAnimations: opts.freezeAnimations ?? true,
     };
+    this._pending = new PendingAssets();
   }
 
   /**
@@ -116,8 +58,8 @@ export class InlineSnapshotStreamer {
       await waitForQuietWindow(doc, opts.quietWindowMs);
 
       // Phase 1: synchronous snapshot + assign ids + rewrite to asset:<id>
-      const snap = snapshotVDOMStreaming(doc);
-      rewriteAllRefsToPendingIds(snap); // proactive rewrite
+      const snap = snapshotVDomStreaming(doc, this.nodeIdMap);
+      rewriteAllRefsToPendingIds(snap, this._pending); // proactive rewrite
 
       // Emit the structural snapshot right away
       this.events.emit({ type: "snapshotStarted", snapshot: snapshotView(snap) });
@@ -132,14 +74,13 @@ export class InlineSnapshotStreamer {
     }
   }
 
-  private async fetchAssetsStreaming(snap: VDomSnapshot): Promise<void> {
+  private async fetchAssetsStreaming(snap: VDocument): Promise<void> {
     const sem = makeSemaphore(this.opts.concurrency);
-    const pending = snap._pending!;
-    const total = pending.order.length;
+    const total = this._pending!.order.length;
 
     let index = 0;
     await Promise.all(
-      pending.order.map((pa) =>
+      this._pending!.order.map((pa) =>
         sem.run(async () => {
           const res = await fetchOriginalBytesAB(pa.url, this.opts.inlineCrossOrigin);
           // Even on failure we advance progress; consumers can reconcile missing assets by id
@@ -147,14 +88,16 @@ export class InlineSnapshotStreamer {
           if (res.ok) {
             this.events.emit({
               type: "asset",
-              id: pa.id,
-              url: pa.url,
-              assetType: pa.type,
-              mime: res.mime,
-              bytes: res.buf.byteLength,
-              buf: res.buf,
-              index: i,
-              total,
+              asset: {
+                id: pa.id,
+                url: pa.url,
+                assetType: pa.type,
+                mime: res.mime,
+                bytes: res.buf.byteLength,
+                buf: res.buf,
+                index: i,
+                total,
+              }
             });
           } else {
             // Optionally emit a separate failure event type; keeping it simple per ask
@@ -169,24 +112,24 @@ export class InlineSnapshotStreamer {
 }
 
 // Public-facing snapshot view (strip internals)
-function snapshotView(snap: VDomSnapshot): VDomSnapshot {
+function snapshotView(snap: VDocument): VDocument {
   const { _pending, ...pub } = snap as any;
-  return pub as VDomSnapshot;
+  return pub as VDocument;
 }
 
 // -------------------- Phase 1 (streaming variant) --------------------
-function snapshotVDOMStreaming(doc: Document): VDomSnapshot {
+function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap): VDocument {
   const pending = new PendingAssets();
 
   const rootEl = doc.documentElement;
-  const tree = snapElement(rootEl, pending);
+  const tree = snapElement(rootEl, pending, nodeIdMap);
 
-  const styles: VStyle[] = [];
+  const styleSheets: VStyleSheet[] = [];
   for (const el of Array.from(doc.querySelectorAll('style,link[rel~="stylesheet"]'))) {
     if (el.tagName === "STYLE") {
       const styleEl = el as HTMLStyleElement;
       const text = readStyleText(styleEl);
-      styles.push({ kind: "inline", id: makeId(), media: mediaText(styleEl), text });
+      styleSheets.push({ id: makeId(), media: mediaText(styleEl), text });
       collectCssUrlsAssign(text, doc.baseURI, pending);
     } else {
       const linkEl = el as HTMLLinkElement;
@@ -195,24 +138,21 @@ function snapshotVDOMStreaming(doc: Document): VDomSnapshot {
         const sheet = linkEl.sheet as CSSStyleSheet | null;
         if (sheet) text = cssRulesToText(sheet);
       } catch {}
-      styles.push({ kind: "link", id: makeId(), media: mediaText(linkEl), href: linkEl.href, text });
+      styleSheets.push({ id: makeId(), media: mediaText(linkEl), text });
       if (text) collectCssUrlsAssign(text, doc.baseURI, pending);
     }
   }
 
-  const snap: VDomSnapshot = {
-    version: 3,
+  return {
     baseURI: doc.baseURI,
     lang: doc.documentElement.getAttribute("lang"),
     dir: doc.documentElement.getAttribute("dir"),
-    styles,
-    tree,
-    _pending: pending,
+    styleSheets: styleSheets,
+    documentElement: tree
   };
-  return snap;
 }
 
-function snapElement(el: Element, pending: PendingAssets): VNode {
+function snapElement(el: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
   const attrs: Record<string, string> = {};
   for (const a of Array.from(el.attributes)) attrs[a.name] = a.value;
 
@@ -221,17 +161,19 @@ function snapElement(el: Element, pending: PendingAssets): VNode {
     const u = el.currentSrc || el.src;
     if (u) pending.assign(resolve(el, u), "image");
     if (attrs["srcset"]) assignSrcsetUrls(attrs["srcset"], el.baseURI || document.baseURI, pending);
-  }
-  if (el instanceof HTMLLinkElement && /(^|\s)(icon|apple-touch-icon)(\s|$)/i.test(el.rel)) {
+  } else if (el instanceof HTMLLinkElement && /(^|\s)(icon|apple-touch-icon)(\s|$)/i.test(el.rel)) {
     if (el.href) pending.assign(resolve(el, el.href), "image");
-  }
-  if (el instanceof HTMLVideoElement && el.poster) {
+  } else if (el instanceof HTMLVideoElement && el.poster) {
     pending.assign(resolve(el, el.poster), "image");
   }
-  if (attrs["style"]) collectCssUrlsAssign(attrs["style"], el.baseURI || document.baseURI, pending);
 
-  const node: VNode = {
-    kind: "element",
+  if (attrs["style"]) {
+    collectCssUrlsAssign(attrs["style"], el.baseURI || document.baseURI, pending);
+  }
+  const id = nodeIdMap.getNodeId(el)!;
+  const node: VElement = {
+    id,
+    nodeType: "element",
     tag: el.tagName.toLowerCase(),
     ns: el.namespaceURI || undefined,
     attrs: Object.keys(attrs).length ? attrs : undefined,
@@ -239,43 +181,64 @@ function snapElement(el: Element, pending: PendingAssets): VNode {
   };
 
   for (const child of Array.from(el.childNodes)) {
-    if (child.nodeType === Node.TEXT_NODE) node.children!.push({ kind: "text", text: child.nodeValue ?? "" });
-    else if (child.nodeType === Node.ELEMENT_NODE) node.children!.push(snapElement(child as Element, pending));
+    if (child.nodeType === Node.TEXT_NODE) {
+      const childVNode: VTextNode = {
+        id: nodeIdMap.getNodeId(child)!, nodeType: "text", text: child.nodeValue ?? ""
+      }
+      node.children!.push(childVNode);
+    } else if (child.nodeType === Node.ELEMENT_NODE) {
+      if (child instanceof HTMLScriptElement || 
+          child instanceof HTMLStyleElement) {
+        const el = snapElement(child as Element, pending, nodeIdMap);
+        el.attrs = { };
+        for (const c of el.children!) {
+          if (c.nodeType === "text") {
+            c.text = "";
+          }
+        }
+        node.children!.push(el);
+      } else if (child instanceof HTMLLinkElement && child.rel === "stylesheet") {
+        const el = snapElement(child as Element, pending, nodeIdMap);
+        el.attrs = { rel: "stylesheet" };
+        node.children!.push(el);
+      } else {
+        node.children!.push(snapElement(child as Element, pending, nodeIdMap));
+      }
+    }
   }
 
   const sr = (el as HTMLElement).shadowRoot;
-  if (sr) node.shadow = snapShadow(sr, pending);
+  if (sr) node.shadow = snapShadow(sr, pending, nodeIdMap);
 
   return node;
 }
 
-function snapShadow(sr: ShadowRoot, pending: PendingAssets): VNode[] {
+function snapShadow(sr: ShadowRoot, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VNode[] {
   const out: VNode[] = [];
   for (const n of Array.from(sr.childNodes)) {
-    if (n.nodeType === Node.TEXT_NODE) out.push({ kind: "text", text: n.nodeValue ?? "" });
-    else if (n.nodeType === Node.ELEMENT_NODE) out.push(snapElement(n as Element, pending));
+    if (n.nodeType === Node.TEXT_NODE) out.push({ id: nodeIdMap.getNodeId(n)!, nodeType: "text", text: n.nodeValue ?? "" });
+    else if (n.nodeType === Node.ELEMENT_NODE) out.push(snapElement(n as Element, pending, nodeIdMap));
   }
   return out;
 }
 
 // Rewrite using provisional ids (before fetch)
-function rewriteAllRefsToPendingIds(snap: VDomSnapshot) {
-  const pending = snap._pending!;
+function rewriteAllRefsToPendingIds(snap: VDocument, pending: PendingAssets) {
   // CSS
-  snap.styles = snap.styles.map((s) => {
+  snap.styleSheets = snap.styleSheets.map((s) => {
     if (!("text" in s) || !s.text) return s;
     const text = s.text.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m, q, raw) => {
       const id = idForUrl(raw, snap.baseURI, pending);
       return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
     });
-    return { ...s, text } as VStyle;
+    return { ...s, text } as VStyleSheet;
   });
   // HTML
-  rewriteTreeUrlsToPendingIds(snap.tree, snap.baseURI, pending);
+  rewriteTreeUrlsToPendingIds(snap.documentElement, snap.baseURI, pending);
 }
 
 function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: PendingAssets): void {
-  if (node.kind === "text") return;
+  if (node.nodeType === "text") return;
   if (node.attrs) {
     for (const key of ["src", "poster", "href", "xlink:href", "data-src"]) {
       const v = node.attrs[key];

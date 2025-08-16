@@ -1,4 +1,4 @@
-import { NodeIdBiMap } from './NodeIdBiMap';
+import { NodeIdBiMap } from './dom/NodeIdBiMap';
 import type { DomOperation } from './operation';
 import { deserializeDomNode } from './serialization';
 
