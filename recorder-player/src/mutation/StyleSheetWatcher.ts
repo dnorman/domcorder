@@ -21,14 +21,38 @@ function ensureStyleSheetId(sheet: CSSStyleSheet): number {
   - Detects additions/removals/reordering in document.styleSheets (order preserved)
   - Detects changes to adoptedStyleSheets on Document and (optionally) ShadowRoots
   - Optional: emits when CSSStyleSheet content mutates via insertRule/deleteRule/replace/replaceSync
+    - 'sheet-rules-insert' for insertRule operations
+    - 'sheet-rules-delete' for deleteRule operations  
+    - 'sheet-rules-replace' for replace and replaceSync operations
   - Works via three mechanisms you can mix & match: MutationObserver, monkey‑patching, and polling
 
   Quick start
   -----------
-  const watcher = new StyleSheetWatcher({ pollInterval: 1000, patchCSSOM: true });
-  watcher.on('document-style-sheets', e => console.log('doc sheets', e));
-  watcher.on('adopted-style-sheets', e => console.log('adopted', e));
-  watcher.on('sheet-rules', e => console.log('rules changed', e));
+  const watcher = new StyleSheetWatcher({ 
+    pollInterval: 1000, 
+    patchCSSOM: true,
+    handler: (events) => {
+      events.forEach(event => {
+        switch (event.type) {
+          case 'document-style-sheets':
+            console.log('doc sheets', event);
+            break;
+          case 'adopted-style-sheets':
+            console.log('adopted', event);
+            break;
+          case 'sheet-rules-insert':
+            console.log('rules inserted', event);
+            break;
+          case 'sheet-rules-delete':
+            console.log('rules deleted', event);
+            break;
+          case 'sheet-rules-replace':
+            console.log('rules replaced', event);
+            break;
+        }
+      });
+    }
+  });
   watcher.start();
   // Optionally: watch specific ShadowRoots (manual control)
   // watcher.watchShadowRoot(someShadowRoot);
@@ -37,23 +61,7 @@ function ensureStyleSheetId(sheet: CSSStyleSheet): number {
   // watcher.stop();
 */
 
-// ---------------------------------------------------------------------------
-// Tiny event emitter
-// ---------------------------------------------------------------------------
 
-type Handler<T> = (data: T) => void;
-class Emitter {
-  private map = new Map<string, Set<Function>>();
-  on<T = any>(event: string, fn: Handler<T>) {
-    if (!this.map.has(event)) this.map.set(event, new Set());
-    this.map.get(event)!.add(fn);
-    return () => this.off(event, fn);
-  }
-  off(event: string, fn: Function) { this.map.get(event)?.delete(fn); }
-  emit<T = any>(event: string, data: T) {
-    this.map.get(event)?.forEach(fn => { try { (fn as Handler<T>)(data); } catch (e) { console.error(e); } });
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Event types
@@ -63,7 +71,7 @@ export type DocumentStyleSheetsEvent = {
   type: 'document-style-sheets';
   target: Document;
   /** Current ordered list of document.styleSheets */
-  now: CSSStyleSheet[]; // ORDER MATTERS
+  now: ReadonlyArray<CSSStyleSheet>; // ORDER MATTERS
   added: CSSStyleSheet[];
   removed: CSSStyleSheet[];
   /** True when only the order changed (membership the same) */
@@ -79,17 +87,33 @@ export type AdoptedStyleSheetsEvent = {
   removed: CSSStyleSheet[];
 };
 
-export type SheetRulesEvent = {
-  type: 'sheet-rules';
+export type SheetRulesInsertEvent = {
+  type: 'sheet-rules-insert';
   sheet: CSSStyleSheet;
-  op: 'insertRule' | 'deleteRule' | 'replace' | 'replaceSync';
-  args: any[];
+  rule: string;
+  index?: number;
+};
+
+export type SheetRulesDeleteEvent = {
+  type: 'sheet-rules-delete';
+  sheet: CSSStyleSheet;
+  index: number;
+};
+
+export type SheetRulesReplaceEvent = {
+  type: 'sheet-rules-replace';
+  sheet: CSSStyleSheet;
+  text: string;
 };
 
 export type StyleSheetWatcherEvent =
   | DocumentStyleSheetsEvent
   | AdoptedStyleSheetsEvent
-  | SheetRulesEvent;
+  | SheetRulesInsertEvent
+  | SheetRulesDeleteEvent
+  | SheetRulesReplaceEvent;
+
+export type StyleSheetWatcherEventHandler = (operations: StyleSheetWatcherEvent) => void;
 
 // ---------------------------------------------------------------------------
 // Options
@@ -108,6 +132,8 @@ export interface StyleSheetWatcherOptions {
   root?: Document;
   /** Debounce window for events in ms (0 = no debounce). Default: 0 */
   debounceMs?: number;
+  /** Handler function to receive events */
+  handler?: StyleSheetWatcherEventHandler;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +176,7 @@ function snapshotAdopted(target: Document | ShadowRoot): ReadonlyArray<CSSStyleS
 
 export class StyleSheetWatcher {
   private opts: Required<StyleSheetWatcherOptions>;
-  private emitter = new Emitter();
+  private handler?: StyleSheetWatcherEventHandler;
   private mo?: MutationObserver;
   private pollTimer?: number;
 
@@ -178,10 +204,8 @@ export class StyleSheetWatcher {
       root: options.root ?? document,
       debounceMs: options.debounceMs ?? 0,
     } as Required<StyleSheetWatcherOptions>;
+    this.handler = options.handler;
   }
-
-  on<T extends StyleSheetWatcherEvent>(event: T['type'], handler: Handler<T>) { return this.emitter.on(event, handler as any); }
-  off<T extends StyleSheetWatcherEvent>(event: T['type'], handler: Handler<T>) { return this.emitter.off(event, handler as any); }
 
   start() {
     const doc = this.opts.root;
@@ -379,7 +403,10 @@ export class StyleSheetWatcher {
     const proto = CSSStyleSheet.prototype as any;
     const wrap = <K extends keyof CSSStyleSheet>(key: K, cb: (sheet: CSSStyleSheet, args: any[]) => void) => {
       const orig = (proto as any)[key] as Function;
-      if (typeof orig !== 'function') return;
+      if (typeof orig !== 'function') {
+        console.warn(`StyleSheetWatcher: CSSStyleSheet.${key} is not available`);
+        return;
+      }
       (proto as any)[key] = function(this: CSSStyleSheet, ...args: any[]) {
         const result = orig.apply(this, args);
         try { ensureStyleSheetId(this); } catch {}
@@ -389,10 +416,26 @@ export class StyleSheetWatcher {
       this.unpatchFns.push(() => { (proto as any)[key] = orig; });
     };
 
-    wrap('insertRule', (sheet, args) => this.emitter.emit<SheetRulesEvent>('sheet-rules', { type: 'sheet-rules', sheet, op: 'insertRule', args }));
-    wrap('deleteRule', (sheet, args) => this.emitter.emit<SheetRulesEvent>('sheet-rules', { type: 'sheet-rules', sheet, op: 'deleteRule', args }));
-    wrap('replace', (sheet, args) => this.emitter.emit<SheetRulesEvent>('sheet-rules', { type: 'sheet-rules', sheet, op: 'replace', args }));
-    wrap('replaceSync', (sheet, args) => this.emitter.emit<SheetRulesEvent>('sheet-rules', { type: 'sheet-rules', sheet, op: 'replaceSync', args }));
+    wrap('insertRule', (sheet, args) => this.emitEvent({ type: 'sheet-rules-insert', sheet, rule: args[0], index: args[1] }));
+    wrap('deleteRule', (sheet, args) => this.emitEvent({ type: 'sheet-rules-delete', sheet, index: args[0] }));
+    wrap('replace', (sheet, args) => this.emitEvent({ type: 'sheet-rules-replace', sheet, text: args[0] }));
+    wrap('replaceSync', (sheet, args) => this.emitEvent({ type: 'sheet-rules-replace', sheet, text: args[0] }));
+  }
+
+  // -------------------------------------------------------------------------
+  // Event emission
+  // -------------------------------------------------------------------------
+
+  private emitEvent(event: StyleSheetWatcherEvent) {
+    if (this.handler) {
+      try {
+        this.handler(event);
+      } catch (e) {
+        console.error('Error in StyleSheetWatcher handler:', e);
+      }
+    } else {
+      console.warn('StyleSheetWatcher: No handler registered for event:', event.type);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -406,7 +449,7 @@ export class StyleSheetWatcher {
   }
 
   private emitDebounced<T extends StyleSheetWatcherEvent>(type: T['type'], key: string, payload: T) {
-    if (this.opts.debounceMs <= 0) { this.emitter.emit(type, payload as any); return; }
+    if (this.opts.debounceMs <= 0) { this.emitEvent(payload); return; }
     this.pendingEvents.set(key, payload);
     const prev = this.debounceTimers.get(key);
     if (prev) clearTimeout(prev);
@@ -414,15 +457,10 @@ export class StyleSheetWatcher {
       const p = this.pendingEvents.get(key);
       this.pendingEvents.delete(key);
       this.debounceTimers.delete(key);
-      this.emitter.emit(type, p as any);
+      this.emitEvent(p as any);
     }, this.opts.debounceMs);
     this.debounceTimers.set(key, timer);
   }
 }
 
-// Convenience helper
-export function watchAll(opts: Partial<StyleSheetWatcherOptions> = {}) {
-  const w = new StyleSheetWatcher({ pollInterval: 1000, observeMutations: true, patchAdoptedSetter: true, patchCSSOM: false, debounceMs: 0, ...opts });
-  w.start();
-  return w;
-}
+

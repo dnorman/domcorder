@@ -1,7 +1,7 @@
 import { NodeIdBiMap } from "./dom";
 import { generateKeyFrame, inlineSubTree, type InlineStartedEvent, type KeyFrameStartedEvent } from "./inliner";
 import type { Asset } from "./inliner/Asset";
-import { DomChangeDetector, type DomOperation } from "./mutation";
+import { DomChangeDetector, StyleSheetWatcher, type DomOperation, type StyleSheetWatcherEvent } from "./mutation";
 import { 
   FrameType, 
   type AssetData, 
@@ -24,6 +24,7 @@ export class PageRecorder {
   private pendingAssets: boolean;
   private operationQueue: DomOperation[];
   private changeDetector: DomChangeDetector | null;
+  private styleSheetWatcher: StyleSheetWatcher | null;
 
   constructor(sourceDocument: Document, frameHandler: FrameHandler) {
     this.sourceDocument = sourceDocument;
@@ -31,6 +32,7 @@ export class PageRecorder {
     this.pendingAssets = false;
     this.operationQueue = [];
     this.changeDetector = null;
+    this.styleSheetWatcher = null;
   }
 
   start() {
@@ -73,6 +75,13 @@ export class PageRecorder {
         } else {
           this.processOperation(operation, sourceDocNodeIdMap, this.frameHandler);
         }
+      }
+    });
+
+    this.styleSheetWatcher = new StyleSheetWatcher({
+      patchCSSOM: true,
+      handler: (event: StyleSheetWatcherEvent) => {
+        console.log("style sheet watcher event", event);
       }
     });
   }
