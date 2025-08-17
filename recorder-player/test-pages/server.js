@@ -18,8 +18,6 @@ app.use('/dist', express.static(path.join(__dirname, "..", "dist")));
 // });
 
 app.listen(port, () => {
-  console.log(`Test page @ http://localhost:${port}/mutation/`);
-  console.log(`Test page @ http://localhost:${port}/keyframe/`);
+  console.log(`Test page @ http://localhost:${port}/recorder-player/`);
   console.log(`Test page @ http://localhost:${port}/stylesheets/`);
-  console.log(`Test page @ http://localhost:${port}/inliner/`);
 });
