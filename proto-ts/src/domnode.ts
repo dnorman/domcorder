@@ -1,4 +1,12 @@
 import { Writer } from "./writer.ts";
+import { DomNodeData } from "./protocol.ts";
+
+// Forward declaration to avoid circular import
+interface BufferReader {
+    readU32(): number;
+    readU64(): bigint;
+    readString(): string;
+}
 
 // DOM Node Type Constants - sequential indices for bincode compatibility
 export enum DomNodeType {
@@ -53,6 +61,35 @@ export class ElementNode {
             await DomNode.encodeStreaming(w, child);
         }
     }
+
+    // Decode method
+    static decode(r: BufferReader): DomNodeData {
+        // Read tag name
+        const tag = r.readString();
+
+        // Read attributes (u64 count + pairs of strings)
+        const attributeCount = Number(r.readU64());
+        const attributes: Record<string, string> = {};
+        for (let i = 0; i < attributeCount; i++) {
+            const name = r.readString();
+            const value = r.readString();
+            attributes[name] = value;
+        }
+
+        // Read children (u64 count + DOM nodes)
+        const childCount = Number(r.readU64());
+        const children: DomNodeData[] = [];
+        for (let i = 0; i < childCount; i++) {
+            children.push(DomNode.decode(r));
+        }
+
+        return {
+            nodeType: DomNodeType.Element,
+            tag,
+            attributes,
+            children
+        };
+    }
 }
 
 export class TextNode {
@@ -61,6 +98,17 @@ export class TextNode {
     static encode(w: Writer, textNode: Text): void {
         // Write text content (enum variant index written by bincode automatically)
         w.strUtf8(textNode.textContent || '');
+    }
+
+    static decode(r: BufferReader): DomNodeData {
+        // Read text content
+        const text = r.readString();
+
+        return {
+            nodeType: DomNodeType.Text,
+            text,
+            children: []
+        };
     }
 }
 
@@ -71,6 +119,17 @@ export class CDataNode {
         // Write CDATA content (enum variant index written by bincode automatically)
         w.strUtf8(cdataNode.textContent || '');
     }
+
+    static decode(r: BufferReader): DomNodeData {
+        // Read CDATA content
+        const text = r.readString();
+
+        return {
+            nodeType: DomNodeType.CData,
+            text,
+            children: []
+        };
+    }
 }
 
 export class CommentNode {
@@ -79,6 +138,17 @@ export class CommentNode {
     static encode(w: Writer, commentNode: Comment): void {
         // Write comment content (enum variant index written by bincode automatically)
         w.strUtf8(commentNode.textContent || '');
+    }
+
+    static decode(r: BufferReader): DomNodeData {
+        // Read comment content
+        const text = r.readString();
+
+        return {
+            nodeType: DomNodeType.Comment,
+            text,
+            children: []
+        };
     }
 }
 
@@ -102,6 +172,20 @@ export class DocumentNode {
         for (const child of children) {
             await DomNode.encodeStreaming(w, child);
         }
+    }
+
+    static decode(r: BufferReader): DomNodeData {
+        // Read children (u64 count + DOM nodes)
+        const childCount = Number(r.readU64());
+        const children: DomNodeData[] = [];
+        for (let i = 0; i < childCount; i++) {
+            children.push(DomNode.decode(r));
+        }
+
+        return {
+            nodeType: DomNodeType.Document,
+            children
+        };
     }
 }
 
@@ -127,6 +211,37 @@ export class DocTypeNode {
         } else {
             w.u32(0); // None
         }
+    }
+
+    static decode(r: BufferReader): DomNodeData {
+        // Read doctype name
+        const tag = r.readString();
+
+        // Read optional public ID
+        const hasPublicId = r.readU32();
+        let publicId: string | undefined;
+        if (hasPublicId === 1) {
+            publicId = r.readString();
+        }
+
+        // Read optional system ID
+        const hasSystemId = r.readU32();
+        let systemId: string | undefined;
+        if (hasSystemId === 1) {
+            systemId = r.readString();
+        }
+
+        // Store optional IDs in attributes for compatibility
+        const attributes: Record<string, string> = {};
+        if (publicId) attributes.publicId = publicId;
+        if (systemId) attributes.systemId = systemId;
+
+        return {
+            nodeType: DomNodeType.DocType,
+            tag,
+            attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
+            children: []
+        };
     }
 }
 
@@ -176,6 +291,29 @@ export class DomNode {
         } else if (node.nodeType === Node.DOCUMENT_TYPE_NODE) {
             w.u32(DomNodeType.DocType);  // Write enum variant index
             DocTypeNode.encode(w, node as DocumentType); // DocType nodes are simple
+        }
+    }
+
+    /** Decode any DOM node using the appropriate decoder */
+    static decode(r: BufferReader): DomNodeData {
+        // Read node type (u32)
+        const nodeType = r.readU32();
+
+        switch (nodeType) {
+            case DomNodeType.Element:
+                return ElementNode.decode(r);
+            case DomNodeType.Text:
+                return TextNode.decode(r);
+            case DomNodeType.CData:
+                return CDataNode.decode(r);
+            case DomNodeType.Comment:
+                return CommentNode.decode(r);
+            case DomNodeType.Document:
+                return DocumentNode.decode(r);
+            case DomNodeType.DocType:
+                return DocTypeNode.decode(r);
+            default:
+                throw new Error(`Unknown DOM node type: ${nodeType}`);
         }
     }
 }

@@ -97,3 +97,86 @@ export function streamObserve(stream: ReadableStream<Uint8Array>): () => Promise
     const observer = new StreamObserver(stream);
     return () => observer.check();
 }
+
+// Frame stream observer for ReadableStream<Frame>
+export interface FrameChunkInfo<T = any> {
+    data: T;
+}
+
+export interface FrameStreamAnalysis<T = any> {
+    chunkCount: number;
+    chunks: FrameChunkInfo<T>[];
+}
+
+export class FrameStreamObserver<T = any> {
+    private chunks: FrameChunkInfo<T>[] = [];
+    private reader: ReadableStreamDefaultReader<T>;
+    private consuming = false;
+    private done = false;
+
+    constructor(stream: ReadableStream<T>) {
+        this.reader = stream.getReader();
+        this.startConsuming();
+    }
+
+    private async startConsuming(): Promise<void> {
+        this.consuming = true;
+
+        try {
+            while (true) {
+                const { done, value } = await this.reader.read();
+                if (done) {
+                    this.done = true;
+                    break;
+                }
+
+                this.chunks.push({
+                    data: value
+                });
+            }
+        } catch (error) {
+            console.error('Frame stream observer error:', error);
+        } finally {
+            this.consuming = false;
+            this.reader.releaseLock();
+        }
+    }
+
+    /** Drain accumulated chunks and return analysis */
+    async check(): Promise<FrameStreamAnalysis<T>> {
+        // Give microtasks a chance to run (should be enough for stream consumption)
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const drainedChunks = [...this.chunks];
+        this.chunks = []; // Clear the accumulated chunks
+
+        return {
+            chunks: drainedChunks,
+            chunkCount: drainedChunks.length
+        };
+    }
+
+    /** Get current chunk count without draining */
+    getCurrentChunkCount(): number {
+        return this.chunks.length;
+    }
+
+    /** Check if stream is done */
+    isDone(): boolean {
+        return this.done;
+    }
+
+    /** Wait for stream to complete */
+    async waitForCompletion(): Promise<FrameStreamAnalysis<T>> {
+        while (!this.done && this.consuming) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        return this.check();
+    }
+}
+
+/** Factory function for Frame streams */
+export function frameStreamObserve<T = any>(stream: ReadableStream<T>): () => Promise<FrameStreamAnalysis<T>> {
+    const observer = new FrameStreamObserver(stream);
+    return () => observer.check();
+}
