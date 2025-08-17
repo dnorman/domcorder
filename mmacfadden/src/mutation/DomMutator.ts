@@ -1,5 +1,6 @@
 import { NodeIdBiMap } from '../dom/';
 import type { DomOperation } from './operations';
+import { applyChanges } from './StringChangeDetector';
 
 export class DomMutator {
   private root: Node;
@@ -59,7 +60,9 @@ export class DomMutator {
         case 'updateText': {
           const node = this.nodeMap.getNodeById(op.nodeId)!;
           if (node && node.nodeType === Node.TEXT_NODE) {
-            node.textContent = op.value;
+            const textContent = node.textContent!;
+            const updatedText = applyChanges(textContent, op.ops);
+            node.textContent = updatedText;
           }
           break;
         }

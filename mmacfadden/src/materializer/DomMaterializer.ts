@@ -35,7 +35,7 @@ export class DomMaterializer {
    * @param vdoc The virtual document representation
    * @param assets Array of asset events containing binary data
    */
-  public materialize(vdoc: VDocument, assets: Asset[]): void {
+  public materializeDocument(vdoc: VDocument, assets: Asset[]): void {
     // Build asset map for quick lookup
     this.buildAssetMap(assets);
     
@@ -45,14 +45,21 @@ export class DomMaterializer {
     // Process all document children
     this.processDocument(vdoc);
 
-    // This is a bit of a hack, to force the browser to re process stylesheets
-    // etc.  Otherwise, the stylesheets are not processed correctly. The style
-    // elements will be in the document, but they will not make therr way into
-    // document.styleSheets.
-    // this.document.documentElement.innerHTML = this.document.documentElement.innerHTML;
-    
     // Apply adopted stylesheets
     this.applyAdoptedStylesheets(vdoc.adoptedStyleSheets);
+
+    // Clean up
+    this.clear();
+  }
+
+  public materializeNode(vNode: VNode, assets: Asset[]): Node {
+    this.buildAssetMap(assets);
+    const node = this.createNode(vNode);
+    if (!node) {
+      throw new Error(`Failed to materialize node ${vNode.id}`);
+    }
+    this.clear();
+    return node;
   }
 
   /**
@@ -388,7 +395,7 @@ export class DomMaterializer {
    * Clears the materializer state
    */
   clear(): void {
-    this.document = new Document();
     this.assetMap.clear();
+    this.isInStyleElement = false;
   }
 }

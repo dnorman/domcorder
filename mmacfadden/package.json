@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "build": " bun build src/index.ts --outdir dist --target bun",
-    "dev": "bun build src/index.ts --outdir dist --target bun --watch & bun run test-pages/server.js"
+    "dev": "bun build src/index.ts --outdir dist --target bun --watch & bun run test-pages/server.js",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -15,7 +17,6 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "jsdom": "^26.1.0",
-    "@types/jsdom": "^21.1.7"
+    "jsdom": "^26.1.0"
   }
 }

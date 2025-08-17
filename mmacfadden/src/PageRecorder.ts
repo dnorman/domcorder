@@ -11,7 +11,8 @@ import {
   type DomNodeRemovedData, 
   type DomTextChangedData, 
   type Frame, 
-  type KeyframeData
+  type KeyframeData,
+  type TextOperationData
 } from "./protocol";
 
 export type FrameHandler = (frame: Frame) => void;
@@ -36,7 +37,6 @@ export class PageRecorder {
     const sourceDocNodeIdMap = new NodeIdBiMap();
     sourceDocNodeIdMap.assignNodeIdsToSubTree(this.sourceDocument);
 
-    this.pendingAssets = true;
     generateKeyFrame(
       this.sourceDocument, sourceDocNodeIdMap, {
       onKeyFrameStarted: (ev: KeyFrameStartedEvent) => {
@@ -47,6 +47,7 @@ export class PageRecorder {
             assetCount: ev.assetCount,
           } as KeyframeData,
         });
+        this.pendingAssets = ev.assetCount > 0;
       },
       onAsset: (asset: Asset) => {
         this.frameHandler({
@@ -79,12 +80,13 @@ export class PageRecorder {
   private processOperation(
     operation: DomOperation, 
     nodeIdMap: NodeIdBiMap,
-    frameHandler: FrameHandler): void {
+    frameHandler: FrameHandler
+  ): void {
     switch (operation.op) {
       case "insert":
         inlineSubTree(operation.node, nodeIdMap, {
           onInlineStarted: (ev: InlineStartedEvent) => {
-            this.pendingAssets = true;
+            this.pendingAssets = ev.assetCount > 0;
             frameHandler({
               frameType: FrameType.DomNodeAdded,
               data: {
@@ -142,11 +144,28 @@ export class PageRecorder {
         break;
 
       case "updateText":
+        const operations: TextOperationData[] = operation.ops.map(op => {
+          switch (op.type) {
+            case "insert":
+              return {
+                op: "insert",
+                index: op.index,
+                text: op.content
+              };
+            case "remove":
+              return {
+                op: "remove",
+                index: op.index,
+                length: op.count
+              };
+            }
+        });
+        
         frameHandler({
           frameType: FrameType.DomTextChanged,
           data: {
             nodeId: operation.nodeId,
-            text: operation.value
+            operations
           } as DomTextChangedData,
         });
         break;

@@ -1,6 +1,7 @@
 import { DomMutator } from "./DomMutator";
 import { NodeIdBiMap } from "../dom/NodeIdBiMap";
 import type { DomOperation } from "./operations";
+import { computeMinimalChanges } from "./StringChangeDetector";
 
 export class DomChangeDetector {
   private liveDomRoot: Node;
@@ -107,10 +108,11 @@ export class DomChangeDetector {
     // Handle text nodes (we know the types are the same)
     if (liveNode.nodeType === Node.TEXT_NODE) {
       if (snapshotNode.textContent !== liveNode.textContent) {
+        const changes = computeMinimalChanges(snapshotNode.textContent || '', liveNode.textContent || '');
         ops.push({
           op: 'updateText',
           nodeId: liveNodeId,
-          value: liveNode.textContent || ''
+          ops: changes
         });
       }
       return ops;
