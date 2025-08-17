@@ -94,12 +94,9 @@ export type KeyframeData = {
 export type AssetData = {
     id: number;                    
     url: string;                 
-    assetType: "image" | "font" | "binary";
+    assetType: "image" | "font" | "binary"; // Not sure we need this.
     mime?: string;
-    bytes?: number;
-    buf: ArrayBuffer;              // raw data for this asset (not retained by streamer)
-    index: number;                 // completion index (1..total)
-    total: number;  
+    buf: ArrayBuffer;
 }
 
 export type ViewportResizedData = {

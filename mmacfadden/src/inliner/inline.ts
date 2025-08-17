@@ -262,7 +262,7 @@ export function rewriteAllRefsToPendingIds(snap: VDocument, baseURI: string, pen
   }
 }
 
-function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: PendingAssets): void {
+export function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: PendingAssets): void {
   if (node.nodeType !== "element") return;
   
   // Handle style elements specifically

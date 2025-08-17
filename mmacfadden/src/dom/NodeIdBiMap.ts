@@ -49,8 +49,13 @@ export class NodeIdBiMap {
     }
   }
 
-  public getNodeId(node: Node): number | undefined {
-    return NodeIdBiMap.getNodeId(node);
+  public getNodeId(node: Node): number {
+    let id = NodeIdBiMap.getNodeId(node);
+    if (id === undefined) {
+      this.assignNodeIdsToSubTree(node);
+      id = NodeIdBiMap.getNodeId(node)!;
+    }
+    return id;
   }
 
   public getNodeById(id: number): Node | undefined {

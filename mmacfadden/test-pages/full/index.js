@@ -1,54 +1,26 @@
 import { 
-  KeyFrameGenerator,
-  DomChangeDetector,
-  DomMutator,
-  DomMaterializer,
-  NodeIdBiMap } from "../../dist/index.js";
+  PageRecorder,
+  PagePlayer
+} from "../../dist/index.js";
 
-const sourceDocNodeIdMap = new NodeIdBiMap();
-sourceDocNodeIdMap.assignNodeIdsToSubTree(document);
+// General Page Set Up
+const stylesheet = new CSSStyleSheet();
+stylesheet.replaceSync(`
+  .adopted-style-sheet {
+    background-color: green;
+    color: white;
+  }
+`);
+document.adoptedStyleSheets = [stylesheet];
 
-start();
 
-async function start() {
-  let assets = [];
-  let vdoc;
+// Player / Recorder Set Up
 
-  const transformer = new KeyFrameGenerator(document, sourceDocNodeIdMap);
+const iFrame = document.getElementById('target');
+const pagePlayer = new PagePlayer(iFrame.contentWindow.document);
 
-  await transformer.generateKeyFrame({
-    onSnapshotStarted: (ev) => {
-      console.log("snapshotStarted", ev);
-      vdoc = ev.snapshot;
-      
-    },
-    onAsset: (asset) => {
-      console.log("asset", asset);
-      assets.push(asset);
-    },
-    onSnapshotComplete: () => {
-      console.log("snapshotComplete");
-      injectSnapshotAndSync(vdoc, assets);
-    }
-  });
-}
-
-function injectSnapshotAndSync(vdoc, assets) {
-  const iFrame = document.getElementById('target');
-  
-  const materializer = new DomMaterializer(iFrame.contentWindow.document);
-  materializer.materialize(vdoc, assets);
-  
-  const targetDocNodeIdMap = new NodeIdBiMap();
-  targetDocNodeIdMap.adoptNodesFromSubTree(iFrame.contentWindow.document);
-
-  const mutator = new DomMutator(iFrame.contentWindow.document.documentElement, targetDocNodeIdMap);
-
-  new DomChangeDetector(document, sourceDocNodeIdMap, (operations) => {
-    operations.forEach(op => {
-      console.log(op);
-    });
-
-    mutator.applyOps(operations);
-  });
-}
+const screenRecorder = new PageRecorder(document, (frame) => {
+  console.log("frame", frame);
+  pagePlayer.handleFrame(frame);
+});
+screenRecorder.start();
