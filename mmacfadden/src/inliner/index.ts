@@ -1,1 +1,1 @@
-export * from "./InlineSnapshotStreamer";
+export * from "./KeyFrameGenerator";

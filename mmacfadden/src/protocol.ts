@@ -7,45 +7,99 @@ export enum FrameType {
     Timestamp = 0,
 
     Keyframe = 1,
+    Asset = 2,
     
-    ViewportResized = 2,
-    ScrollOffsetChanged = 3,
+    ViewportResized = 3,
+    ScrollOffsetChanged = 4,
 
-    MouseMoved = 4,
-    MouseClicked = 5,
-    KeyPressed = 6,
-    ElementFocused = 7,
-    TextSelectionChanged = 8,
+    MouseMoved = 5,
+    MouseClicked = 6,
+    KeyPressed = 7,
+    ElementFocused = 8,
+    TextSelectionChanged = 9,
     
-    DomNodeAdded = 9,
-    DomNodeRemoved = 10,
-    DomAttributeChanged = 11,
-    DomAttributeRemoved = 12,
-    DomTextChanged = 13,
-    DomNodeResized = 14,
+    DomNodeAdded = 10,
+    DomNodeRemoved = 11,
+    DomAttributeChanged = 12,
+    DomAttributeRemoved = 13,
+    DomTextChanged = 14,
+    DomNodeResized = 15,
 
-    StyleSheetChanged = 15,
+    StyleSheetChanged = 16,
 }
 
 export type TimestampData = {
     timestamp: number;
 }
 
-export type DomNodeData = {
-    nodeType: number;
-    tag?: string;
-    attributes?: Record<string, string>;
-    children: DomNodeData[];
-    text?: string;
-}
+export type TextNodeData = {
+    id: number;
+    nodeType: "text"; 
+    text: string
+  };
+  
+  export type CDATASectionData = {
+    id: number;
+    nodeType: "cdata"; 
+    data: string
+  };
+  
+  export type CommentData = {
+    id: number;
+    nodeType: "comment"; 
+    data: string
+  };
+  
+  export type ProcessingInstructionData = {
+    id: number;
+    nodeType: "processingInstruction"; 
+    target: string;
+    data: string
+  };
+  
+  export type DocumentTypeData = {
+    id: number;
+    nodeType: "documentType"; 
+    name: string;
+    publicId?: string;
+    systemId?: string;
+  };
+  
+  export type ElementData = {
+    id: number;
+    nodeType: "element";
+    tag: string;
+    ns?: string;
+    attrs?: Record<string, string>;
+    children?: NodeData[];
+    shadow?: NodeData[];
+  };
+  
+  export type NodeData = TextNodeData | ElementData | CDATASectionData | CommentData | ProcessingInstructionData | DocumentTypeData;
+  
+  export type StyleSheetData = { id: string; media?: string; text?: string };
+  
+  export interface DocumentData {
+    id: number;
+    adoptedStyleSheets: StyleSheetData[];
+    children: NodeData[];
+  }
 
-export type HtmlDocumentData = {
-    docType: string;
-    documentElement: DomNodeData;
-}
 
 export type KeyframeData = {
-    document: HtmlDocumentData;
+    document: DocumentData;
+    assetCount: number;
+}
+
+export type AssetData = {
+    id: number;                    
+    url: string;                 
+    assetType: "image" | "font" | "binary";
+    mime?: string;
+    bytes?: number;
+    buf: ArrayBuffer;              // raw data for this asset (not retained by streamer)
+    index: number;                 // completion index (1..total)
+    total: number;  
 }
 
 export type ViewportResizedData = {
@@ -84,34 +138,34 @@ export type TextSelectionChangedData = {
 }
 
 export type DomNodeAddedData = {
-    parentNodeId: string;
+    parentNodeId: number;
     index: number;
-    node: DomNodeData;
+    node: NodeData;
+    assetCount: number;
 }
 
 export type DomNodeRemovedData = {
-    parentNodeId: string;
-    index: number;
+    nodeId: number;
 }
 
 export type DomAttributeChangedData = {
-    nodeId: string;
+    nodeId: number;
     attributeName: string;
     attributeValue: string;
 }
 
 export type DomAttributeRemovedData = {
-    nodeId: string;
+    nodeId: number;
     attributeName: string;
 }
 
 export type DomTextChangedData = {
-    nodeId: string;
+    nodeId: number;
     text: string;
 }
 
 export type DomNodeResizedData = {
-    nodeId: string;
+    nodeId: number;
     width: number;
     height: number;
 }

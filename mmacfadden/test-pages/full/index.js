@@ -1,5 +1,5 @@
 import { 
-  InlineSnapshotStreamer,
+  KeyFrameGenerator,
   DomChangeDetector,
   DomMutator,
   DomMaterializer,
@@ -8,30 +8,29 @@ import {
 const sourceDocNodeIdMap = new NodeIdBiMap();
 sourceDocNodeIdMap.assignNodeIdsToSubTree(document);
 
-screenshot();
+start();
 
-async function screenshot() {
+async function start() {
   let assets = [];
   let vdoc;
 
-  const transformer = new InlineSnapshotStreamer(document, sourceDocNodeIdMap);
+  const transformer = new KeyFrameGenerator(document, sourceDocNodeIdMap);
 
-  transformer.events.on("snapshotStarted", (ev) => {
-    console.log("event", ev);
-    vdoc = ev.snapshot;
+  await transformer.generateKeyFrame({
+    onSnapshotStarted: (ev) => {
+      console.log("snapshotStarted", ev);
+      vdoc = ev.snapshot;
+      
+    },
+    onAsset: (asset) => {
+      console.log("asset", asset);
+      assets.push(asset);
+    },
+    onSnapshotComplete: () => {
+      console.log("snapshotComplete");
+      injectSnapshotAndSync(vdoc, assets);
+    }
   });
-
-  transformer.events.on("asset", (ev) => {
-    console.log("event", ev);
-    assets.push(ev.asset);
-  });
-  
-  transformer.events.on("snapshotComplete", (ev) => {
-    console.log("event", ev);
-    injectSnapshotAndSync(vdoc, assets);
-
-  });
-  await transformer.start();
 }
 
 function injectSnapshotAndSync(vdoc, assets) {
