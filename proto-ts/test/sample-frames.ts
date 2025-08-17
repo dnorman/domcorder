@@ -55,39 +55,39 @@ function createSimpleNode(): Element {
     return span;
 }
 
-export function generateTestFrames(writer: Writer): void {
+export async function generateTestFrames(writer: Writer): Promise<void> {
     const timestamp = 1722550000000n; // Fixed timestamp to match frames-basic.bin
-    
+
     // Frame 0: Timestamp
-    TimestampDataEnc.encode(writer, timestamp);
-    
+    await TimestampDataEnc.encode(writer, timestamp);
+
     // Frame 1: Keyframe with DOM
-    KeyframeDataEnc.encode(writer, dom.window.document);
-    
+    await KeyframeDataEnc.encode(writer, dom.window.document);
+
     // Frame 2: ViewportResized
-    ViewportResizedDataEnc.encode(writer, 1920, 1080);
-    
+    await ViewportResizedDataEnc.encode(writer, 1920, 1080);
+
     // Frame 3: ScrollOffsetChanged
-    ScrollOffsetChangedDataEnc.encode(writer, 0, 240);
-    
+    await ScrollOffsetChangedDataEnc.encode(writer, 0, 240);
+
     // Frame 4: MouseMoved
-    MouseMovedDataEnc.encode(writer, 150, 200);
-    
+    await MouseMovedDataEnc.encode(writer, 150, 200);
+
     // Frame 5: MouseClicked
-    MouseClickedDataEnc.encode(writer, 150, 200);
-    
+    await MouseClickedDataEnc.encode(writer, 150, 200);
+
     // Frame 6: KeyPressed
-    KeyPressedDataEnc.encode(writer, "Enter");
-    
+    await KeyPressedDataEnc.encode(writer, "Enter");
+
     // Frame 7: ElementFocused
-    ElementFocusedDataEnc.encode(writer, 42n);
-    
+    await ElementFocusedDataEnc.encode(writer, 42n);
+
     // Frame 8: DomTextChanged
-    DomTextChangedDataEnc.encode(writer, 42n, "Updated text content");
-    
+    await DomTextChangedDataEnc.encode(writer, 42n, "Updated text content");
+
     // Frame 9: DomNodeAdded
-    DomNodeAddedDataEnc.encode(writer, 1n, 0, createSimpleNode());
-    
+    await DomNodeAddedDataEnc.encode(writer, 1n, 0, createSimpleNode());
+
     // Frame 10: DomAttributeChanged
-    DomAttributeChangedDataEnc.encode(writer, 42n, "class", "updated-class");
+    await DomAttributeChangedDataEnc.encode(writer, 42n, "class", "updated-class");
 }

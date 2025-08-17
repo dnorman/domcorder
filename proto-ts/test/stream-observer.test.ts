@@ -1,0 +1,133 @@
+// Test for stream observer utility
+import { describe, test, expect } from "bun:test";
+import { Writer } from "../src/writer.ts";
+import { streamObserve, StreamObserver } from "./stream-observer.ts";
+import { TimestampDataEnc, KeyframeDataEnc } from "../src/frames.ts";
+import { setupDOMGlobals } from "./sample-frames.ts";
+import { JSDOM } from "jsdom";
+
+// Set up DOM polyfills
+setupDOMGlobals();
+
+describe("Stream Observer Utility", () => {
+    test("should observe chunks only after yield points", async () => {
+        const [writer, stream] = Writer.create(16); // Large enough to hold both u32s
+        const check = streamObserve(stream);
+
+        // Initially no chunks
+        let analysis = await check();
+        expect(analysis.chunkCount).toBe(0);
+        expect(analysis.totalBytes).toBe(0);
+
+        // Write data without yielding
+        writer.u32(42);  // 4 bytes
+        writer.u32(100); // 4 more bytes = 8 total, under 16 byte chunk size
+
+        // No auto-flush yet because under chunk size
+        analysis = await check();
+        expect(analysis.chunkCount).toBe(0);
+
+        // Now yield - but streamWait won't flush because buffer (8 bytes) < chunk size (16 bytes)
+        await writer.streamWait();
+
+        // Still no chunks because streamWait didn't flush
+        analysis = await check();
+        expect(analysis.chunkCount).toBe(0);
+
+        // Force flush with endFrame
+        await writer.endFrame();
+
+        analysis = await check();
+        expect(analysis.chunkCount).toBe(1);
+        expect(analysis.totalBytes).toBe(8);
+        expect(analysis.chunks[0].size).toBe(8);
+
+        writer.close();
+    });
+
+    test("should respect chunk size limits with auto-flush", async () => {
+        const [writer, stream] = Writer.create(4); // Very small chunks
+        const check = streamObserve(stream);
+
+        // Write data that exceeds chunk size - should auto-flush
+        writer.u32(1); // 4 bytes - exactly chunk size, should auto-flush
+
+        // Auto-flush happened, chunk is visible immediately
+        let analysis = await check();
+        expect(analysis.chunkCount).toBe(1);
+        expect(analysis.chunks[0].size).toBe(4);
+
+        // Write more data
+        writer.u32(2); // 4 bytes - should auto-flush again
+
+        // Second auto-flush happened, another chunk visible
+        analysis = await check();
+        expect(analysis.chunkCount).toBe(1);
+        expect(analysis.chunks[0].size).toBe(4);
+
+        // Total so far should be 2 chunks, 8 bytes
+        // (Note: check() drains chunks each time, so we see 1 chunk per call)
+
+        writer.close();
+    });
+
+    test("should work with frame encoding", async () => {
+        const [writer, stream] = Writer.create(16); // Small chunks to force multiple
+        const check = streamObserve(stream);
+
+        // Encode a timestamp frame
+        await TimestampDataEnc.encode(writer, 1234567890n);
+
+        let analysis = await check();
+        expect(analysis.chunkCount).toBe(1);
+        expect(analysis.totalBytes).toBe(12); // u32 frame type + u64 timestamp
+
+        // Encode a keyframe with small DOM
+        const dom = new JSDOM(`
+            <!DOCTYPE html>
+            <html><head><title>Test</title></head><body><div>Hello</div></body></html>
+        `);
+
+        await KeyframeDataEnc.encode(writer, dom.window.document);
+
+        analysis = await check();
+        expect(analysis.chunkCount).toBeGreaterThan(0);
+        expect(analysis.totalBytes).toBeGreaterThan(50); // Should be substantial
+
+        writer.close();
+    });
+
+    test("should support streaming frame encoding analysis", async () => {
+        const dom = new JSDOM(`
+            <!DOCTYPE html>
+            <html>
+            <head><title>Test</title></head>
+            <body>
+                <div>Content 1</div>
+                <div>Content 2</div>
+                <div>Content 3</div>
+                <div>Content 4</div>
+                <div>Content 5</div>
+            </body>
+            </html>
+        `);
+
+        const [writer, stream] = Writer.create(32); // Small chunks to force streaming
+        const check = streamObserve(stream);
+
+        // Use streaming encoding
+        await KeyframeDataEnc.encodeStreaming(writer, dom.window.document);
+
+        const analysis = await check();
+
+        // Streaming should produce multiple chunks
+        expect(analysis.chunkCount).toBeGreaterThan(1);
+        expect(analysis.totalBytes).toBeGreaterThan(100);
+
+        // Log the analysis for debugging
+        console.log(`Streaming analysis: ${analysis.chunkCount} chunks, ${analysis.totalBytes} bytes`);
+        console.log(`Chunk sizes: ${analysis.chunks.map(c => c.size).join(', ')}`);
+
+        writer.close();
+    });
+});

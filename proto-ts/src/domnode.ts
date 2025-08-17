@@ -32,6 +32,27 @@ export class ElementNode {
             DomNode.encode(w, child);
         }
     }
+
+    // Streaming version that yields during recursion
+    static async encodeStreaming(w: Writer, element: Element): Promise<void> {
+        // Write tag name (enum variant index written by bincode automatically)
+        w.strUtf8(element.tagName.toLowerCase());
+
+        // Encode attributes as Vec<(String, String)> - name/value pairs
+        w.u64(BigInt(element.attributes.length));
+        for (let i = 0; i < element.attributes.length; i++) {
+            const attr = element.attributes[i];
+            w.strUtf8(attr.name);
+            w.strUtf8(attr.value);
+        }
+
+        // Encode children as Vec<DomNode> - this is where we yield during recursion
+        const children = Array.from(element.childNodes);
+        w.u64(BigInt(children.length));
+        for (const child of children) {
+            await DomNode.encodeStreaming(w, child);
+        }
+    }
 }
 
 export class TextNode {
@@ -70,6 +91,16 @@ export class DocumentNode {
         w.u64(BigInt(children.length));
         for (const child of children) {
             DomNode.encode(w, child);
+        }
+    }
+
+    // Streaming version that yields during recursion
+    static async encodeStreaming(w: Writer, document: Document): Promise<void> {
+        // Encode children as Vec<DomNode> - this is where we yield during recursion
+        const children = Array.from(document.childNodes);
+        w.u64(BigInt(children.length));
+        for (const child of children) {
+            await DomNode.encodeStreaming(w, child);
         }
     }
 }
@@ -113,15 +144,38 @@ export class DomNode {
         } else if (node.nodeType === Node.CDATA_SECTION_NODE) {
             w.u32(DomNodeType.CData);  // Write enum variant index
             CDataNode.encode(w, node as CDATASection);
-        } else if (node.nodeType === Node.COMMENT_NODE) {
-            w.u32(DomNodeType.Comment);  // Write enum variant index
-            CommentNode.encode(w, node as Comment);
         } else if (node.nodeType === Node.DOCUMENT_NODE) {
             w.u32(DomNodeType.Document);  // Write enum variant index
             DocumentNode.encode(w, node as Document);
         } else if (node.nodeType === Node.DOCUMENT_TYPE_NODE) {
             w.u32(DomNodeType.DocType);  // Write enum variant index
             DocTypeNode.encode(w, node as DocumentType);
+        }
+    }
+
+    /** Streaming version that yields during recursion */
+    static async encodeStreaming(w: Writer, node: Node): Promise<void> {
+        // Yield at start of each node
+        await w.streamWait();
+
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            w.u32(DomNodeType.Element);  // Write enum variant index
+            await ElementNode.encodeStreaming(w, node as Element);
+        } else if (node.nodeType === Node.TEXT_NODE) {
+            w.u32(DomNodeType.Text);  // Write enum variant index
+            TextNode.encode(w, node as Text); // Text nodes are simple, no async needed
+        } else if (node.nodeType === Node.CDATA_SECTION_NODE) {
+            w.u32(DomNodeType.CData);  // Write enum variant index
+            CDataNode.encode(w, node as CDATASection); // CDATA nodes are simple
+        } else if (node.nodeType === Node.COMMENT_NODE) {
+            w.u32(DomNodeType.Comment);  // Write enum variant index
+            CommentNode.encode(w, node as Comment); // Comment nodes are simple
+        } else if (node.nodeType === Node.DOCUMENT_NODE) {
+            w.u32(DomNodeType.Document);  // Write enum variant index
+            await DocumentNode.encodeStreaming(w, node as Document);
+        } else if (node.nodeType === Node.DOCUMENT_TYPE_NODE) {
+            w.u32(DomNodeType.DocType);  // Write enum variant index
+            DocTypeNode.encode(w, node as DocumentType); // DocType nodes are simple
         }
     }
 }
