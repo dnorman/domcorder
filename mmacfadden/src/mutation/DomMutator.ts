@@ -1,6 +1,5 @@
-import { NodeIdBiMap } from './dom/NodeIdBiMap';
-import type { DomOperation } from './operation';
-import { deserializeDomNode } from './serialization';
+import { NodeIdBiMap } from '../dom/';
+import type { DomOperation } from './operations';
 
 export class DomMutator {
   private root: Node;

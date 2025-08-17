@@ -236,12 +236,14 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, antiAnimat
   };
 }
 
-function snapshotScriptElement(el: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
+function  snapshotScriptElement(el: HTMLScriptElement, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
   const vEl: VElement = {
     id: nodeIdMap.getNodeId(el)!,
     nodeType: "element",
     tag: "script",
-    attrs: { },
+    attrs: { 
+      "data-orig-src": el.src,
+    },
     children: Array.from(el.childNodes).map(c => snapshotNode(c, pending, nodeIdMap))
   };
   

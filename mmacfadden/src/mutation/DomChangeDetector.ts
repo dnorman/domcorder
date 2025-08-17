@@ -1,6 +1,6 @@
 import { DomMutator } from "./DomMutator";
-import { NodeIdBiMap } from "./dom/NodeIdBiMap";
-import type { DomOperation } from "./operation";
+import { NodeIdBiMap } from "../dom/NodeIdBiMap";
+import type { DomOperation } from "./operations";
 
 export class DomChangeDetector {
   private liveDomRoot: Node;
@@ -18,11 +18,10 @@ export class DomChangeDetector {
   private batchTimeoutMs = 1000;
 
 
-  constructor(root: Node, callback: (ops: DomOperation[]) => void) {
+  constructor(root: Node, liveNodeMap: NodeIdBiMap, callback: (ops: DomOperation[]) => void) {
     this.liveDomRoot = root;
     this.snapshotDomRoot = root.cloneNode(true);
-    this.liveNodeMap = new NodeIdBiMap();
-    this.liveNodeMap.assignNodeIdsToSubTree(this.liveDomRoot);
+    this.liveNodeMap = liveNodeMap;
     this.snapshotNodeMap = new NodeIdBiMap();
     this.snapshotNodeMap.assignNodeIdsToSubTree(this.snapshotDomRoot);
     this.snapshotMutator = new DomMutator(this.snapshotDomRoot, this.snapshotNodeMap);
@@ -40,7 +39,6 @@ export class DomChangeDetector {
 
   private handleMutations(mutations: MutationRecord[]): void {
     for (const mutation of mutations) {
-      console.log(mutation);
       
       let target = mutation.target;
       
@@ -106,7 +104,6 @@ export class DomChangeDetector {
 
     const ops: DomOperation[] = [];
   
-
     // Handle text nodes (we know the types are the same)
     if (liveNode.nodeType === Node.TEXT_NODE) {
       if (snapshotNode.textContent !== liveNode.textContent) {
