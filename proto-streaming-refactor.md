@@ -54,14 +54,50 @@ The TypeScript Writer is now fully implemented with:
 
 1. **Implement TypeScript Reader**
 
-   - [ ] Incremental parsing for chunked streams
-   - [ ] Handle frames split across arbitrary chunk boundaries
-   - [ ] Support both file mode (header) and stream mode
+   **Design Decisions (Confirmed):**
 
-2. **Enhanced Testing with Stream Observer**
-   - [ ] Round-trip tests using stream observer for realistic chunk analysis
-   - [ ] Memory usage validation during large frame streaming
-   - [ ] Chunk boundary verification for streaming frames
+   - ✅ Factory pattern matching Writer: `Reader.create(inputStream, expectHeader)`
+   - ✅ Output raw `Frame` type from `protocol.ts`
+   - ✅ Explicit header mode via factory parameter
+   - ✅ Fail-fast error handling (throw on corruption)
+   - ✅ No buffer size limits (trust input data)
+
+   **API Design:**
+
+   ```typescript
+   // File mode (with 32-byte header)
+   const [reader, frameStream] = Reader.create(byteStream, true);
+
+   // Stream mode (no header)
+   const [reader, frameStream] = Reader.create(byteStream, false);
+
+   // Output: ReadableStream<Frame> where Frame matches protocol.ts exactly
+   ```
+
+   **Technical Requirements:**
+
+   - Accept `ReadableStream<Uint8Array>` with arbitrary chunk boundaries
+   - Output stream of complete `Frame` objects (no partial frames)
+   - Buffer incomplete frames internally until fully received
+   - Parse variable-length data correctly (strings, DOM nodes)
+   - Frames are NOT length-prefixed (must parse to determine size)
+
+   **Implementation Tasks:**
+
+   - [ ] Core Reader class with factory pattern
+   - [ ] Internal buffer management for partial frames
+   - [ ] Frame type detection (u32) and routing to specific decoders
+   - [ ] Decode all frame types to match `protocol.ts` types exactly
+   - [ ] String decoding (u64 length + UTF-8 bytes)
+   - [ ] DOM node recursive decoding with child counts
+   - [ ] Header parsing when `expectHeader = true`
+   - [ ] Throw immediately on malformed data or unexpected EOF
+
+2. **Testing Strategy (Writer → Reader Focus)**
+   - [ ] Round-trip tests: Writer output → Reader input
+   - [ ] Various chunk sizes (1 byte to 64KB)
+   - [ ] Memory validation: ensure frames are released after emission
+   - [ ] Error handling: incomplete streams, corrupted data
 
 ## Implementation Decisions
 
@@ -84,3 +120,54 @@ The TypeScript Writer is now fully implemented with:
 - **String streaming**: Only for strings larger than remaining buffer
 - **Chunk size**: Constructor param with setter method, default 4KB
 - **Frame boundaries**: Always explicit via `endFrame()`
+
+## Reader Implementation Details
+
+### Factory Pattern (Confirmed)
+
+```typescript
+export class Reader {
+  static create(
+    inputStream: ReadableStream<Uint8Array>,
+    expectHeader: boolean
+  ): [Reader, ReadableStream<Frame>] {
+    // Returns tuple matching Writer pattern
+    // Reader instance for control/header access
+    // ReadableStream<Frame> for consuming frames
+  }
+
+  // Access header if it was parsed (expectHeader = true)
+  getHeader(): { magic: Uint8Array; version: number; createdAt: bigint } | null;
+}
+```
+
+### Frame Output (Confirmed)
+
+- Output `Frame` type from `protocol.ts` exactly
+- No higher-level conversions or DOM node reconstruction
+- Frame types remain as numbers for efficiency
+- Complete frames only - no partial emission
+
+### Buffer Management (Confirmed)
+
+- Internal `Uint8Array` buffer with dynamic growth
+- No maximum buffer size limits
+- Append incoming chunks, parse when data sufficient
+- Shift consumed bytes after successful frame parse
+- Throw immediately on unexpected EOF (incomplete frame at stream end)
+
+### Error Handling (Confirmed)
+
+- Fail fast: throw and close stream on any corruption
+- No error recovery or frame skipping
+- Malformed data = immediate exception
+- Trust input data integrity
+
+### Decoding Strategy
+
+- Single-pass parsing (no pre-measurement)
+- Route by frame type to specific decoders
+- Each decoder consumes bytes and returns typed data
+- String decoding: read u64 length, then UTF-8 bytes
+- DOM recursion: read node type, attributes, child count, recurse
+- All decoding eager (not lazy) - return fully parsed frames
