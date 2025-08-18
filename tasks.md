@@ -4,189 +4,167 @@
 
 Create an "HTML video" capture & playback system that records webpage state over time, using keyframes and delta frames, with input event recording.
 
-## punchlist
+## Current Architecture (2025-08-18)
 
-- [~] Change detection
-  - [x] DOM Change detector (responsible for detecing changes that would be visible in outerHTML / detectable by MutationObserver)
-    - [x] interval vdom diff module
-  - [ ] recording canvas changes (monkey-patching?)
-  - [ ] recording scrolloffsets for scrollable elements (scroll event binding?)
-  - [ ] stylesheet changes (event binding?)
-  - [ ] mouse / keyboard / scrolloffset (references dom elements)
-  - [ ] viewport size
-  - [ ] maybe don't bother - but, zoom level (not sure if possible)
-- [~] JS change operation in-memory format
+### Components
 
-- [ ] Transformation/inlining engine - transform the dom structure to be replayable (incrementally)
+1. **recorder-player/** - Core recording & playback library with PageRecorder/PagePlayer
+2. **proto-ts/** - TypeScript binary protocol implementation (✅ COMPLETE - reader/writer working)
+3. **proto-rs/** - Rust binary protocol implementation (✅ COMPLETE - reader/writer working)
+   - FrameReader/FrameWriter for .dcrr format
+   - Supports both file mode (with header) and stream mode
+   - Frame enum values 0-15 (no Asset frame yet)
+   - Uses bincode serialization with serde
+4. **demo-app/** - Demo with bookmarklet and server (needs integration)
+5. **server/** - New Rust server (empty, needs implementation)
 
-  - Note: reasons we transform/inline things:
+### Integration Plan
 
-    - content is not actually represented in the dom - eg canvas state
-    - cases where the player may not be able to access resources (css files, images, etc) which might require a login to access, or maybe ephemeral, or maybe not available due to network connectivity, etc. (we want to fully and centrally capture the resources necessary to replay the recording with visual fidelity)
+#### Phase 1: Implement Rust Server (IMMEDIATE PRIORITY)
 
-  - [x] POC keyframe generator - captureKeyframe function (and associated functions)
-  - [ ] rename captureKeyframe to transformSubtree (or something like that - and created a new captureKeyframe function that calls transformSubtree on the entire document)
-  - [ ] update transformSubtree to:
-    - [ ] background resource fetching without yielding the transformSubtree recursion
-    - [ ] initial output format - sufficient for feeding local player iframe (used during developemnt)
-    - [ ] update initial output format to be the direct binary serialization
+Using Axum framework:
 
-- [ ] POC player component
+1. [ ] POST route to receive frame stream
+   - Parse frames using proto-rs Reader to validate
+   - Write validated frames to file with DCRR header using Writer
+   - Store in timestamped files in storage folder
+2. [ ] GET route to list recordings (JSON response)
+3. [ ] GET route to stream file back (without header)
+   - Stream raw file bytes minus the 32-byte header
+   - No frame parsing needed, just byte streaming
 
-  - [ ] in the same page as the recorder for development purposes
-  - [ ] consumes the initial output format and plays it back in an iframe in the same page as the recording
-  - [ ] update player to consume the direct binary serialization
+#### Phase 2: Protocol Unification
 
-- [ ] Binary serialization and deserialization schema
+1. [ ] **DISCUSSION NEEDED**: Strategy for unifying recorder-player, proto-ts, and proto-rs protocols
+   - Align FrameType enums (recorder-player 0-16 vs proto-ts/proto-rs 0-15)
+   - Add Asset frame type to proto-ts and proto-rs protocols
+   - Standardize node ID types (number vs string vs bigint)
+   - Ensure bincode compatibility between TypeScript and Rust
+2. [ ] Implement protocol changes in all three packages
+3. [ ] Update tests for new unified protocol
+4. [ ] Verify cross-language compatibility (TS writer → Rust reader, etc.)
 
-  - [ ] change operations
-  - [ ] change content
-  - [ ] viewport size events
-  - [ ] packet/frame containing N operations and events
+#### Phase 3: Integration Tasks
 
-- Optimization
-  - [ ] webworkers for resource fetching / encoding? (probably needs to own the websocket connection to avoid double copying)
+1. [ ] Create async/sync bridge for PageRecorder → Writer pipeline
+   - PageRecorder emits sync, Writer needs async
+   - Implement queue/buffer mechanism
+2. [ ] **DISCUSSION NEEDED**: DOM format strategy
+   - Option A: Convert recorder-player format to DOM for proto-ts
+   - Option B: Modify proto-ts to accept recorder-player format directly
+3. [ ] Wire up PageRecorder with binary streaming
+   - Modify bookmarklet to use PageRecorder
+   - Connect FrameHandler to proto-ts Writer
+   - Use HTTP streaming (fetch with ReadableStream body)
 
-## Pending discssion points
+#### Phase 4: Player Integration
 
-- [ ] Strawman set of rust structs for the protocol
-- [ ] Page navigation - stitching together of multiple recordings AND non-pageload navigations
+1. [ ] Add player UI to demo-app homepage
+2. [ ] Use proto-ts Reader to parse binary stream from server
+3. [ ] Feed parsed Frames to PagePlayer for playback
+4. [ ] Display recordings list with click-to-play
 
-#### TODO evaluate below here - pending review:
+### Key Technical Decisions
 
-## Current Status
+#### Decided
 
-**Works**
+- **Transport**: HTTP streaming using fetch with ReadableStream body (not WebSocket)
+- **Protocol Strategy**: Unify protocols rather than mapping layer
+- **Asset Handling**: Will add Asset frame type when unifying protocols (separate frame)
+- **Header Mode**: Use header for stored files, stream mode for live transmission
 
-- `captureKeyframe()` produces a self-contained HTML snapshot ("keyframe") of the current page
-  - Handles stylesheets, fonts, images, canvases, and SVG
-  - Snapshot can be injected into an `iframe` for faithful static rendering
+#### Needs Discussion (Action Items in Phase 2 & 3)
 
-**Partially-working / Untested**
+1. **Protocol Unification Strategy**:
 
-- `startRecording()` sets up a `MutationObserver` but delta-encoding logic is stubbed and unverified
-- No server-side collector or player exists yet
+   - How to align FrameType enums (recorder-player 0-16 vs proto-ts 0-15)
+   - Add Asset frame type to proto-ts
+   - Standardize node ID types (number vs string vs bigint)
 
-**Technical Debt & Unknowns**
+2. **DOM Format Strategy**:
+   - Option A: Convert recorder-player format to DOM for proto-ts
+   - Option B: Modify proto-ts to accept recorder-player format
 
-- `startRecording()` mutation observer logic needs implementation and testing
-- Canvas content changes not detected by MutationObserver (requires separate strategy)
+#### Implementation Notes
 
----
+- **Chunking**: Use Writer default 4096 bytes, configurable as needed
+- **Streaming Encode**: Use for large frames (keyframes), regular for small frames
 
-## Phase 1 - File Format & Still Image Capture ✅
+## Active Development Tasks
 
-**Completed:**
+### Immediate Priority - Rust Server Implementation
 
-- Binary `.dcrr` format design with streaming support for keyframes, deltas, input events
-- Format specification documented in `docs/file_format.md`
-- TypeScript types and reader/writer utilities with seeking
-- HTTP server setup with CORS, capture endpoints, bookmarklet generation and testing
+Using Axum framework:
 
-**Remaining:**
+- [ ] Set up basic Axum server with dependencies
+- [ ] POST `/record` - receive and validate frame stream
+  - Use proto-rs Reader to parse incoming frames
+  - Write validated frames with DCRR header using Writer
+  - Store as timestamped files in storage folder
+- [ ] GET `/recordings` - list available recordings (JSON)
+- [ ] GET `/recording/:id` - stream file without header
+  - Skip first 32 bytes (DCRR header)
+  - Stream raw bytes (no parsing needed)
 
-- [ ] Add player interface to main page that loads `.dcrr` files from server and displays in iframe
-- [ ] Update GETTING_STARTED.md to remove "not implemented yet" note once player works
+### Player Integration
 
-## Phase 2 - Basic Video Recording
+- [ ] Add player UI to demo-app
+- [ ] Wire proto-ts Reader to server stream
+- [ ] Connect Reader output to PagePlayer
+- [ ] Add recording list/selection UI
 
-### Slow Keyframe Recording (≈1 fps)
+### Recording Improvements
 
-- [ ] Design WebSocket binary message protocol for recording streams
-- [ ] Extend server to handle WebSocket connections and live writing to `.dcrr`
-- [ ] Update bookmarklet for continuous recording mode
-- [ ] Test `startRecording` with periodic keyframe capture
-- [ ] Handle recording session lifecycle (start/stop/pause)
+- [ ] Canvas change detection (monkey-patching)
+- [ ] Scroll offset tracking for scrollable elements
+- [ ] StyleSheet change tracking (already has watcher)
+- [ ] Input event recording (mouse, keyboard, scroll)
+- [ ] Viewport resize events
 
-### Player Timeline
+### Delta Frame Support
 
-- [ ] Add basic timeline/scrubber to player interface
-- [ ] Implement frame seeking using file index
-- [ ] Test playback of multi-keyframe recordings
-- [ ] Add playback controls (play/pause/speed)
+- [ ] Map recorder-player DOM operations to proto-ts frame types
+- [ ] Test incremental DOM updates
+- [ ] Optimize mutation batching
 
-## Phase 3 - Delta Frames & Input
+### Asset Management
 
-### Change Detection Infrastructure
+- [ ] Asset deduplication strategy
+- [ ] Resource frame implementation
+- [ ] Inline vs reference decision logic
 
-- [ ] **DOM Diff Calculation Module**: Implement efficient DOM diffing system
-  - Research diff algorithms (Myers, patience diff) for DOM trees
-  - Element ID tagging vs XPath references for node identification
-  - Compression opportunities for mutation data
-- [ ] **Canvas Change Detection Strategy**: Handle canvas content changes (MutationObserver blind spot)
-  - Monkey-patch Canvas API methods (`drawImage`, `fillRect`, `strokeText`, etc.)
-  - Implement canvas content hashing for change detection
-  - Add canvas-specific delta encoding (image diffs or full snapshots)
-- [ ] **Interval Diff Calculation Module**: Periodic change detection fallback
-  - Implement scheduled DOM tree comparison for missed changes
-  - Handle dynamic content not caught by MutationObserver
-  - Configurable interval timing and scope
+## Future Enhancements
 
-### Resource Frame Design
+### Performance
 
-- [ ] Design "Resource" frame type for static assets (images, fonts, etc.)
-  - Research addressing schemes: content-addressed vs ID-based vs offset-based
-  - Define how keyframes/deltas reference resources (URLs, hashes, IDs)
-  - Consider deduplication strategies for repeated resources
-  - Plan streaming implications (when to send resources vs references)
-- [ ] Update `.dcrr` format specification with Resource frame type
-- [ ] Implement Resource frame encoding/decoding in format utilities
+- [ ] WebWorker for encoding (avoid main thread blocking)
+- [ ] Memory profiling for long recordings
+- [ ] Streaming playback for large files
+- [ ] Configurable quality settings (keyframe interval)
 
-### Delta Frame Implementation
+### Reliability
 
-- [ ] Design mutation serialization format using diff calculation module
-- [ ] Implement and test mutation serialization in `startRecording`
-- [ ] Update player interface to handle delta frames during playback
-- [ ] Performance testing: mutation processing overhead
+- [ ] Network failure recovery
+- [ ] Partial recording handling
+- [ ] Resume interrupted recordings
 
-### Input Event Recording
+### Advanced Features
 
-- [ ] Design input event schema (keyboard, mouse, scroll, resize)
-- [ ] Implement event capture in bookmarklet
-- [ ] Add input events to `.dcrr` format and player interface
-- [ ] Create visual overlays for input playback (cursor, keyboard)
+- [ ] Page navigation handling (SPA support)
+- [ ] Multi-tab recording
+- [ ] Recording metadata and cataloging
+- [ ] Search and filtering for recordings
 
-## Phase 4 - Cataloging & Real-time Updates
+## Testing Requirements
 
-### Ankurah Integration
+- [ ] Unit tests for integration points
+- [ ] E2E test with real web pages
+- [ ] Performance benchmarks
+- [ ] Cross-browser validation
 
-- [ ] Design recording metadata schema for cataloging
-- [ ] Integrate Ankurah for recording management
-- [ ] Add real-time recording list updates
-- [ ] Add search and filtering to recordings interface
+## Documentation Needed
 
-## Phase 5 - Optimization & Edge Cases
-
-### Performance & Reliability
-
-- [ ] Memory usage profiling during long recordings
-- [ ] Optimize large page capture (lazy loading, selective capture)
-- [ ] Handle network failures gracefully
-- [ ] Add recording quality settings (keyframe interval, compression)
-
-### Edge Case Handling
-
-- [ ] Dynamic content (AJAX updates, infinite scroll)
-- [ ] Browser compatibility testing
-- [ ] Large file handling and streaming playback
-- [ ] Error recovery and partial recordings
-
----
-
-## Testing Strategy
-
-Each phase should include:
-
-- Unit tests for core utilities
-- Integration tests with real web pages
-- Performance benchmarks
-- Cross-browser validation on representative sites
-
-## Documentation Plan
-
-- `docs/file_format.md` - Binary format specification
-- `docs/architecture.md` - System design decisions
-- `docs/performance.md` - Benchmarks and optimization notes
-- `docs/compatibility.md` - Browser and site compatibility matrix
-
-The focus is on getting a working proof of concept while building systematic understanding of the technical challenges.
+- [ ] Integration guide for recorder-player + proto-ts
+- [ ] Rust server API documentation
+- [ ] Player usage guide
+- [ ] Architecture decision record
