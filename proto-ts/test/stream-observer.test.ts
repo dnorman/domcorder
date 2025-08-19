@@ -5,6 +5,7 @@ import { streamObserve, StreamObserver } from "./stream-observer.ts";
 import { TimestampDataEnc, KeyframeDataEnc } from "../src/frames.ts";
 import { setupDOMGlobals } from "./sample-frames.ts";
 import { JSDOM } from "jsdom";
+import { convertDOMDocumentToVDocument } from "../src/dom-converter.ts";
 
 // Set up DOM polyfills
 setupDOMGlobals();
@@ -88,7 +89,8 @@ describe("Stream Observer Utility", () => {
             <html><head><title>Test</title></head><body><div>Hello</div></body></html>
         `);
 
-        await KeyframeDataEnc.encode(writer, dom.window.document);
+        const vdocument = convertDOMDocumentToVDocument(dom.window.document);
+        await KeyframeDataEnc.encode(writer, vdocument);
 
         analysis = await check();
         expect(analysis.chunkCount).toBeGreaterThan(0);
@@ -116,7 +118,8 @@ describe("Stream Observer Utility", () => {
         const check = streamObserve(stream);
 
         // Use streaming encoding
-        await KeyframeDataEnc.encodeStreaming(writer, dom.window.document);
+        const vdocument = convertDOMDocumentToVDocument(dom.window.document);
+        await KeyframeDataEnc.encodeStreaming(writer, vdocument);
 
         const analysis = await check();
 

@@ -1,5 +1,5 @@
-import { Frame, FrameType, HtmlDocumentData } from "./protocol.ts";
-import { DomNode } from "./domnode.ts";
+import { type Frame, FrameType } from "./protocol.ts";
+import { VNode, VDocument } from "./vdom.ts";
 
 // BufferReader interface for DOM decoding
 interface BufferReader {

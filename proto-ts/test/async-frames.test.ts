@@ -5,6 +5,7 @@ import { TimestampDataEnc, KeyframeDataEnc, ViewportResizedDataEnc } from "../sr
 import { setupDOMGlobals } from "./sample-frames.ts";
 import { streamObserve } from "./stream-observer.ts";
 import { JSDOM } from "jsdom";
+import { convertDOMDocumentToVDocument } from "../src/dom-converter.ts";
 
 // Set up DOM polyfills
 setupDOMGlobals();
@@ -38,7 +39,8 @@ describe("Async Frame Encoders", () => {
         const check = streamObserve(stream);
 
         // Encode keyframe (regular version)
-        await KeyframeDataEnc.encode(writer, dom.window.document);
+        const vdocument = convertDOMDocumentToVDocument(dom.window.document);
+        await KeyframeDataEnc.encode(writer, vdocument);
 
         writer.close();
 
@@ -65,7 +67,8 @@ describe("Async Frame Encoders", () => {
         const check = streamObserve(stream);
 
         // Encode keyframe (streaming version)
-        await KeyframeDataEnc.encodeStreaming(writer, dom.window.document);
+        const vdocument = convertDOMDocumentToVDocument(dom.window.document);
+        await KeyframeDataEnc.encodeStreaming(writer, vdocument);
 
         writer.close();
 

@@ -7,7 +7,7 @@ export enum FrameType {
     Timestamp = 0,
 
     Keyframe = 1,
-    
+
     ViewportResized = 2,
     ScrollOffsetChanged = 3,
 
@@ -16,7 +16,7 @@ export enum FrameType {
     KeyPressed = 6,
     ElementFocused = 7,
     TextSelectionChanged = 8,
-    
+
     DomNodeAdded = 9,
     DomNodeRemoved = 10,
     DomAttributeChanged = 11,
@@ -31,17 +31,13 @@ export type TimestampData = {
     timestamp: number;
 }
 
-export type DomNodeData = {
-    nodeType: number;
-    tag?: string;
-    attributes?: Record<string, string>;
-    children: DomNodeData[];
-    text?: string;
-}
+// DomNodeData has been replaced with VNode class hierarchy from vdom.ts
+
+import { VNode } from './vdom.js';
 
 export type HtmlDocumentData = {
     docType: string;
-    documentElement: DomNodeData;
+    documentElement: VNode;
 }
 
 export type KeyframeData = {
@@ -86,7 +82,7 @@ export type TextSelectionChangedData = {
 export type DomNodeAddedData = {
     parentNodeId: string;
     index: number;
-    node: DomNodeData;
+    node: VNode;
 }
 
 export type DomNodeRemovedData = {

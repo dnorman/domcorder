@@ -1,6 +1,6 @@
 import { Writer } from "./writer.ts";
 import { FrameType } from "./protocol.ts";
-import { DomNode } from "./domnode.ts";
+import { VNode, VDocument } from "./vdom.ts";
 
 
 
@@ -23,28 +23,28 @@ export class KeyframeDataEnc {
     private constructor() { }
 
     // Regular async - yields only at frame boundary
-    static async encode(w: Writer, document: Document): Promise<void> {
+    static async encode(w: Writer, vdocument: VDocument): Promise<void> {
         w.u32(this.tag);
 
         // Extract doctype from document - use full DOCTYPE string to match Rust
         const docType = "<!DOCTYPE html>";
         w.strUtf8(docType);
 
-        // Encode the document element synchronously
-        DomNode.encode(w, document.documentElement);
+        // Encode the VDocument synchronously
+        vdocument.encode(w);
         await w.endFrame();
     }
 
     // Streaming async - can yield during DOM recursion
-    static async encodeStreaming(w: Writer, document: Document): Promise<void> {
+    static async encodeStreaming(w: Writer, vdocument: VDocument): Promise<void> {
         w.u32(this.tag);
 
         // Extract doctype from document - use full DOCTYPE string to match Rust
         const docType = "<!DOCTYPE html>";
         w.strUtf8(docType);
 
-        // Encode the document element with streaming
-        await DomNode.encodeStreaming(w, document.documentElement);
+        // Encode the VDocument with streaming
+        await vdocument.encodeStreaming(w);
         await w.endFrame();
     }
 }
@@ -131,20 +131,20 @@ export class DomNodeAddedDataEnc {
     private constructor() { }
 
     // Regular async - yields only at frame boundary
-    static async encode(w: Writer, parentNodeId: number | bigint, index: number, node: Node): Promise<void> {
+    static async encode(w: Writer, parentNodeId: number | bigint, index: number, vnode: VNode): Promise<void> {
         w.u32(this.tag);
         w.u64(toU64(parentNodeId)); // u64 BE
         w.u32(index);               // u32 BE
-        DomNode.encode(w, node);    // Encode the node synchronously
+        vnode.encode(w);            // Encode the VNode synchronously
         await w.endFrame();
     }
 
     // Streaming async - can yield during node encoding
-    static async encodeStreaming(w: Writer, parentNodeId: number | bigint, index: number, node: Node): Promise<void> {
+    static async encodeStreaming(w: Writer, parentNodeId: number | bigint, index: number, vnode: VNode): Promise<void> {
         w.u32(this.tag);
         w.u64(toU64(parentNodeId)); // u64 BE
         w.u32(index);               // u32 BE
-        await DomNode.encodeStreaming(w, node);  // Encode the node with streaming
+        await vnode.encodeStreaming(w);  // Encode the VNode with streaming
         await w.endFrame();
     }
 }

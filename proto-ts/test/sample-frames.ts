@@ -14,6 +14,7 @@ import {
     DomNodeAddedDataEnc,
     DomAttributeChangedDataEnc
 } from "../src/frames.ts";
+import { convertDOMDocumentToVDocument, convertDOMElementToVElement } from "../src/dom-converter.ts";
 
 // Set up JSDOM for DOM polyfills  
 const dom = new JSDOM(`
@@ -62,7 +63,8 @@ export async function generateTestFrames(writer: Writer): Promise<void> {
     await TimestampDataEnc.encode(writer, timestamp);
 
     // Frame 1: Keyframe with DOM
-    await KeyframeDataEnc.encode(writer, dom.window.document);
+    const vdocument = convertDOMDocumentToVDocument(dom.window.document);
+    await KeyframeDataEnc.encode(writer, vdocument);
 
     // Frame 2: ViewportResized
     await ViewportResizedDataEnc.encode(writer, 1920, 1080);
@@ -86,7 +88,8 @@ export async function generateTestFrames(writer: Writer): Promise<void> {
     await DomTextChangedDataEnc.encode(writer, 42n, "Updated text content");
 
     // Frame 9: DomNodeAdded
-    await DomNodeAddedDataEnc.encode(writer, 1n, 0, createSimpleNode());
+    const velement = convertDOMElementToVElement(createSimpleNode());
+    await DomNodeAddedDataEnc.encode(writer, 1n, 0, velement);
 
     // Frame 10: DomAttributeChanged
     await DomAttributeChangedDataEnc.encode(writer, 42n, "class", "updated-class");

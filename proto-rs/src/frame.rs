@@ -62,22 +62,27 @@ pub struct DocTypeNode {
     pub system_id: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProcessingInstructionNode {
+    pub target: String,
+    pub data: String,
+}
+
 /// DOM Node - tagged union of all node types
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DomNode {
-    Element(ElementNode),   // 0
-    Text(TextNode),         // 1
-    CData(CDataNode),       // 2
-    Comment(CommentNode),   // 3
-    Document(DocumentNode), // 4
-    DocType(DocTypeNode),   // 5
+    Element(ElementNode),                             // 0
+    Text(TextNode),                                   // 1
+    CData(CDataNode),                                 // 2
+    Comment(CommentNode),                             // 3
+    DocType(DocTypeNode),                             // 4
+    ProcessingInstruction(ProcessingInstructionNode), // 5
 }
 
-/// HTML Document representation
+/// HTML Document representation - matches TypeScript VDocument
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HtmlDocument {
-    pub doc_type: String,
-    pub document_element: DomNode,
+    pub children: Vec<DomNode>, // Array of children (typically DOCTYPE + HTML element)
 }
 
 /// Frame data structures corresponding to TypeScript frame data types
@@ -89,7 +94,7 @@ pub struct TimestampData {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeyframeData {
     pub doc_type: String,
-    pub document_element: DomNode,
+    pub document: HtmlDocument, // Now contains the full document structure
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

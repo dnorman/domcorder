@@ -37,7 +37,7 @@ export class Writer {
         return this;
     }
 
-    private byte(n: number): void {
+    byte(n: number): void {
         // Ensure buffer has space
         if (this.bufLength >= this.buf.length) {
             this.growBuffer();
