@@ -1,6 +1,6 @@
 export type Frame = {
     frameType: FrameType;
-    data: TimestampData | KeyframeData | ViewportResizedData | ScrollOffsetChangedData | MouseMovedData | MouseClickedData | KeyPressedData | ElementFocusedData | TextSelectionChangedData | DomNodeAddedData | DomNodeRemovedData | DomAttributeChangedData | DomAttributeRemovedData | DomTextChangedData | DomNodeResizedData | StyleSheetChangedData;
+    data: TimestampData | KeyframeData | ViewportResizedData | ScrollOffsetChangedData | MouseMovedData | MouseClickedData | KeyPressedData | ElementFocusedData | TextSelectionChangedData | DomNodeAddedData | DomNodeRemovedData | DomAttributeChangedData | DomAttributeRemovedData | DomTextChangedData | DomNodeResizedData | StyleSheetChangedData | AssetData;
 }
 
 export enum FrameType {
@@ -25,6 +25,8 @@ export enum FrameType {
     DomNodeResized = 14,
 
     StyleSheetChanged = 15,
+
+    Asset = 16,
 }
 
 export type TimestampData = {
@@ -101,15 +103,37 @@ export type DomAttributeRemovedData = {
     attributeName: string;
 }
 
+export type TextInsertOperationData = {
+    op: 'insert';
+    index: number;
+    text: string;
+}
+
+export type TextRemoveOperationData = {
+    op: 'remove';
+    index: number;
+    length: number;
+}
+
+export type TextOperationData = TextInsertOperationData | TextRemoveOperationData;
+
 export type DomTextChangedData = {
     nodeId: string;
-    text: string;
+    operations: TextOperationData[];
 }
 
 export type DomNodeResizedData = {
     nodeId: string;
     width: number;
     height: number;
+}
+
+export type AssetData = {
+    id: number;
+    url: string;
+    assetType: string; // "image" | "font" | "binary"
+    mime?: string;
+    buf: ArrayBuffer;
 }
 
 export type StyleSheetChangedData = {

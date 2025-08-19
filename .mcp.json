@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"],
+      "env": {
+        "PLAYWRIGHT_DEBUG_PORT": "9232",
+        "PLAYWRIGHT_BROWSER_WS_ENDPOINT_PORT": "9233"
+      }
+    }
+  }
+}

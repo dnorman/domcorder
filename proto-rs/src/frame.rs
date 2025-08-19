@@ -20,6 +20,7 @@ pub enum Frame {
     DomTextChanged(DomTextChangedData) = 13,
     DomNodeResized(DomNodeResizedData) = 14,
     StyleSheetChanged(StyleSheetChangedData) = 15,
+    Asset(AssetData) = 16,
 }
 
 /// Element node representation
@@ -148,8 +149,7 @@ pub struct DomNodeAddedData {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DomNodeRemovedData {
-    pub parent_node_id: u64,
-    pub index: u32,
+    pub node_id: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -166,9 +166,28 @@ pub struct DomAttributeRemovedData {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextInsertOperationData {
+    pub index: u32,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextRemoveOperationData {
+    pub index: u32,
+    pub length: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u32)]
+pub enum TextOperationData {
+    Insert(TextInsertOperationData) = 0,
+    Remove(TextRemoveOperationData) = 1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DomTextChangedData {
     pub node_id: u64,
-    pub text: String,
+    pub operations: Vec<TextOperationData>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -176,6 +195,15 @@ pub struct DomNodeResizedData {
     pub node_id: u64,
     pub width: u32,
     pub height: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssetData {
+    pub id: u32,
+    pub url: String,
+    pub asset_type: String,
+    pub mime: Option<String>,
+    pub buf: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

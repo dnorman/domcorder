@@ -1,5 +1,5 @@
 import { Writer } from "./writer.ts";
-import { FrameType } from "./protocol.ts";
+import { FrameType, type TextOperationData } from "./protocol.ts";
 import { VNode, VDocument } from "./vdom.ts";
 
 
@@ -45,6 +45,32 @@ export class KeyframeDataEnc {
 
         // Encode the VDocument with streaming
         await vdocument.encodeStreaming(w);
+        await w.endFrame();
+    }
+}
+
+export class AssetDataEnc {
+    static readonly tag = FrameType.Asset;
+    private constructor() { }
+
+    static async encode(w: Writer, id: number, url: string, assetType: string, mime: string | undefined, buf: ArrayBuffer): Promise<void> {
+        w.u32(this.tag);
+        w.u32(id);                    // u32 BE
+        w.strUtf8(url);               // u64 length + UTF-8 bytes (BE)
+        w.strUtf8(assetType);         // u64 length + UTF-8 bytes (BE)
+
+        // Encode optional mime type
+        if (mime) {
+            w.byte(1); // Some flag
+            w.strUtf8(mime);
+        } else {
+            w.byte(0); // None flag
+        }
+
+        // Encode buffer
+        const bytes = new Uint8Array(buf);
+        w.u64(BigInt(bytes.length));  // u64 length (BE)
+        w.bytes(bytes);               // Raw bytes
         await w.endFrame();
     }
 }
@@ -152,10 +178,9 @@ export class DomNodeAddedDataEnc {
 export class DomNodeRemovedDataEnc {
     static readonly tag = FrameType.DomNodeRemoved;
     private constructor() { }
-    static async encode(w: Writer, parentNodeId: number | bigint, index: number): Promise<void> {
+    static async encode(w: Writer, nodeId: number | bigint): Promise<void> {
         w.u32(this.tag);
-        w.u64(toU64(parentNodeId)); // u64 BE
-        w.u32(index);               // u32 BE
+        w.u64(toU64(nodeId)); // u64 BE
         await w.endFrame();
     }
 }
@@ -186,10 +211,25 @@ export class DomAttributeRemovedDataEnc {
 export class DomTextChangedDataEnc {
     static readonly tag = FrameType.DomTextChanged;
     private constructor() { }
-    static async encode(w: Writer, nodeId: number | bigint, text: string): Promise<void> {
+    static async encode(w: Writer, nodeId: number | bigint, operations: TextOperationData[]): Promise<void> {
         w.u32(this.tag);
         w.u64(toU64(nodeId)); // u64 BE
-        w.strUtf8(text);      // u64 length + UTF-8 bytes (BE)
+
+        // Encode the array of operations
+        w.u64(BigInt(operations.length)); // u64 length (BE)
+
+        for (const op of operations) {
+            if (op.op === 'insert') {
+                w.u32(0); // Insert variant = 0
+                w.u32(op.index); // u32 BE
+                w.strUtf8(op.text); // u64 length + UTF-8 bytes (BE)
+            } else { // 'remove'
+                w.u32(1); // Remove variant = 1
+                w.u32(op.index); // u32 BE
+                w.u32(op.length); // u32 BE
+            }
+        }
+
         await w.endFrame();
     }
 }

@@ -1,6 +1,7 @@
 import type { NodeIdBiMap } from "../dom/NodeIdBiMap";
 import { PendingAssets } from "./PendingAssets";
-import type { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
+import { VDocument } from "@domcorder/proto-ts";
+import type { VNode, VStyleSheet } from "@domcorder/proto-ts";
 import {
   collectCssUrlsAssign,
   fetchAssets,
@@ -134,9 +135,9 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, antiAnimat
     }
   }
 
-  return {
-    id: nodeIdMap.getNodeId(doc),
-    adoptedStyleSheets: adoptedStyleSheets,
-    children: vChildren
-  };
+  return new VDocument(
+    nodeIdMap.getNodeId(doc),
+    adoptedStyleSheets,
+    vChildren
+  );
 }

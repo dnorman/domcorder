@@ -2,18 +2,28 @@ import { NodeIdBiMap } from "./dom";
 import { generateKeyFrame, inlineSubTree, type InlineStartedEvent, type KeyFrameStartedEvent } from "./inliner";
 import type { Asset } from "./inliner/Asset";
 import { DomChangeDetector, StyleSheetWatcher, type DomOperation, type StyleSheetWatcherEvent } from "./mutation";
-import { 
-  FrameType, 
-  type AssetData, 
-  type DomAttributeChangedData, 
-  type DomAttributeRemovedData, 
-  type DomNodeAddedData, 
-  type DomNodeRemovedData, 
-  type DomTextChangedData, 
-  type Frame, 
+import {
+  FrameType,
+  type AssetData,
+  type DomAttributeChangedData,
+  type DomAttributeRemovedData,
+  type DomNodeAddedData,
+  type DomNodeRemovedData,
+  type DomTextChangedData,
+  type Frame,
   type KeyframeData,
   type TextOperationData
 } from "./protocol";
+import {
+  Writer,
+  KeyframeDataEnc,
+  AssetDataEnc,
+  DomNodeAddedDataEnc,
+  DomNodeRemovedDataEnc,
+  DomAttributeChangedDataEnc,
+  DomAttributeRemovedDataEnc,
+  DomTextChangedDataEnc
+} from "@domcorder/proto-ts";
 
 // This 100% no matter how far we refactor this.. should
 // def be the real binary frame.
@@ -27,6 +37,8 @@ export class PageRecorder {
   private operationQueue: DomOperation[];
   private changeDetector: DomChangeDetector | null;
   private styleSheetWatcher: StyleSheetWatcher | null;
+  private writer: Writer;
+  private stream: ReadableStream<Uint8Array>;
 
   constructor(sourceDocument: Document, frameHandler: FrameHandler) {
     this.sourceDocument = sourceDocument;
@@ -35,15 +47,24 @@ export class PageRecorder {
     this.operationQueue = [];
     this.changeDetector = null;
     this.styleSheetWatcher = null;
+
+    // Create Writer and stream
+    const [writer, stream] = Writer.create(16 * 1024); // 16KB chunks
+    this.writer = writer;
+    this.stream = stream;
   }
 
   start() {
     const sourceDocNodeIdMap = new NodeIdBiMap();
     sourceDocNodeIdMap.assignNodeIdsToSubTree(this.sourceDocument);
 
+    // Start server stream
+    this.startServerStream();
+
     generateKeyFrame(
       this.sourceDocument, sourceDocNodeIdMap, {
-      onKeyFrameStarted: (ev: KeyFrameStartedEvent) => {
+      onKeyFrameStarted: async (ev: KeyFrameStartedEvent) => {
+        // Keep existing frameHandler call
         this.frameHandler({
           frameType: FrameType.Keyframe,
           data: {
@@ -51,9 +72,14 @@ export class PageRecorder {
             assetCount: ev.assetCount,
           } as KeyframeData,
         });
+
+        // Additionally encode to server stream
+        await KeyframeDataEnc.encode(this.writer, ev.document);
+
         this.pendingAssets = ev.assetCount > 0;
       },
-      onAsset: (asset: Asset) => {
+      onAsset: async (asset: Asset) => {
+        // Keep existing frameHandler call
         this.frameHandler({
           frameType: FrameType.Asset,
           data: {
@@ -64,18 +90,21 @@ export class PageRecorder {
             buf: asset.buf
           } as AssetData,
         });
+
+        // Additionally encode to server stream
+        await AssetDataEnc.encode(this.writer, asset.id, asset.url, asset.assetType, asset.mime, asset.buf);
       },
       onKeyFrameComplete: () => {
         this.pendingAssets = false;
       },
     });
-    
-    this.changeDetector = new DomChangeDetector(this.sourceDocument, sourceDocNodeIdMap, (operations) => {
+
+    this.changeDetector = new DomChangeDetector(this.sourceDocument, sourceDocNodeIdMap, async (operations) => {
       for (const operation of operations) {
         if (this.pendingAssets) {
           this.operationQueue.push(operation);
         } else {
-          this.processOperation(operation, sourceDocNodeIdMap, this.frameHandler);
+          await this.processOperation(operation, sourceDocNodeIdMap, this.frameHandler);
         }
       }
     });
@@ -91,16 +120,18 @@ export class PageRecorder {
     this.styleSheetWatcher.start();
   }
 
-  private processOperation(
-    operation: DomOperation, 
+  private async processOperation(
+    operation: DomOperation,
     nodeIdMap: NodeIdBiMap,
     frameHandler: FrameHandler
-  ): void {
+  ): Promise<void> {
     switch (operation.op) {
       case "insert":
         inlineSubTree(operation.node, nodeIdMap, {
-          onInlineStarted: (ev: InlineStartedEvent) => {
+          onInlineStarted: async (ev: InlineStartedEvent) => {
             this.pendingAssets = ev.assetCount > 0;
+
+            // Keep existing frameHandler call
             frameHandler({
               frameType: FrameType.DomNodeAdded,
               data: {
@@ -110,8 +141,12 @@ export class PageRecorder {
                 assetCount: ev.assetCount,
               } as DomNodeAddedData,
             });
+
+            // Additionally encode to server stream
+            await DomNodeAddedDataEnc.encode(this.writer, operation.parentId, operation.index, ev.node);
           },
-          onAsset: (asset: Asset) => {
+          onAsset: async (asset: Asset) => {
+            // Keep existing frameHandler call
             frameHandler({
               frameType: FrameType.Asset,
               data: {
@@ -122,21 +157,29 @@ export class PageRecorder {
                 buf: asset.buf
               } as AssetData,
             });
+
+            // Additionally encode to server stream
+            await AssetDataEnc.encode(this.writer, asset.id, asset.url, asset.assetType, asset.mime, asset.buf);
           },
-          onInlineComplete: () => {}
+          onInlineComplete: () => { }
         });
-       break;
+        break;
 
       case "remove":
+        // Keep existing frameHandler call
         frameHandler({
           frameType: FrameType.DomNodeRemoved,
           data: {
             nodeId: operation.nodeId
           } as DomNodeRemovedData,
         });
+
+        // Additionally encode to server stream
+        await DomNodeRemovedDataEnc.encode(this.writer, operation.nodeId);
         break;
 
       case "updateAttribute":
+        // Keep existing frameHandler call
         frameHandler({
           frameType: FrameType.DomAttributeChanged,
           data: {
@@ -145,9 +188,13 @@ export class PageRecorder {
             attributeValue: operation.value
           } as DomAttributeChangedData,
         });
+
+        // Additionally encode to server stream
+        await DomAttributeChangedDataEnc.encode(this.writer, operation.nodeId, operation.name, operation.value);
         break;
 
       case "removeAttribute":
+        // Keep existing frameHandler call
         frameHandler({
           frameType: FrameType.DomAttributeRemoved,
           data: {
@@ -155,6 +202,9 @@ export class PageRecorder {
             attributeName: operation.name,
           } as DomAttributeRemovedData,
         });
+
+        // Additionally encode to server stream
+        await DomAttributeRemovedDataEnc.encode(this.writer, operation.nodeId, operation.name);
         break;
 
       case "updateText":
@@ -172,9 +222,10 @@ export class PageRecorder {
                 index: op.index,
                 length: op.count
               };
-            }
+          }
         });
-        
+
+        // Keep existing frameHandler call
         frameHandler({
           frameType: FrameType.DomTextChanged,
           data: {
@@ -182,7 +233,60 @@ export class PageRecorder {
             operations
           } as DomTextChangedData,
         });
+
+        // Additionally encode to server stream - use the rich operations data
+        await DomTextChangedDataEnc.encode(this.writer, operation.nodeId, operations);
         break;
+    }
+  }
+
+  private async startServerStream(): Promise<void> {
+    // Use WebSocket for streaming instead of fetch
+    console.log('🔌 Connecting to WebSocket server...');
+    try {
+      const ws = new WebSocket('ws://localhost:8723/ws/record');
+
+      ws.onopen = () => {
+        console.log('🔌 WebSocket connected');
+        this.streamToWebSocket(ws);
+      };
+
+      ws.onmessage = (event) => {
+        console.log('📨 Server message:', event.data);
+      };
+
+      ws.onerror = (error) => {
+        console.error('❌ WebSocket error:', error);
+      };
+
+      ws.onclose = () => {
+        console.log('🔌 WebSocket closed');
+      };
+
+    } catch (error) {
+      console.error('Error connecting to WebSocket:', error);
+    }
+  }
+
+  private async streamToWebSocket(ws: WebSocket): Promise<void> {
+    try {
+      const reader = this.stream.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          console.log('📡 Stream finished, closing WebSocket');
+          ws.close();
+          break;
+        }
+
+        if (value) {
+          ws.send(value);
+        }
+      }
+
+    } catch (error) {
+      console.error('Error streaming to WebSocket:', error);
     }
   }
 }

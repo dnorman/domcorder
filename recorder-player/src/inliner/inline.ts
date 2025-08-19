@@ -1,4 +1,5 @@
-import type { NodeIdBiMap, VCDATASection, VComment, VDocument, VDocumentType, VElement, VNode, VProcessingInstruction, VStyleSheet, VTextNode } from "../dom";
+import { VCDATASection, VComment, VDocumentType, VElement, VProcessingInstruction, VTextNode } from "@domcorder/proto-ts";
+import type { NodeIdBiMap } from "../dom";
 import type { Asset } from "./Asset";
 import type { AssetType } from "./AssetType";
 import { PendingAssets } from "./PendingAssets";
@@ -38,14 +39,14 @@ export function snapshotNode(node: Node, pending: PendingAssets, nodeIdMap: Node
     case Node.ELEMENT_NODE: {
       return snapElement(node as Element, pending, nodeIdMap);
     }
-    
+
     case Node.TEXT_NODE: {
-      const textNode: VTextNode = {
-        id: nodeIdMap.getNodeId(node)!, nodeType: "text", text: node.nodeValue ?? ""
-      } 
-      return textNode;
+      return new VTextNode(
+        nodeIdMap.getNodeId(node)!,
+        node.nodeValue ?? ""
+      );
     }
-    
+
     case Node.DOCUMENT_NODE: {
       throw new Error("Not implemented");
     }
@@ -59,40 +60,36 @@ export function snapshotNode(node: Node, pending: PendingAssets, nodeIdMap: Node
     }
 
     case Node.CDATA_SECTION_NODE: {
-      const cdataNode: VCDATASection = {
-        id: nodeIdMap.getNodeId(node)!, nodeType: "cdata", data: node.nodeValue ?? ""
-      }
-      return cdataNode;
+      return new VCDATASection(
+        nodeIdMap.getNodeId(node)!,
+        node.nodeValue ?? ""
+      );
     }
 
     case Node.COMMENT_NODE: {
-      const commentNode: VComment = {
-        id: nodeIdMap.getNodeId(node)!, nodeType: "comment", data: node.nodeValue ?? ""
-      }
-      return commentNode;
+      return new VComment(
+        nodeIdMap.getNodeId(node)!,
+        node.nodeValue ?? ""
+      );
     }
 
     case Node.PROCESSING_INSTRUCTION_NODE: {
       const piNode = node as ProcessingInstruction;
-      const processingInstruction: VProcessingInstruction = {
-        id: nodeIdMap.getNodeId(node)!, 
-        nodeType: "processingInstruction", 
-        target: piNode.target, 
-        data: piNode.data
-      }
-      return processingInstruction;
+      return new VProcessingInstruction(
+        nodeIdMap.getNodeId(node)!,
+        piNode.target,
+        piNode.data
+      );
     }
 
     case Node.DOCUMENT_TYPE_NODE: {
       const docTypeNode = node as DocumentType;
-      const docType: VDocumentType = {
-        id: nodeIdMap.getNodeId(node)!,
-        nodeType: "documentType",
-        name: docTypeNode.name,
-        publicId: docTypeNode.publicId,
-        systemId: docTypeNode.systemId
-      }
-      return docType;
+      return new VDocumentType(
+        nodeIdMap.getNodeId(node)!,
+        docTypeNode.name,
+        docTypeNode.publicId || undefined,
+        docTypeNode.systemId || undefined
+      );
     }
 
     case Node.NOTATION_NODE: {
@@ -108,46 +105,46 @@ export function snapshotNode(node: Node, pending: PendingAssets, nodeIdMap: Node
 // -------------------- Phase 1 (streaming variant) --------------------
 
 
-function  snapshotScriptElement(el: HTMLScriptElement, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
-  const vEl: VElement = {
-    id: nodeIdMap.getNodeId(el)!,
-    nodeType: "element",
-    tag: "script",
-    attrs: { 
-      "data-orig-src": el.src,
-    },
-    children: Array.from(el.childNodes).map(c => snapshotNode(c, pending, nodeIdMap))
-  };
-  
-  for (const c of vEl.children!) {
+function snapshotScriptElement(el: HTMLScriptElement, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
+  const children = Array.from(el.childNodes).map(c => snapshotNode(c, pending, nodeIdMap));
+
+  // Clear text content from script children
+  for (const c of children) {
     if (c.nodeType === "text") {
-      c.text = "";
+      (c as VTextNode).text = "";
     }
   }
 
-  return vEl;
+  return new VElement(
+    nodeIdMap.getNodeId(el)!,
+    "script",
+    undefined,
+    { "data-orig-src": el.src },
+    children
+  );
 }
 
 function snapshotStyleElement(styleElement: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
-  const vElement: VElement = {
-    id: nodeIdMap.getNodeId(styleElement)!,
-    nodeType: "element",
-    tag: "style",
-    attrs: { },
-    children: Array.from(styleElement.childNodes).map(c => snapshotNode(c, pending, nodeIdMap))
-  };
-  
+  const children = Array.from(styleElement.childNodes).map(c => snapshotNode(c, pending, nodeIdMap));
+
   const originalText = readStyleText(styleElement as HTMLStyleElement);
   if (originalText) {
     collectCssUrlsAssign(originalText, styleElement.baseURI || document.baseURI, pending);
     // Replace the text content with processed CSS
-    for (const c of vElement.children!) {
+    for (const c of children) {
       if (c.nodeType === "text") {
-        c.text = originalText;
+        (c as VTextNode).text = originalText;
       }
     }
   }
-  return vElement;
+
+  return new VElement(
+    nodeIdMap.getNodeId(styleElement)!,
+    "style",
+    undefined,
+    {},
+    children
+  );
 }
 
 function snapshotLinkElement(linkElement: HTMLLinkElement, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
@@ -166,22 +163,18 @@ function snapshotLinkElement(linkElement: HTMLLinkElement, pending: PendingAsset
   }
 
   // Create a style element instead of link
-  const vElement: VElement = {
-    id: nodeIdMap.getNodeId(linkElement)!,
-    nodeType: "element",
-    tag: "style",
-    attrs: {
+  const children = cssText ? [new VTextNode(-1, cssText)] : [];
+
+  return new VElement(
+    nodeIdMap.getNodeId(linkElement)!,
+    "style",
+    undefined,
+    {
       "data-link-href": linkElement.href,
       ...(linkElement.media ? { media: linkElement.media } : {})
     },
-    children: cssText ? [{
-      id: -1,
-      nodeType: "text",
-      text: cssText
-    }] : []
-  };
-
-  return vElement;
+    children
+  );
 }
 
 function snapElement(el: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
@@ -211,21 +204,22 @@ function snapElement(el: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap
   if (attrs["style"]) {
     collectCssUrlsAssign(attrs["style"], el.baseURI || document.baseURI, pending);
   }
-  
+
   const id = nodeIdMap.getNodeId(el)!;
-  const node: VElement = {
-    id,
-    nodeType: "element",
-    tag: el.tagName.toLowerCase(),
-    ns: el.namespaceURI || undefined,
-    attrs: Object.keys(attrs).length ? attrs : {},
-    children: [],
-  };
+  const children: VNode[] = [];
 
   for (const child of Array.from(el.childNodes)) {
     const vChild = snapshotNode(child, pending, nodeIdMap);
-    node.children!.push(vChild);
+    children.push(vChild);
   }
+
+  const node = new VElement(
+    id,
+    el.tagName.toLowerCase(),
+    el.namespaceURI || undefined,
+    Object.keys(attrs).length ? attrs : {},
+    children
+  );
 
   const sr = (el as HTMLElement).shadowRoot;
   if (sr) node.shadow = snapShadow(sr, pending, nodeIdMap);
@@ -253,7 +247,7 @@ export function rewriteAllRefsToPendingIds(snap: VDocument, baseURI: string, pen
     });
     return { ...s, text } as VStyleSheet;
   });
-  
+
   // Process all document children to rewrite URLs in style elements
   for (const child of snap.children) {
     if (child.nodeType === "element") {
@@ -264,7 +258,7 @@ export function rewriteAllRefsToPendingIds(snap: VDocument, baseURI: string, pen
 
 export function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: PendingAssets): void {
   if (node.nodeType !== "element") return;
-  
+
   // Handle style elements specifically
   if (node.tag === "style") {
     // Process CSS content in style elements
@@ -279,7 +273,7 @@ export function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: 
       }
     }
   }
-  
+
   if (node.attrs) {
     for (const key of ["src", "poster", "href", "xlink:href", "data-src"]) {
       const v = node.attrs[key];
@@ -367,7 +361,7 @@ function readStyleText(styleEl: HTMLStyleElement): string {
   try {
     const sh = styleEl.sheet as CSSStyleSheet | null;
     if (sh) return cssRulesToText(sh);
-  } catch {}
+  } catch { }
   return styleEl.textContent ?? "";
 }
 

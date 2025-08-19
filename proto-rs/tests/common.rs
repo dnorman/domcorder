@@ -125,6 +125,13 @@ pub fn sample_frames() -> Vec<Frame> {
                 ], // End of HtmlDocument children array
             }, // End of HtmlDocument
         }),
+        Frame::Asset(AssetData {
+            id: 123,
+            url: "https://example.com/image.png".to_string(),
+            asset_type: "image".to_string(),
+            mime: Some("image/png".to_string()),
+            buf: vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], // PNG header
+        }),
         Frame::ViewportResized(ViewportResizedData {
             width: 1920,
             height: 1080,
@@ -141,7 +148,16 @@ pub fn sample_frames() -> Vec<Frame> {
         Frame::ElementFocused(ElementFocusedData { element_id: 42 }),
         Frame::DomTextChanged(DomTextChangedData {
             node_id: 42,
-            text: "Updated text content".to_string(),
+            operations: vec![
+                TextOperationData::Remove(TextRemoveOperationData {
+                    index: 0,
+                    length: 5,
+                }),
+                TextOperationData::Insert(TextInsertOperationData {
+                    index: 0,
+                    text: "Updated".to_string(),
+                }),
+            ],
         }),
         Frame::DomNodeAdded(DomNodeAddedData {
             parent_node_id: 1,
@@ -154,6 +170,7 @@ pub fn sample_frames() -> Vec<Frame> {
                 })],
             }),
         }),
+        Frame::DomNodeRemoved(DomNodeRemovedData { node_id: 43 }),
         Frame::DomAttributeChanged(DomAttributeChangedData {
             node_id: 42,
             attribute_name: "class".to_string(),

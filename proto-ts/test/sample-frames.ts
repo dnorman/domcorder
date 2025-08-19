@@ -4,6 +4,7 @@ import { Writer } from "../src/writer.ts";
 import {
     TimestampDataEnc,
     KeyframeDataEnc,
+    AssetDataEnc,
     ViewportResizedDataEnc,
     ScrollOffsetChangedDataEnc,
     MouseMovedDataEnc,
@@ -12,6 +13,7 @@ import {
     ElementFocusedDataEnc,
     DomTextChangedDataEnc,
     DomNodeAddedDataEnc,
+    DomNodeRemovedDataEnc,
     DomAttributeChangedDataEnc
 } from "../src/frames.ts";
 import { convertDOMDocumentToVDocument, convertDOMElementToVElement } from "../src/dom-converter.ts";
@@ -66,31 +68,42 @@ export async function generateTestFrames(writer: Writer): Promise<void> {
     const vdocument = convertDOMDocumentToVDocument(dom.window.document);
     await KeyframeDataEnc.encode(writer, vdocument);
 
-    // Frame 2: ViewportResized
+    // Frame 2: Asset (sample image data)
+    const sampleImageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]); // PNG header
+    await AssetDataEnc.encode(writer, 123, "https://example.com/image.png", "image", "image/png", sampleImageData.buffer);
+
+    // Frame 3: ViewportResized
     await ViewportResizedDataEnc.encode(writer, 1920, 1080);
 
-    // Frame 3: ScrollOffsetChanged
+    // Frame 4: ScrollOffsetChanged
     await ScrollOffsetChangedDataEnc.encode(writer, 0, 240);
 
-    // Frame 4: MouseMoved
+    // Frame 5: MouseMoved
     await MouseMovedDataEnc.encode(writer, 150, 200);
 
-    // Frame 5: MouseClicked
+    // Frame 6: MouseClicked
     await MouseClickedDataEnc.encode(writer, 150, 200);
 
-    // Frame 6: KeyPressed
+    // Frame 7: KeyPressed
     await KeyPressedDataEnc.encode(writer, "Enter");
 
-    // Frame 7: ElementFocused
+    // Frame 8: ElementFocused
     await ElementFocusedDataEnc.encode(writer, 42n);
 
-    // Frame 8: DomTextChanged
-    await DomTextChangedDataEnc.encode(writer, 42n, "Updated text content");
+    // Frame 9: DomTextChanged with operations
+    const textOperations = [
+        { op: 'remove' as const, index: 0, length: 5 },  // Remove first 5 chars
+        { op: 'insert' as const, index: 0, text: 'Updated' }  // Insert "Updated"
+    ];
+    await DomTextChangedDataEnc.encode(writer, 42n, textOperations);
 
-    // Frame 9: DomNodeAdded
+    // Frame 10: DomNodeAdded
     const velement = convertDOMElementToVElement(createSimpleNode());
     await DomNodeAddedDataEnc.encode(writer, 1n, 0, velement);
 
-    // Frame 10: DomAttributeChanged
+    // Frame 11: DomNodeRemoved
+    await DomNodeRemovedDataEnc.encode(writer, 43n);
+
+    // Frame 12: DomAttributeChanged
     await DomAttributeChangedDataEnc.encode(writer, 42n, "class", "updated-class");
 }
