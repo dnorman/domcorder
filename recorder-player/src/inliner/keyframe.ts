@@ -1,7 +1,7 @@
 import type { NodeIdBiMap } from "../dom/NodeIdBiMap";
 import { PendingAssets } from "./PendingAssets";
-import type { VDocument, VNode, VStyleSheet } from "../dom/vdom";
-import { 
+import type { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
+import {
   collectCssUrlsAssign,
   fetchAssets,
   makeId,

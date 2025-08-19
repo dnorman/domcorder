@@ -1,6 +1,6 @@
 import { NodeIdBiMap } from '../dom/NodeIdBiMap';
-import type { VDocument, VNode, VElement, VTextNode, VCDATASection, VComment, VProcessingInstruction, VDocumentType, VStyleSheet } from '../dom/vdom';
-import type { Asset } from '../inliner/events';
+import type { VDocument, VNode, VElement, VTextNode, VCDATASection, VComment, VProcessingInstruction, VDocumentType, VStyleSheet } from '@domcorder/proto-ts';
+import type { Asset } from '../inliner/Asset';
 
 /**
  * DomMaterializer recreates an HTML document from a VDocument and associated assets.
