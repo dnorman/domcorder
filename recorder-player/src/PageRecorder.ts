@@ -15,6 +15,8 @@ import {
   type TextOperationData
 } from "./protocol";
 
+// This 100% no matter how far we refactor this.. should
+// def be the real binary frame.
 export type FrameHandler = (frame: Frame) => void;
 
 export class PageRecorder {
@@ -80,10 +82,13 @@ export class PageRecorder {
 
     this.styleSheetWatcher = new StyleSheetWatcher({
       patchCSSOM: true,
+      root: this.sourceDocument,
       handler: (event: StyleSheetWatcherEvent) => {
         console.log("style sheet watcher event", event);
       }
     });
+
+    this.styleSheetWatcher.start();
   }
 
   private processOperation(

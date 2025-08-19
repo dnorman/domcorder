@@ -9,7 +9,11 @@
 
   <script src="./emptry.js"></script>
   <script language="javascript" type="text/javascript">
-    // A script that will be stripped by the inliner
+    function addStyleSheet() {
+      const styleSheet = new CSSStyleSheet();
+      styleSheet.replaceSync(".added-style-sheet { background-color: white }");
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, styleSheet];
+    }
   </script>
 
 </head>
@@ -35,7 +39,8 @@
       <div style="background-image: url('millennium_falcon.png'); background-size: 75px; width: 75px; height: 45px;"></div> 
     </div>
 
-    
+    <button onclick="addStyleSheet()">Add Style Sheet</button>
+    <div class="added-style-sheet">Styled via added adopted stylesheet</div>
 
     <div class="editor-title">Text Editor</div>
     <div class="editor" contenteditable="true">

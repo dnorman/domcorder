@@ -24,3 +24,4 @@ const screenRecorder = new PageRecorder(document, (frame) => {
   pagePlayer.handleFrame(frame);
 });
 screenRecorder.start();
+

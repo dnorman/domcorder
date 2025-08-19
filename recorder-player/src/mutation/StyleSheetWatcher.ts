@@ -348,6 +348,30 @@ export class StyleSheetWatcher {
   }
 
   // -------------------------------------------------------------------------
+  // Utilities
+  // -------------------------------------------------------------------------
+
+  private isStyleSheetAttached(sheet: CSSStyleSheet): boolean {
+    // Check if it's in document.styleSheets
+    const docSheets = Array.from(this.opts.root.styleSheets);
+    if (docSheets.includes(sheet)) return true;
+
+    // Check if it's in document.adoptedStyleSheets
+    const docAdopted = Array.from(this.opts.root.adoptedStyleSheets);
+    if (docAdopted.includes(sheet)) return true;
+
+    // Check if it's in any watched ShadowRoot's adoptedStyleSheets
+    for (const [target] of this.lastAdopted) {
+      if (target instanceof ShadowRoot) {
+        const shadowAdopted = Array.from(target.adoptedStyleSheets);
+        if (shadowAdopted.includes(sheet)) return true;
+      }
+    }
+
+    return false;
+  }
+
+  // -------------------------------------------------------------------------
   // Patching
   // -------------------------------------------------------------------------
 
@@ -416,10 +440,26 @@ export class StyleSheetWatcher {
       this.unpatchFns.push(() => { (proto as any)[key] = orig; });
     };
 
-    wrap('insertRule', (sheet, args) => this.emitEvent({ type: 'sheet-rules-insert', sheet, rule: args[0], index: args[1] }));
-    wrap('deleteRule', (sheet, args) => this.emitEvent({ type: 'sheet-rules-delete', sheet, index: args[0] }));
-    wrap('replace', (sheet, args) => this.emitEvent({ type: 'sheet-rules-replace', sheet, text: args[0] }));
-    wrap('replaceSync', (sheet, args) => this.emitEvent({ type: 'sheet-rules-replace', sheet, text: args[0] }));
+    wrap('insertRule', (sheet, args) => {
+      if (this.isStyleSheetAttached(sheet)) {
+        this.emitEvent({ type: 'sheet-rules-insert', sheet, rule: args[0], index: args[1] });
+      }
+    });
+    wrap('deleteRule', (sheet, args) => {
+      if (this.isStyleSheetAttached(sheet)) {
+        this.emitEvent({ type: 'sheet-rules-delete', sheet, index: args[0] });
+      }
+    });
+    wrap('replace', (sheet, args) => {
+      if (this.isStyleSheetAttached(sheet)) {
+        this.emitEvent({ type: 'sheet-rules-replace', sheet, text: args[0] });
+      }
+    });
+    wrap('replaceSync', (sheet, args) => {
+      if (this.isStyleSheetAttached(sheet)) {
+        this.emitEvent({ type: 'sheet-rules-replace', sheet, text: args[0] });
+      }
+    });
   }
 
   // -------------------------------------------------------------------------

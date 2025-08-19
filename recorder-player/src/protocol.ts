@@ -1,6 +1,6 @@
 export type Frame = {
     frameType: FrameType;
-    data: TimestampData | KeyframeData | ViewportResizedData | ScrollOffsetChangedData | MouseMovedData | MouseClickedData | KeyPressedData | ElementFocusedData | TextSelectionChangedData | DomNodeAddedData | DomNodeRemovedData | DomAttributeChangedData | DomAttributeRemovedData | DomTextChangedData | DomNodeResizedData | StyleSheetChangedData;
+    data: TimestampData | KeyframeData | ViewportResizedData | ScrollOffsetChangedData | MouseMovedData | MouseClickedData | KeyPressedData | ElementFocusedData | TextSelectionChangedData | DomNodeAddedData | DomNodeRemovedData | DomAttributeChangedData | DomAttributeRemovedData | DomTextChangedData | DomNodeResizedData;
 }
 
 export enum FrameType {
@@ -77,20 +77,24 @@ export type TextNodeData = {
   
   export type NodeData = TextNodeData | ElementData | CDATASectionData | CommentData | ProcessingInstructionData | DocumentTypeData;
   
+  // This is new.
   export type StyleSheetData = { id: string; media?: string; text?: string };
   
+  // These properties changed a bi.
   export interface DocumentData {
     id: number;
     adoptedStyleSheets: StyleSheetData[];
     children: NodeData[];
   }
 
-
+// This is a bit different, added asset count
+// this allows us to not need an end frame.
 export type KeyframeData = {
     document: DocumentData;
     assetCount: number;
 }
 
+// This is new.
 export type AssetData = {
     id: number;                    
     url: string;                 
@@ -155,7 +159,7 @@ export type DomAttributeRemovedData = {
     nodeId: number;
     attributeName: string;
 }
-
+// The text changed frames are different now.
 export type TextInsertOperationData = {
     op: 'insert';
     index: number;
@@ -175,12 +179,39 @@ export type DomTextChangedData = {
     operations: TextOperationData[];
 }
 
+// down to here.
+
 export type DomNodeResizedData = {
     nodeId: number;
     width: number;
     height: number;
 }
 
-export type StyleSheetChangedData = {
-    // TODO Not sure what data we want here yet.
+// Everything below here is not needed yet.
+export type StyleSheetAddedData = {
+    styleSheetId: number;
+    content: string;
+    assetCount: number;
+}
+
+export type StyleSheetRemovedData = {
+    styleSheetId: number;
+}
+
+export type StyleSheetRuleInsertedData = {
+    styleSheetId: number;
+    ruleIndex: number;
+    content: string;
+    assetCount: number;
+}
+
+export type StyleSheetRuleDeletedData = {
+    styleSheetId: number;
+    ruleIndex: number;
+}
+
+export type StyleSheetReplacedData = {
+    styleSheetId: number;
+    content: string;
+    assetCount: number;
 }
