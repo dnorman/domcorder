@@ -6,7 +6,8 @@
   "type": "module",
   "workspaces": [
     "demo-app",
-    "proto-ts"
+    "proto-ts",
+    "recorder-player"
   ],
   "scripts": {
     "dev": "cd demo-app && bun run dev",
@@ -18,7 +19,7 @@
   },
   "keywords": [
     "dom",
-    "recording", 
+    "recording",
     "capture",
     "video",
     "web",
