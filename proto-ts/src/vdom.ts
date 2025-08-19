@@ -1,37 +1,70 @@
-export type VTextNode = {
+export class VTextNode {
   id: number;
-  nodeType: "text"; 
-  text: string
-};
+  nodeType: "text";
+  text: string;
 
-export type VCDATASection = {
-  id: number;
-  nodeType: "cdata"; 
-  data: string
-};
+  constructor(id: number, text: string) {
+    this.id = id;
+    this.nodeType = "text";
+    this.text = text;
+  }
+}
 
-export type VComment = {
+export class VCDATASection {
   id: number;
-  nodeType: "comment"; 
-  data: string
-};
+  nodeType: "cdata";
+  data: string;
 
-export type VProcessingInstruction = {
+  constructor(id: number, data: string) {
+    this.id = id;
+    this.nodeType = "cdata";
+    this.data = data;
+  }
+}
+
+export class VComment {
   id: number;
-  nodeType: "processingInstruction"; 
+  nodeType: "comment";
+  data: string;
+
+  constructor(id: number, data: string) {
+    this.id = id;
+    this.nodeType = "comment";
+    this.data = data;
+  }
+}
+
+export class VProcessingInstruction {
+  id: number;
+  nodeType: "processingInstruction";
   target: string;
-  data: string
-};
+  data: string;
 
-export type VDocumentType = {
+  constructor(id: number, target: string, data: string) {
+    this.id = id;
+    this.nodeType = "processingInstruction";
+    this.target = target;
+    this.data = data;
+  }
+}
+
+export class VDocumentType {
   id: number;
-  nodeType: "documentType"; 
+  nodeType: "documentType";
   name: string;
   publicId?: string;
   systemId?: string;
-};
 
-export type VElement = {
+  constructor(id: number, name: string, publicId?: string, systemId?: string) {
+    this.id = id;
+    this.nodeType = "documentType";
+    this.name = name;
+    this.publicId = publicId;
+    this.systemId = systemId;
+  }
+}
+
+export class VElement {
   id: number;
   nodeType: "element";
   tag: string;
@@ -39,14 +72,40 @@ export type VElement = {
   attrs?: Record<string, string>;
   children?: VNode[];
   shadow?: VNode[];
-};
+
+  constructor(id: number, tag: string, ns?: string, attrs?: Record<string, string>, children?: VNode[], shadow?: VNode[]) {
+    this.id = id;
+    this.nodeType = "element";
+    this.tag = tag;
+    this.ns = ns;
+    this.attrs = attrs;
+    this.children = children;
+    this.shadow = shadow;
+  }
+}
 
 export type VNode = VTextNode | VElement | VCDATASection | VComment | VProcessingInstruction | VDocumentType;
 
-export type VStyleSheet = {id: string; media?: string; text?: string };
+export class VStyleSheet {
+  id: string;
+  media?: string;
+  text?: string;
 
-export interface VDocument {
+  constructor(id: string, media?: string, text?: string) {
+    this.id = id;
+    this.media = media;
+    this.text = text;
+  }
+}
+
+export class VDocument {
   id: number;
   adoptedStyleSheets: VStyleSheet[];
   children: VNode[];
+
+  constructor(id: number, adoptedStyleSheets: VStyleSheet[] = [], children: VNode[] = []) {
+    this.id = id;
+    this.adoptedStyleSheets = adoptedStyleSheets;
+    this.children = children;
+  }
 }
