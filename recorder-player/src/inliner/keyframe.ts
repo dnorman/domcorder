@@ -30,13 +30,13 @@ export interface KeyFrameGenerationOptions {
 
 export async function generateKeyFrame(
   doc: Document = document,
-  nodeIdMap: NodeIdBiMap, 
+  nodeIdMap: NodeIdBiMap,
   handler: KeyFrameEventHandler,
   opts: KeyFrameGenerationOptions = {}
 ): Promise<void> {
-  
+
   const antiAnimationStylesheet = opts.freezeAnimations ? injectAntiAnimationStyle(doc) : null;
-  
+
   try {
     if (opts.quietWindowMs) {
       await waitForQuietWindow(doc, opts.quietWindowMs);
@@ -56,18 +56,18 @@ export async function generateKeyFrame(
 
     // Phase 2: cache-first fetch & stream assets one-by-one
     await fetchAssets(
-      opts.concurrency || 6, 
+      opts.concurrency || 6,
       opts.inlineCrossOrigin || false,
       pendingAssets,
       (asset) => handler.onAsset(asset));
 
     // All assets processed; signal completion (no payload)
     handler.onKeyFrameComplete();
-  
+
   } finally {
     if (antiAnimationStylesheet) {
       // Remove the anti-animation stylesheet from adopted stylesheets
-      doc.adoptedStyleSheets = 
+      doc.adoptedStyleSheets =
         doc.adoptedStyleSheets.filter((sheet: CSSStyleSheet) => sheet !== antiAnimationStylesheet);
     }
   }
@@ -76,10 +76,10 @@ export async function generateKeyFrame(
 function injectAntiAnimationStyle(doc: Document): CSSStyleSheet {
   const stylesheet = new CSSStyleSheet();
   stylesheet.replaceSync(`*{animation:none!important;transition:none!important}`);
-  
+
   // Add to adopted stylesheets
   doc.adoptedStyleSheets = [...doc.adoptedStyleSheets, stylesheet];
-  
+
   return stylesheet;
 }
 
@@ -110,22 +110,22 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, antiAnimat
   if (doc.adoptedStyleSheets && doc.adoptedStyleSheets.length > 0) {
     for (let i = 0; i < doc.adoptedStyleSheets.length; i++) {
       const sheet = doc.adoptedStyleSheets[i];
-      
+
       // Skip the anti-animation stylesheet
       if (antiAnimationStylesheet && sheet === antiAnimationStylesheet) {
         continue;
       }
-      
+
       try {
         const rules = Array.from(sheet.cssRules);
         const text = rules.map(rule => rule.cssText).join('\n');
         // FIXME_MM the ids here needs to be linked to the
         // stylesheet object and can be monotonically incremented
         // just like node ids.
-        adoptedStyleSheets.push({ 
-          id: makeId(), 
-          media: sheet.media.mediaText || undefined, 
-          text 
+        adoptedStyleSheets.push({
+          id: makeId(),
+          media: sheet.media.mediaText || undefined,
+          text
         });
         collectCssUrlsAssign(text, doc.baseURI, pending);
       } catch (error) {

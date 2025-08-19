@@ -38,10 +38,10 @@ export class DomMaterializer {
   public materializeDocument(vdoc: VDocument, assets: Asset[]): void {
     // Build asset map for quick lookup
     this.buildAssetMap(assets);
-    
+
     // Clear existing document children
     this.clearDocumentChildren();
-    
+
     // Process all document children
     this.processDocument(vdoc);
 
@@ -98,13 +98,13 @@ export class DomMaterializer {
         }
       }
     }
-    
+
     // Track if we're entering a style element
     const wasInStyleElement = this.isInStyleElement;
     if (vElement.tag === 'style') {
       this.isInStyleElement = true;
     }
-    
+
     // Process children
     if (vElement.children) {
       for (const child of vElement.children) {
@@ -114,10 +114,10 @@ export class DomMaterializer {
         }
       }
     }
-    
+
     // Restore previous state
     this.isInStyleElement = wasInStyleElement;
-    
+
     // Handle shadow DOM
     if (vElement.shadow) {
       const shadowRoot = element.attachShadow({ mode: 'closed' });
@@ -128,7 +128,7 @@ export class DomMaterializer {
         }
       }
     }
-    
+
     return element;
   }
 
@@ -150,17 +150,17 @@ export class DomMaterializer {
         }
       }
     }
-    
+
     // Handle srcset attribute (multiple URLs)
     if (key === 'srcset') {
       return this.processSrcsetValue(value);
     }
-    
+
     // Handle style attribute (inline CSS)
     if (key === 'style') {
       return this.processCssText(value);
     }
-    
+
     return value;
   }
 
@@ -195,7 +195,7 @@ export class DomMaterializer {
    */
   private processDocument(vdoc: VDocument): void {
     NodeIdBiMap.setNodeId(this.document, vdoc.id);
-    
+
     for (const child of vdoc.children) {
       const node = this.createNode(child);
       if (node) {
@@ -231,16 +231,16 @@ export class DomMaterializer {
         node = this.createElement(vNode);
         break;
       case 'cdata':
-        node =  this.document.createCDATASection(vNode.data);
+        node = this.document.createCDATASection(vNode.data);
         break;
       case 'comment':
-        node =  this.document.createComment(vNode.data);
+        node = this.document.createComment(vNode.data);
         break;
       case 'processingInstruction':
-        node =  this.document.createProcessingInstruction(vNode.target, vNode.data);
+        node = this.document.createProcessingInstruction(vNode.target, vNode.data);
         break;
       case 'documentType':
-        node =  this.document.implementation.createDocumentType(vNode.name, vNode.publicId || '', vNode.systemId || '');
+        node = this.document.implementation.createDocumentType(vNode.name, vNode.publicId || '', vNode.systemId || '');
         break;
       default:
         return null;
@@ -259,16 +259,16 @@ export class DomMaterializer {
   private applyAdoptedStylesheets(adoptedStyleSheets: VStyleSheet[]): void {
     for (const sheet of adoptedStyleSheets) {
       if (!sheet.text) continue;
-      
+
       // Process the CSS text to inline asset data
       const processedText = this.processCssText(sheet.text);
-      
+
       // Create a new stylesheet using CSSOM API
       const win = this.document.defaultView!;
 
       if (win.CSSStyleSheet) {
         const stylesheet = new win.CSSStyleSheet();
-        
+
         // Set the CSS text content
         try {
           stylesheet.replaceSync(processedText);
@@ -276,12 +276,12 @@ export class DomMaterializer {
           console.warn('Failed to parse CSS stylesheet:', error);
           continue;
         }
-        
+
         // Set media if specified
         if (sheet.media) {
           stylesheet.media.mediaText = sheet.media;
         }
-        
+
         // Add the stylesheet to the document's stylesheet collection
         this.document.adoptedStyleSheets = [
           ...this.document.adoptedStyleSheets,
@@ -289,19 +289,19 @@ export class DomMaterializer {
         ];
       } else {
         const styleElement = this.document.createElement('style');
-      
+
         if (sheet.id) {
           styleElement.id = sheet.id;
         }
-        
+
         if (sheet.media) {
           styleElement.setAttribute('media', sheet.media);
         }
-        
+
         if (processedText) {
           styleElement.textContent = processedText;
         }
-        
+
         this.document.head?.appendChild(styleElement);
       }
     }
@@ -313,7 +313,7 @@ export class DomMaterializer {
   private processCssText(cssText: string): string {
     // This is a simplified implementation - in practice, you might want to use a CSS parser
     // to properly handle all URL references in CSS
-    
+
     // Look for url() references and replace them with data URLs if the asset exists
     return cssText.replace(/url\(['"]?([^'"]+)['"]?\)/g, (match, url) => {
       // Handle "asset:<id>" format
@@ -353,7 +353,7 @@ export class DomMaterializer {
     if (url.startsWith('asset:')) {
       return 'application/octet-stream'; // Default fallback
     }
-    
+
     const extension = url.split('.').pop()?.toLowerCase();
     switch (extension) {
       case 'png':
