@@ -1,5 +1,5 @@
 import { Writer } from "./writer.ts";
-import { DomNodeData } from "./protocol.ts";
+import type { DomNodeData } from "./protocol.ts";
 
 // Forward declaration to avoid circular import
 interface BufferReader {
