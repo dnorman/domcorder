@@ -1,107 +1,32 @@
-use std::io::{self, Read, BufRead, BufReader};
-use bincode::Options;
-use crate::Frame;
-use crate::writer::{FileHeader, DCRR_MAGIC, DCRR_VERSION, HEADER_SIZE};
+use std::io;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio_stream::Stream;
 
-/// Reader for .dcrr file format and frame streams
-pub struct FrameReader<R: Read> {
-    reader: BufReader<R>,
+use crate::Frame;
+use crate::writer::{DCRR_MAGIC, DCRR_VERSION, FileHeader, HEADER_SIZE};
+use bincode::Options;
+
+/// Async stream-based reader for .dcrr file format and frame streams
+pub struct FrameReader<R: AsyncRead + Unpin> {
+    reader: R,
     header: Option<FileHeader>,
-    position: usize,
+    buffer: Vec<u8>,
+    header_read: bool,
+    expect_header: bool,
 }
 
-impl<R: Read> FrameReader<R> {
-    /// Create a new frame reader
-    pub fn new(reader: R) -> Self {
+impl<R: AsyncRead + Unpin> FrameReader<R> {
+    /// Create a new async frame reader
+    /// If expect_header is true, will try to read DCRR header first
+    pub fn new(reader: R, expect_header: bool) -> Self {
         Self {
-            reader: BufReader::new(reader),
+            reader,
             header: None,
-            position: 0,
-        }
-    }
-
-    /// Try to read file header (fallible - returns error if not a .dcrr file)
-    pub fn read_header(&mut self) -> io::Result<FileHeader> {
-        if let Some(ref header) = self.header {
-            return Ok(header.clone());
-        }
-
-        let mut header_buf = [0u8; HEADER_SIZE];
-        self.reader.read_exact(&mut header_buf)?;
-        
-        // Check magic bytes
-        if &header_buf[0..4] != &DCRR_MAGIC {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid DCRR magic bytes - not a .dcrr file",
-            ));
-        }
-        
-        // Parse version
-        let version = u32::from_be_bytes([
-            header_buf[4], header_buf[5], header_buf[6], header_buf[7]
-        ]);
-        
-        if version != DCRR_VERSION {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Unsupported DCRR version: {} (expected {})", version, DCRR_VERSION),
-            ));
-        }
-        
-        // Parse timestamp
-        let created_at = u64::from_be_bytes([
-            header_buf[8], header_buf[9], header_buf[10], header_buf[11],
-            header_buf[12], header_buf[13], header_buf[14], header_buf[15],
-        ]);
-        
-        // Parse reserved bytes
-        let mut reserved = [0u8; 16];
-        reserved.copy_from_slice(&header_buf[16..32]);
-        
-        let header = FileHeader {
-            magic: DCRR_MAGIC,
-            version,
-            created_at,
-            reserved,
-        };
-        
-        self.header = Some(header.clone());
-        self.position += HEADER_SIZE;
-        Ok(header)
-    }
-
-    /// Read the next frame from the stream
-    /// Returns Ok(None) when end of stream is reached
-    pub fn read_frame(&mut self) -> io::Result<Option<Frame>> {
-        let config = bincode::DefaultOptions::new()
-            .with_big_endian()
-            .with_fixint_encoding();
-
-        // Check if we have data available
-        let available = self.reader.fill_buf()?;
-        if available.is_empty() {
-            return Ok(None); // End of stream
-        }
-
-        // Use bincode's deserialize_from which reads exactly one value and leaves the rest
-        match config.deserialize_from(&mut self.reader) {
-            Ok(frame) => {
-                // bincode automatically consumed the correct number of bytes
-                Ok(Some(frame))
-            }
-            Err(e) => {
-                // Check if this is EOF
-                if let bincode::ErrorKind::Io(io_err) = e.as_ref() {
-                    if io_err.kind() == io::ErrorKind::UnexpectedEof {
-                        return Ok(None);
-                    }
-                }
-                Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Failed to decode frame: {}", e),
-                ))
-            }
+            buffer: Vec::new(),
+            header_read: false,
+            expect_header,
         }
     }
 
@@ -110,23 +35,166 @@ impl<R: Read> FrameReader<R> {
         self.header.as_ref()
     }
 
-    /// Get current position in stream
-    pub fn position(&self) -> usize {
-        self.position
+    /// Read the header (for compatibility with old API)
+    pub async fn read_header(&mut self) -> io::Result<FileHeader> {
+        self.read_header_if_needed().await?;
+        self.header
+            .clone()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "No header available"))
     }
 
-    /// Read all remaining frames into a vector
-    pub fn read_all_frames(&mut self) -> io::Result<Vec<Frame>> {
-        let mut frames = Vec::new();
-        
-        while let Some(frame) = self.read_frame()? {
-            frames.push(frame);
+    /// Read the next frame (for compatibility with old API)
+    pub async fn read_frame(&mut self) -> io::Result<Option<Frame>> {
+        self.read_header_if_needed().await?;
+        self.try_read_frame().await
+    }
+
+    async fn read_header_if_needed(&mut self) -> io::Result<()> {
+        if !self.expect_header || self.header_read {
+            return Ok(());
         }
-        
-        Ok(frames)
+
+        let mut header_buf = [0u8; HEADER_SIZE];
+        self.reader.read_exact(&mut header_buf).await?;
+
+        // Check magic bytes
+        if &header_buf[0..4] != &DCRR_MAGIC {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid DCRR magic bytes - not a .dcrr file",
+            ));
+        }
+
+        // Parse version
+        let version =
+            u32::from_be_bytes([header_buf[4], header_buf[5], header_buf[6], header_buf[7]]);
+
+        if version != DCRR_VERSION {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Unsupported DCRR version: {} (expected {})",
+                    version, DCRR_VERSION
+                ),
+            ));
+        }
+
+        // Parse timestamp
+        let created_at = u64::from_be_bytes([
+            header_buf[8],
+            header_buf[9],
+            header_buf[10],
+            header_buf[11],
+            header_buf[12],
+            header_buf[13],
+            header_buf[14],
+            header_buf[15],
+        ]);
+
+        // Parse reserved bytes
+        let mut reserved = [0u8; 16];
+        reserved.copy_from_slice(&header_buf[16..32]);
+
+        let header = FileHeader {
+            magic: DCRR_MAGIC,
+            version,
+            created_at,
+            reserved,
+        };
+
+        self.header = Some(header);
+        self.header_read = true;
+        Ok(())
+    }
+
+    async fn try_read_frame(&mut self) -> io::Result<Option<Frame>> {
+        let config = bincode::DefaultOptions::new()
+            .with_big_endian()
+            .with_fixint_encoding();
+
+        // Read chunks until we can deserialize a complete frame
+        let mut temp_buf = [0u8; 4096];
+
+        loop {
+            // Try to deserialize from current buffer
+            if !self.buffer.is_empty() {
+                let mut cursor = std::io::Cursor::new(&self.buffer);
+                match config.deserialize_from(&mut cursor) {
+                    Ok(frame) => {
+                        // Success! Remove consumed bytes from buffer
+                        let consumed = cursor.position() as usize;
+                        self.buffer.drain(..consumed);
+                        return Ok(Some(frame));
+                    }
+                    Err(e) => {
+                        // Check if this is just incomplete data
+                        if let bincode::ErrorKind::Io(io_err) = e.as_ref() {
+                            if io_err.kind() == io::ErrorKind::UnexpectedEof {
+                                // Need more data, continue reading
+                            } else {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    format!("Failed to decode frame: {}", e),
+                                ));
+                            }
+                        } else {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                format!("Failed to decode frame: {}", e),
+                            ));
+                        }
+                    }
+                }
+            }
+
+            // Read more data
+            match self.reader.read(&mut temp_buf).await {
+                Ok(0) => {
+                    // End of stream
+                    if self.buffer.is_empty() {
+                        return Ok(None);
+                    }
+                    // Try final deserialize with remaining data
+                    let mut cursor = std::io::Cursor::new(&self.buffer);
+                    match config.deserialize_from(&mut cursor) {
+                        Ok(frame) => {
+                            let consumed = cursor.position() as usize;
+                            self.buffer.drain(..consumed);
+                            return Ok(Some(frame));
+                        }
+                        Err(_) => return Ok(None), // Incomplete frame at end
+                    }
+                }
+                Ok(n) => {
+                    self.buffer.extend_from_slice(&temp_buf[..n]);
+                }
+                Err(e) => return Err(e),
+            }
+        }
     }
 }
 
-// Users should create FrameReader directly and decide whether to call read_header()
-// If read_header() fails with "Invalid DCRR magic bytes", treat as raw stream
-// If read_header() succeeds, it's a .dcrr file format
+impl<R: AsyncRead + Unpin> Stream for FrameReader<R> {
+    type Item = io::Result<Frame>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // Create a future for reading the next frame
+        let fut = async {
+            // Read header if needed
+            if let Err(e) = self.read_header_if_needed().await {
+                return Some(Err(e));
+            }
+
+            // Try to read the next frame
+            match self.try_read_frame().await {
+                Ok(Some(frame)) => Some(Ok(frame)),
+                Ok(None) => None,
+                Err(e) => Some(Err(e)),
+            }
+        };
+
+        // Pin and poll the future
+        let mut boxed = Box::pin(fut);
+        boxed.as_mut().poll(cx)
+    }
+}

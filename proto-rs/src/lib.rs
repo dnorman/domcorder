@@ -1,8 +1,7 @@
-pub mod writer;
-pub mod reader;
 pub mod frame;
+pub mod reader;
+pub mod writer;
 
-pub use writer::{FrameWriter, FileHeader};
-pub use reader::FrameReader;
 pub use frame::*;
-
+pub use reader::FrameReader;
+pub use writer::{FileHeader, FrameWriter};
