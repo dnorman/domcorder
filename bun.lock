@@ -1,5 +1,5 @@
 {
-  "lockfileVersion": 1,
+  "lockfileVersion": 0,
   "workspaces": {
     "": {
       "name": "domcorder-workspace",
@@ -34,7 +34,7 @@
     "recorder-player": {
       "name": "html-recording",
       "dependencies": {
-        "@domcorder/proto-ts": "workspace:*",
+        "@domcorder/proto-ts": "proto-ts",
         "jsdom": "^26.1.0",
       },
       "devDependencies": {
@@ -60,7 +60,7 @@
 
     "@csstools/css-tokenizer": ["@csstools/css-tokenizer@3.0.4", "", {}, "sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw=="],
 
-    "@domcorder/proto-ts": ["@domcorder/proto-ts@workspace:proto-ts"],
+    "@domcorder/proto-ts": ["@domcorder/proto-ts@workspace:proto-ts", { "devDependencies": { "jsdom": "^22.1.0" } }],
 
     "@tootallnate/once": ["@tootallnate/once@2.0.0", "", {}, "sha512-XCuKFP5PS55gnMVu3dty8KPatLqUoy/ZYzDzAGCQ8JNFCkLXzmI7vNHCR+XpbZaMWQK/vQubr7PkYq8g470J/A=="],
 
@@ -118,7 +118,7 @@
 
     "depd": ["depd@2.0.0", "", {}, "sha512-g7nH6P6dyDioJogAAGprGpCtVImJhpPk/roCzdb3fIh61/s/nPsfR6onyMwkCAR/OlC3yBC0lESvUoQEAssIrw=="],
 
-    "domcorder": ["domcorder@workspace:demo-app"],
+    "domcorder": ["domcorder@workspace:demo-app", { "dependencies": { "@types/react": "^19.1.8", "@types/react-dom": "^19.1.6", "react": "^19.1.0", "react-dom": "^19.1.0" }, "devDependencies": { "@types/bun": "latest", "@types/jsdom": "^21.1.7", "jsdom": "^26.1.0" }, "peerDependencies": { "typescript": "^5.0.0" } }],
 
     "domexception": ["domexception@4.0.0", "", { "dependencies": { "webidl-conversions": "^7.0.0" } }, "sha512-A2is4PLG+eeSfoTMA95/s4pvAoSo2mKtiM5jlHkAVewmiO8ISFTFKZjH7UAM1Atli/OT/7JHOrJRJiMKUZKYBw=="],
 
@@ -168,7 +168,7 @@
 
     "html-encoding-sniffer": ["html-encoding-sniffer@3.0.0", "", { "dependencies": { "whatwg-encoding": "^2.0.0" } }, "sha512-oWv4T4yJ52iKrufjnyZPkrN0CH3QnrUqdB6In1g5Fe1mia8GmF36gnfNySxoZtxD5+NmYw1EElVXiBk93UeskA=="],
 
-    "html-recording": ["html-recording@workspace:recorder-player"],
+    "html-recording": ["html-recording@workspace:recorder-player", { "dependencies": { "@domcorder/proto-ts": "proto-ts", "jsdom": "^26.1.0" }, "devDependencies": { "@types/bun": "latest", "@types/jsdom": "^21.1.7", "express": "^5.1.0" }, "peerDependencies": { "typescript": "^5.0.0" } }],
 
     "http-errors": ["http-errors@2.0.0", "", { "dependencies": { "depd": "2.0.0", "inherits": "2.0.4", "setprototypeof": "1.2.0", "statuses": "2.0.1", "toidentifier": "1.0.1" } }, "sha512-FtwrG/euBzaEjYeRqOgly7G0qviiXoJWnvEH2Z1plBdXgbyjv34pHTSb9zoeHMyDy33+DWy5Wt9Wo+TURtOYSQ=="],
 

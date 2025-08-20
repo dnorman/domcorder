@@ -1,16 +1,4 @@
-export interface InsertOperation {
-  type: 'insert';
-  index: number;
-  content: string;
-}
-
-export interface RemoveOperation {
-  type: 'remove';
-  index: number;
-  count: number;
-}
-
-export type StringChangeOperation = InsertOperation | RemoveOperation;
+import type { StringMutationOperation } from "../common/StringMutationOperation";
 
 /**
  * Computes a minimal set of changes to transform source string into target string.
@@ -20,12 +8,12 @@ export type StringChangeOperation = InsertOperation | RemoveOperation;
  * @param target - The target string to transform into
  * @returns Array of insert and remove operations in order of application
  */
-export function computeMinimalChanges(source: string, target: string): StringChangeOperation[] {
+export function computeMinimalChanges(source: string, target: string): StringMutationOperation[] {
   if (source === target) {
     return [];
   }
 
-  const operations: StringChangeOperation[] = [];
+  const operations: StringMutationOperation[] = [];
   let sourceIndex = 0;
   let targetIndex = 0;
 
@@ -72,7 +60,7 @@ export function computeMinimalChanges(source: string, target: string): StringCha
  * Applies the computed changes to a source string to produce the target string.
  * This is useful for testing and verification.
  */
-export function applyChanges(source: string, operations: StringChangeOperation[]): string {
+export function applyChanges(source: string, operations: StringMutationOperation[]): string {
   let result = source;
   
   // Sort operations by index in reverse order to avoid index shifting issues

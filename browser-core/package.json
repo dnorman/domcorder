@@ -1,5 +1,5 @@
 {
-  "name": "html-recording",
+  "name": "@domcorder/browser-core",
   "module": "index.ts",
   "type": "module",
   "scripts": {

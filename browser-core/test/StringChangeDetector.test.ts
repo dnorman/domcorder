@@ -1,4 +1,4 @@
-import { computeMinimalChanges, applyChanges } from '../src/mutation/StringChangeDetector';
+import { computeMinimalChanges, applyChanges } from '../src/recorder/StringChangeDetector';
 
 describe('StringChangeDetector', () => {
   describe('computeMinimalChanges', () => {

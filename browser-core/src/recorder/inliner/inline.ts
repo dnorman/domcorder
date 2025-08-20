@@ -1,5 +1,15 @@
-import { VCDATASection, VComment, VDocumentType, VElement, VProcessingInstruction, VTextNode } from "@domcorder/proto-ts";
-import type { NodeIdBiMap } from "../dom";
+import { 
+  VNode,
+  VCDATASection,
+  VComment,
+  VDocument,
+  VDocumentType,
+  VElement,
+  VProcessingInstruction,
+  VStyleSheet,
+  VTextNode
+} from "@domcorder/proto-ts";
+import type { NodeIdBiMap } from "../../common";
 import type { Asset } from "./Asset";
 import type { AssetType } from "./AssetType";
 import { PendingAssets } from "./PendingAssets";
@@ -230,7 +240,7 @@ function snapElement(el: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap
 function snapShadow(sr: ShadowRoot, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VNode[] {
   const out: VNode[] = [];
   for (const n of Array.from(sr.childNodes)) {
-    if (n.nodeType === Node.TEXT_NODE) out.push({ id: nodeIdMap.getNodeId(n)!, nodeType: "text", text: n.nodeValue ?? "" });
+    if (n.nodeType === Node.TEXT_NODE) out.push({ id: nodeIdMap.getNodeId(n)!, nodeType: "text", text: n.nodeValue ?? "" } as VTextNode);
     else if (n.nodeType === Node.ELEMENT_NODE) out.push(snapElement(n as Element, pending, nodeIdMap));
   }
   return out;
@@ -257,14 +267,14 @@ export function rewriteAllRefsToPendingIds(snap: VDocument, baseURI: string, pen
 }
 
 export function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: PendingAssets): void {
-  if (node.nodeType !== "element") return;
+  if (!(node instanceof VElement)) return;
 
   // Handle style elements specifically
   if (node.tag === "style") {
     // Process CSS content in style elements
     if (node.children) {
       for (const child of node.children) {
-        if (child.nodeType === "text" && child.text) {
+        if (child instanceof VTextNode && child.text) {
           child.text = child.text.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m: string, q: string, raw: string) => {
             const id = idForUrl(raw, base, pending);
             return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;

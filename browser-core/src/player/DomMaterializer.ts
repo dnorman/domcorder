@@ -1,6 +1,6 @@
-import { NodeIdBiMap } from '../dom/NodeIdBiMap';
+import { NodeIdBiMap } from '../common/NodeIdBiMap';
 import type { VDocument, VNode, VElement, VTextNode, VCDATASection, VComment, VProcessingInstruction, VDocumentType, VStyleSheet } from '@domcorder/proto-ts';
-import type { Asset } from '../inliner/Asset';
+import type { Asset } from '../recorder/inliner/Asset';
 
 /**
  * DomMaterializer recreates an HTML document from a VDocument and associated assets.
@@ -226,22 +226,22 @@ export class DomMaterializer {
 
     switch (vNode.nodeType) {
       case 'text':
-        node = this.createTextNode(vNode);
+        node = this.createTextNode(vNode as VTextNode);
         break;
       case 'element':
-        node = this.createElement(vNode);
+        node = this.createElement(vNode as VElement);
         break;
       case 'cdata':
-        node = this.document.createCDATASection(vNode.data);
+        node = this.document.createCDATASection((vNode as VCDATASection).data);
         break;
       case 'comment':
-        node = this.document.createComment(vNode.data);
+        node = this.document.createComment((vNode as VComment).data);
         break;
       case 'processingInstruction':
-        node = this.document.createProcessingInstruction(vNode.target, vNode.data);
+        node = this.document.createProcessingInstruction((vNode as VProcessingInstruction).target, (vNode as VProcessingInstruction).data);
         break;
       case 'documentType':
-        node = this.document.implementation.createDocumentType(vNode.name, vNode.publicId || '', vNode.systemId || '');
+        node = this.document.implementation.createDocumentType((vNode as VDocumentType).name, (vNode as VDocumentType).publicId || '', (vNode as VDocumentType).systemId || '');
         break;
       default:
         return null;

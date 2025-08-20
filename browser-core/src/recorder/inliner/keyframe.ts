@@ -1,4 +1,4 @@
-import type { NodeIdBiMap } from "../dom/NodeIdBiMap";
+import type { NodeIdBiMap } from "../../common/NodeIdBiMap";
 import { PendingAssets } from "./PendingAssets";
 import { VDocument } from "@domcorder/proto-ts";
 import type { VNode, VStyleSheet } from "@domcorder/proto-ts";

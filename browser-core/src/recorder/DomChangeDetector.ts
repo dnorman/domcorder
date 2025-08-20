@@ -1,6 +1,6 @@
-import { DomMutator } from "./DomMutator";
-import { NodeIdBiMap } from "../dom/NodeIdBiMap";
-import type { DomOperation } from "./operations";
+import { DomMutator } from "../player/DomMutator";
+import { NodeIdBiMap } from "../common/NodeIdBiMap";
+import type { DomOperation } from "../common/DomOperation";
 import { computeMinimalChanges } from "./StringChangeDetector";
 
 export class DomChangeDetector {

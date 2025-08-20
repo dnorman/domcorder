@@ -1,6 +1,8 @@
+import type { VDocument, VNode } from "@domcorder/proto-ts";
+
 export type Frame = {
     frameType: FrameType;
-    data: TimestampData | KeyframeData | ViewportResizedData | ScrollOffsetChangedData | MouseMovedData | MouseClickedData | KeyPressedData | ElementFocusedData | TextSelectionChangedData | DomNodeAddedData | DomNodeRemovedData | DomAttributeChangedData | DomAttributeRemovedData | DomTextChangedData | DomNodeResizedData;
+    data: TimestampData | KeyframeData | AssetData| ViewportResizedData | ScrollOffsetChangedData | MouseMovedData | MouseClickedData | KeyPressedData | ElementFocusedData | TextSelectionChangedData | DomNodeAddedData | DomNodeRemovedData | DomAttributeChangedData | DomAttributeRemovedData | DomTextChangedData | DomNodeResizedData;
 }
 
 export enum FrameType {
@@ -32,65 +34,15 @@ export type TimestampData = {
     timestamp: number;
 }
 
-export type TextNodeData = {
-    id: number;
-    nodeType: "text"; 
-    text: string
-  };
   
-  export type CDATASectionData = {
-    id: number;
-    nodeType: "cdata"; 
-    data: string
-  };
+// This is new.
+export type StyleSheetData = { id: string; media?: string; text?: string };
   
-  export type CommentData = {
-    id: number;
-    nodeType: "comment"; 
-    data: string
-  };
-  
-  export type ProcessingInstructionData = {
-    id: number;
-    nodeType: "processingInstruction"; 
-    target: string;
-    data: string
-  };
-  
-  export type DocumentTypeData = {
-    id: number;
-    nodeType: "documentType"; 
-    name: string;
-    publicId?: string;
-    systemId?: string;
-  };
-  
-  export type ElementData = {
-    id: number;
-    nodeType: "element";
-    tag: string;
-    ns?: string;
-    attrs?: Record<string, string>;
-    children?: NodeData[];
-    shadow?: NodeData[];
-  };
-  
-  export type NodeData = TextNodeData | ElementData | CDATASectionData | CommentData | ProcessingInstructionData | DocumentTypeData;
-  
-  // This is new.
-  export type StyleSheetData = { id: string; media?: string; text?: string };
-  
-  // These properties changed a bi.
-  export interface DocumentData {
-    id: number;
-    adoptedStyleSheets: StyleSheetData[];
-    children: NodeData[];
-  }
 
 // This is a bit different, added asset count
 // this allows us to not need an end frame.
 export type KeyframeData = {
-    document: DocumentData;
+    document: VDocument;
     assetCount: number;
 }
 
@@ -141,7 +93,7 @@ export type TextSelectionChangedData = {
 export type DomNodeAddedData = {
     parentNodeId: number;
     index: number;
-    node: NodeData;
+    node: VNode;
     assetCount: number;
 }
 

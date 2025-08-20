@@ -1,6 +1,6 @@
-import { NodeIdBiMap } from '../dom/';
-import type { DomOperation } from './operations';
-import { applyChanges } from './StringChangeDetector';
+import { NodeIdBiMap } from '../common';
+import type { DomOperation } from '../common/DomOperation';
+import { applyChanges } from '../recorder/StringChangeDetector';
 
 export class DomMutator {
   private root: Node;

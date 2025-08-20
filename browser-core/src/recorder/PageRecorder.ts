@@ -1,7 +1,6 @@
-import { NodeIdBiMap } from "./dom";
 import { generateKeyFrame, inlineSubTree, type InlineStartedEvent, type KeyFrameStartedEvent } from "./inliner";
 import type { Asset } from "./inliner/Asset";
-import { DomChangeDetector, StyleSheetWatcher, type DomOperation, type StyleSheetWatcherEvent } from "./mutation";
+import { DomChangeDetector } from "./DomChangeDetector";
 import {
   FrameType,
   type AssetData,
@@ -13,7 +12,7 @@ import {
   type Frame,
   type KeyframeData,
   type TextOperationData
-} from "./protocol";
+} from "../common/protocol";
 import {
   Writer,
   KeyframeDataEnc,
@@ -22,8 +21,13 @@ import {
   DomNodeRemovedDataEnc,
   DomAttributeChangedDataEnc,
   DomAttributeRemovedDataEnc,
-  DomTextChangedDataEnc
+  DomTextChangedDataEnc,
+  type TextInsertOperationData,
+  type TextRemoveOperationData
 } from "@domcorder/proto-ts";
+import { NodeIdBiMap } from "../common";
+import type { DomOperation } from "../common/DomOperation";
+import { StyleSheetWatcher, type StyleSheetWatcherEvent } from "./StyleSheetWatcher";
 
 // This 100% no matter how far we refactor this.. should
 // def be the real binary frame.
@@ -215,13 +219,15 @@ export class PageRecorder {
                 op: "insert",
                 index: op.index,
                 text: op.content
-              };
+              } as TextInsertOperationData;
             case "remove":
               return {
                 op: "remove",
                 index: op.index,
                 length: op.count
-              };
+              } as TextRemoveOperationData;
+            default:
+              throw new Error(`Unknown operation type: ${(op as any).type}`);
           }
         });
 

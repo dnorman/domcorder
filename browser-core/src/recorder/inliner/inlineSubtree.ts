@@ -1,4 +1,5 @@
-import type { NodeIdBiMap, VNode } from "../dom";
+import type { VNode } from "@domcorder/proto-ts";
+import type { NodeIdBiMap } from "../../common";
 import type { Asset } from "./Asset";
 import { fetchAssets, rewriteTreeUrlsToPendingIds, snapshotNode } from "./inline";
 import { PendingAssets } from "./PendingAssets";

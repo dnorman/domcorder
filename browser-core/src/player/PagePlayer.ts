@@ -1,8 +1,19 @@
-import { DomMaterializer } from "./materializer";
-import { NodeIdBiMap } from "./dom";
-import { DomMutator } from "./mutation";
-import { FrameType, type AssetData, type DocumentData, type DomAttributeChangedData, type DomAttributeRemovedData, type DomNodeAddedData, type DomNodeRemovedData, type DomTextChangedData, type Frame, type KeyframeData, type NodeData } from "./protocol";
-import type { StringChangeOperation } from "./mutation/StringChangeDetector";
+import { DomMaterializer } from "./DomMaterializer";
+import { NodeIdBiMap } from "../common";
+import { DomMutator } from "./DomMutator";
+import { 
+  FrameType,
+  type AssetData,
+  type DomAttributeChangedData,
+  type DomAttributeRemovedData,
+  type DomNodeAddedData,
+  type DomNodeRemovedData,
+  type DomTextChangedData,
+  type Frame,
+  type KeyframeData
+} from "../common/protocol";
+import type { StringMutationOperation } from "../common/StringMutationOperation";
+import type { VDocument, VNode } from "@domcorder/proto-ts";
 
 export enum PagePlayerState {
   UNINITIALIZED,
@@ -17,7 +28,7 @@ export class PagePlayer {
   private state: PagePlayerState;
 
   private activeKeyFrame: {
-    document: DocumentData,
+    document: VDocument,
     assets: AssetData[]
     assetCount: number;
   } | null;
@@ -25,7 +36,7 @@ export class PagePlayer {
   private activeAddNode: {
     parentId: number,
     index: number,
-    node: NodeData,
+    node: VNode,
     assets: AssetData[]
     assetCount: number;
   } | null;
@@ -131,7 +142,7 @@ export class PagePlayer {
   }
 
   private _handleTextChangedFrame(textChangedData: DomTextChangedData) {
-    const ops: StringChangeOperation[] = textChangedData.operations.map(op => {
+    const ops: StringMutationOperation[] = textChangedData.operations.map(op => {
       switch (op.op) {
         case 'insert':
           return {

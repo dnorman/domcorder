@@ -1,4 +1,4 @@
-import type { StringChangeOperation } from "./StringChangeDetector";
+import type { StringMutationOperation } from "./StringMutationOperation";
 
 export type DomOperation =
   | { op: 'insert'; parentId: number; index: number, node: Node }
@@ -6,4 +6,4 @@ export type DomOperation =
   | { op: 'replace'; nodeId: number; node: Node }
   | { op: 'updateAttribute'; nodeId: number; name: string; value: string }
   | { op: 'removeAttribute'; nodeId: number; name: string; }
-  | { op: 'updateText'; nodeId: number; ops: StringChangeOperation[] };
+  | { op: 'updateText'; nodeId: number; ops: StringMutationOperation[] };
