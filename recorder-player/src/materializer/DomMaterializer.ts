@@ -99,6 +99,7 @@ export class DomMaterializer {
       }
     }
 
+    // TODO find a better way to handle this.
     // Track if we're entering a style element
     const wasInStyleElement = this.isInStyleElement;
     if (vElement.tag === 'style') {
