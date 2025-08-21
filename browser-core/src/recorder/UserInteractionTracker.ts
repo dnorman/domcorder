@@ -1,4 +1,5 @@
 import { NodeIdBiMap } from '../common/NodeIdBiMap';
+import { EventRateLimiter } from './EventRateLimiter';
 
 /**
  * Event handler interface for user interaction events
@@ -21,20 +22,22 @@ export interface UserInteractionEventHandler {
  * Configuration options for the UserInteractionTracker
  */
 export interface UserInteractionTrackerConfig {
-  mouseMoveDebounceMs?: number;
-  scrollDebounceMs?: number;
-  resizeDebounceMs?: number;
-  selectionDebounceMs?: number;
+  mouseMoveRateLimitMs?: number;
+  scrollRateLimitMs?: number;
+  resizeRateLimitMs?: number;
+  selectionRateLimitMs?: number;
+  elementScrollRateLimitMs?: number;
 }
 
 /**
  * Default configuration values
  */
 const DEFAULT_CONFIG: Required<UserInteractionTrackerConfig> = {
-  mouseMoveDebounceMs: 16, // ~60fps
-  scrollDebounceMs: 16,    // ~60fps
-  resizeDebounceMs: 100,   // 10fps
-  selectionDebounceMs: 100 // 10fps
+  mouseMoveRateLimitMs: 250,  // 250ms for mouse movement
+  scrollRateLimitMs: 250,     // 250ms for scroll events
+  resizeRateLimitMs: 500,    // 1000ms for resize events
+  selectionRateLimitMs: 500, // 1000ms for selection events
+  elementScrollRateLimitMs: 250 // 500ms for element scroll events
 };
 
 export class UserInteractionTracker {
@@ -43,7 +46,7 @@ export class UserInteractionTracker {
   private config: Required<UserInteractionTrackerConfig>;
   private targetWindow: Window;
   private isTracking: boolean = false;
-  private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  private rateLimiter: EventRateLimiter;
   private iframeTrackers: Map<HTMLIFrameElement, UserInteractionTracker> = new Map();
 
   constructor(
@@ -56,6 +59,7 @@ export class UserInteractionTracker {
     this.nodeIdBiMap = nodeIdBiMap;
     this.eventHandler = eventHandler;
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.rateLimiter = new EventRateLimiter();
   }
 
   /**
@@ -78,7 +82,7 @@ export class UserInteractionTracker {
     this.isTracking = false;
     this.removeEventListeners();
     this.stopIframeTracking();
-    this.clearDebounceTimers();
+    this.rateLimiter.clear();
   }
 
   /**
@@ -190,31 +194,6 @@ export class UserInteractionTracker {
   }
 
   /**
-   * Clear all debounce timers
-   */
-  private clearDebounceTimers(): void {
-    this.debounceTimers.forEach(timerId => clearTimeout(timerId));
-    this.debounceTimers.clear();
-  }
-
-  /**
-   * Debounce helper function
-   */
-  private debounce(key: string, delay: number, callback: () => void): void {
-    const existingTimer = this.debounceTimers.get(key);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-    }
-    
-    const timerId = setTimeout(() => {
-      callback();
-      this.debounceTimers.delete(key);
-    }, delay);
-    
-    this.debounceTimers.set(key, timerId);
-  }
-
-  /**
    * Get the target window (supports iframe contexts)
    */
   private getTargetWindow(): Window {
@@ -238,12 +217,12 @@ export class UserInteractionTracker {
 
   // Event handlers
   private handleMouseMove = (event: MouseEvent): void => {
-    this.debounce('mousemove', this.config.mouseMoveDebounceMs, () => {
-      this.eventHandler.onMouseMove?.({
-        x: event.pageX,
-        y: event.pageY,
-        timestamp: Date.now()
-      });
+    this.rateLimiter.rateLimit('mousemove', this.config.mouseMoveRateLimitMs, {
+      x: event.pageX,
+      y: event.pageY,
+      timestamp: Date.now()
+    }, (data) => {
+      this.eventHandler.onMouseMove?.(data);
     });
   };
 
@@ -268,22 +247,22 @@ export class UserInteractionTracker {
   };
 
   private handleWindowResize = (): void => {
-    this.debounce('resize', this.config.resizeDebounceMs, () => {
-      this.eventHandler.onWindowResize?.({
-        width: this.targetWindow.innerWidth,
-        height: this.targetWindow.innerHeight,
-        timestamp: Date.now()
-      });
+    this.rateLimiter.rateLimit('resize', this.config.resizeRateLimitMs, {
+      width: this.targetWindow.innerWidth,
+      height: this.targetWindow.innerHeight,
+      timestamp: Date.now()
+    }, (data) => {
+      this.eventHandler.onWindowResize?.(data);
     });
   };
 
   private handleScroll = (): void => {
-    this.debounce('scroll', this.config.scrollDebounceMs, () => {
-      this.eventHandler.onScroll?.({
-        scrollX: this.targetWindow.scrollX,
-        scrollY: this.targetWindow.scrollY,
-        timestamp: Date.now()
-      });
+    this.rateLimiter.rateLimit('scroll', this.config.scrollRateLimitMs, {
+      scrollX: this.targetWindow.scrollX,
+      scrollY: this.targetWindow.scrollY,
+      timestamp: Date.now()
+    }, (data) => {
+      this.eventHandler.onScroll?.(data);
     });
   };
 
@@ -292,17 +271,13 @@ export class UserInteractionTracker {
       return;
     }
 
-    this.debounce('elementScroll', this.config.scrollDebounceMs, () => {
-      const targetElement = event.target as Element;
-      const elementId = this.getElementId(targetElement);
-      if (elementId !== null) {
-        this.eventHandler.onElementScroll?.({
-          elementId,
-          scrollLeft: targetElement.scrollLeft,
-          scrollTop: targetElement.scrollTop,
-          timestamp: Date.now()
-        });
-      }
+    this.rateLimiter.rateLimit('elementScroll', this.config.elementScrollRateLimitMs, {
+      elementId: this.getElementId(event.target as Element) || -1, // Use -1 for no element
+      scrollLeft: (event.target as Element).scrollLeft,
+      scrollTop: (event.target as Element).scrollTop,
+      timestamp: Date.now()
+    }, (data) => {
+      this.eventHandler.onElementScroll?.(data);
     });
   };
 
@@ -327,23 +302,14 @@ export class UserInteractionTracker {
   };
 
   private handleTextSelection = (): void => {
-    this.debounce('selection', this.config.selectionDebounceMs, () => {
-      const selection = this.targetWindow.getSelection();
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        const startNodeId = this.getElementId(range.startContainer as Element);
-        const endNodeId = this.getElementId(range.endContainer as Element);
-        
-        if (startNodeId !== null && endNodeId !== null) {
-          this.eventHandler.onTextSelection?.({
-            startNodeId,
-            startOffset: range.startOffset,
-            endNodeId,
-            endOffset: range.endOffset,
-            timestamp: Date.now()
-          });
-        }
-      }
+    this.rateLimiter.rateLimit('selection', this.config.selectionRateLimitMs, {
+      startNodeId: this.getElementId(this.targetWindow.getSelection()?.anchorNode as Element) || -1,
+      startOffset: this.targetWindow.getSelection()?.anchorOffset || 0,
+      endNodeId: this.getElementId(this.targetWindow.getSelection()?.focusNode as Element) || -1,
+      endOffset: this.targetWindow.getSelection()?.focusOffset || 0,
+      timestamp: Date.now()
+    }, (data) => {
+      this.eventHandler.onTextSelection?.(data);
     });
   };
 
