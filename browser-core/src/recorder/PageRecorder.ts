@@ -1,6 +1,7 @@
 import { generateKeyFrame, inlineSubTree, type InlineStartedEvent, type KeyFrameStartedEvent } from "./inliner";
 import type { Asset } from "./inliner/Asset";
 import { DomChangeDetector } from "./DomChangeDetector";
+import { UserInteractionTracker, type UserInteractionEventHandler } from "./UserInteractionTracker";
 import {
   FrameType,
   type NewAdoptedStyleSheetData,
@@ -44,6 +45,7 @@ export class PageRecorder {
   private operationQueue: DomOperation[];
   private changeDetector: DomChangeDetector | null;
   private styleSheetWatcher: StyleSheetWatcher | null;
+  private userInteractionTracker: UserInteractionTracker | null;
   private writer: Writer;
   private stream: ReadableStream<Uint8Array>;
 
@@ -54,6 +56,7 @@ export class PageRecorder {
     this.operationQueue = [];
     this.changeDetector = null;
     this.styleSheetWatcher = null;
+    this.userInteractionTracker = null;
 
     // Create Writer and stream
     const [writer, stream] = Writer.create(16 * 1024); // 16KB chunks
@@ -68,43 +71,17 @@ export class PageRecorder {
     // Start server stream
     this.startServerStream();
 
+    // Setup user interaction tracking
+    this.userInteractionTracker = new UserInteractionTracker(
+      window,
+      sourceDocNodeIdMap,
+      this.createUserInteractionHandler()
+    );
+    this.userInteractionTracker.start();
+
     generateKeyFrame(
-      this.sourceDocument, sourceDocNodeIdMap, {
-      onKeyFrameStarted: async (ev: KeyFrameStartedEvent) => {
-        // Keep existing frameHandler call
-        this.frameHandler({
-          frameType: FrameType.Keyframe,
-          data: {
-            document: ev.document,
-            assetCount: ev.assetCount,
-          } as KeyframeData,
-        });
-
-        // Additionally encode to server stream
-        await KeyframeDataEnc.encode(this.writer, ev.document);
-
-        this.pendingAssets = ev.assetCount > 0;
-      },
-      onAsset: async (asset: Asset) => {
-        // Keep existing frameHandler call
-        this.frameHandler({
-          frameType: FrameType.Asset,
-          data: {
-            id: asset.id,
-            url: asset.url,
-            assetType: asset.assetType,
-            mime: asset.mime,
-            buf: asset.buf
-          } as AssetData,
-        });
-
-        // Additionally encode to server stream
-        await AssetDataEnc.encode(this.writer, asset.id, asset.url, asset.assetType, asset.mime, asset.buf);
-      },
-      onKeyFrameComplete: () => {
-        this.pendingAssets = false;
-      },
-    });
+      this.sourceDocument, sourceDocNodeIdMap, this.createKeyFrameHandler()
+    );
 
     this.changeDetector = new DomChangeDetector(this.sourceDocument, sourceDocNodeIdMap, async (operations) => {
       for (const operation of operations) {
@@ -119,44 +96,7 @@ export class PageRecorder {
     this.styleSheetWatcher = new StyleSheetWatcher({
       patchCSSOM: true,
       root: this.sourceDocument,
-      handler: async (event: StyleSheetWatcherEvent) => {
-        if (event.type === 'adopted-style-sheets') {
-          this.frameHandler({
-            frameType: FrameType.AdoptedStyleSheetsChanged,
-            data: {
-              styleSheetIds: event.now.map(sheet => getStyleSheetId(sheet)),
-              addedCount: event.added.length,
-            } as AdoptedStyleSheetsChangedData
-          });
-
-          for (const sheet of event.added) {
-            await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, {
-              onInlineStarted: (ev: InlineAdoptedStyleSheetEvent) => {
-                this.frameHandler({
-                  frameType: FrameType.AdoptedStyleSheetAdded,
-                  data: {
-                    styleSheet: ev.styleSheet,
-                    assetCount: ev.assetCount,
-                  } as NewAdoptedStyleSheetData
-                });
-              },
-              onAsset: (asset: Asset) => {
-                this.frameHandler({
-                  frameType: FrameType.Asset,
-                  data: {
-                    id: asset.id,
-                    url: asset.url,
-                    assetType: asset.assetType,
-                    mime: asset.mime,
-                    buf: asset.buf
-                  } as AssetData,
-                });
-              },
-              onInlineComplete: () => { }
-            });
-          }
-        }
-      }
+      handler: this.createStyleSheetHandler()
     });
 
     this.styleSheetWatcher.start();
@@ -332,5 +272,183 @@ export class PageRecorder {
     } catch (error) {
       console.error('Error streaming to WebSocket:', error);
     }
+  }
+
+  private createUserInteractionHandler(): UserInteractionEventHandler {
+    return {
+      onMouseMove: (event) => {
+        this.frameHandler({
+          frameType: FrameType.MouseMoved,
+          data: {
+            x: event.x,
+            y: event.y
+          }
+        });
+      },
+      onMouseClick: (event) => {
+        this.frameHandler({
+          frameType: FrameType.MouseClicked,
+          data: {
+            x: event.x,
+            y: event.y
+          }
+        });
+      },
+      onKeyPress: (event) => {
+        this.frameHandler({
+          frameType: FrameType.KeyPressed,
+          data: {
+            key: event.key
+          }
+        });
+      },
+      onWindowResize: (event) => {
+        this.frameHandler({
+          frameType: FrameType.ViewportResized,
+          data: {
+            width: event.width,
+            height: event.height
+          }
+        });
+      },
+      onScroll: (event) => {
+        this.frameHandler({
+          frameType: FrameType.WindowScrolled,
+          data: {
+            scrollXOffset: event.scrollX,
+            scrollYOffset: event.scrollY
+          }
+        });
+      },
+      onElementScroll: (event) => {
+        this.frameHandler({
+          frameType: FrameType.ElementScrolled,
+          data: {
+            id: event.elementId,
+            scrollXOffset: event.scrollLeft,
+            scrollYOffset: event.scrollTop
+          }
+        });
+      },
+      onElementFocus: (event) => {
+        this.frameHandler({
+          frameType: FrameType.ElementFocused,
+          data: {
+            id: event.elementId.toString()
+          }
+        });
+      },
+      onElementBlur: (event) => {
+        this.frameHandler({
+          frameType: FrameType.ElementBlurred,
+          data: {
+            id: event.elementId.toString()
+          }
+        });
+      },
+      onTextSelection: (event) => {
+        this.frameHandler({
+          frameType: FrameType.TextSelectionChanged,
+          data: {
+            selectionStartNodeId: event.startNodeId.toString(),
+            selectionStartOffset: event.startOffset,
+            selectionEndNodeId: event.endNodeId.toString(),
+            selectionEndOffset: event.endOffset
+          }
+        });
+      },
+      onWindowFocus: (event) => {
+        this.frameHandler({
+          frameType: FrameType.WindowFocused,
+          data: {}
+        });
+      },
+      onWindowBlur: (event) => {
+        this.frameHandler({
+          frameType: FrameType.WindowBlurred,
+          data: {}
+        });
+      }
+    };
+  }
+
+  private createKeyFrameHandler() {
+    return {
+      onKeyFrameStarted: async (ev: KeyFrameStartedEvent) => {
+        // Keep existing frameHandler call
+        this.frameHandler({
+          frameType: FrameType.Keyframe,
+          data: {
+            document: ev.document,
+            assetCount: ev.assetCount,
+          } as KeyframeData,
+        });
+
+        // Additionally encode to server stream
+        await KeyframeDataEnc.encode(this.writer, ev.document);
+
+        this.pendingAssets = ev.assetCount > 0;
+      },
+      onAsset: async (asset: Asset) => {
+        // Keep existing frameHandler call
+        this.frameHandler({
+          frameType: FrameType.Asset,
+          data: {
+            id: asset.id,
+            url: asset.url,
+            assetType: asset.assetType,
+            mime: asset.mime,
+            buf: asset.buf
+          } as AssetData,
+        });
+
+        // Additionally encode to server stream
+        await AssetDataEnc.encode(this.writer, asset.id, asset.url, asset.assetType, asset.mime, asset.buf);
+      },
+      onKeyFrameComplete: () => {
+        this.pendingAssets = false;
+      },
+    };
+  }
+
+  private createStyleSheetHandler() {
+    return async (event: StyleSheetWatcherEvent) => {
+      if (event.type === 'adopted-style-sheets') {
+        this.frameHandler({
+          frameType: FrameType.AdoptedStyleSheetsChanged,
+          data: {
+            styleSheetIds: event.now.map(sheet => getStyleSheetId(sheet)),
+            addedCount: event.added.length,
+          } as AdoptedStyleSheetsChangedData
+        });
+
+        for (const sheet of event.added) {
+          await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, {
+            onInlineStarted: (ev: InlineAdoptedStyleSheetEvent) => {
+              this.frameHandler({
+                frameType: FrameType.AdoptedStyleSheetAdded,
+                data: {
+                  styleSheet: ev.styleSheet,
+                  assetCount: ev.assetCount,
+                } as NewAdoptedStyleSheetData
+              });
+            },
+            onAsset: (asset: Asset) => {
+              this.frameHandler({
+                frameType: FrameType.Asset,
+                data: {
+                  id: asset.id,
+                  url: asset.url,
+                  assetType: asset.assetType,
+                  mime: asset.mime,
+                  buf: asset.buf
+                } as AssetData,
+              });
+            },
+            onInlineComplete: () => { }
+          });
+        }
+      }
+    };
   }
 }

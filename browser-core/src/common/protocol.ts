@@ -6,7 +6,7 @@ export type Frame = {
       KeyframeData |
       AssetData |
       ViewportResizedData |
-      ScrollOffsetChangedData |
+      WindowScrolledData |
       MouseMovedData |
       MouseClickedData |
       KeyPressedData |
@@ -19,9 +19,15 @@ export type Frame = {
       DomTextChangedData |
       DomNodeResizedData |
       AdoptedStyleSheetsChangedData |
-      NewAdoptedStyleSheetData;
+      NewAdoptedStyleSheetData |
+      ElementScrolledData |
+      ElementBlurredData |
+      WindowFocusedData |
+      WindowBlurredData;
 }
 
+// TODO reflow these ids to be grouped better when
+// we are done with the initial implementation.
 export enum FrameType {
     Timestamp = 0,
 
@@ -29,7 +35,7 @@ export enum FrameType {
     Asset = 2,
     
     ViewportResized = 3,
-    ScrollOffsetChanged = 4,
+    WindowScrolled = 4,
 
     MouseMoved = 5,
     MouseClicked = 6,
@@ -46,6 +52,11 @@ export enum FrameType {
 
     AdoptedStyleSheetsChanged = 16,
     AdoptedStyleSheetAdded = 17,
+
+    ElementScrolled = 18,
+    ElementBlurred = 19,
+    WindowFocused = 20,
+    WindowBlurred = 21,
 }
 
 export type TimestampData = {
@@ -78,9 +89,15 @@ export type ViewportResizedData = {
     height: number;
 }
 
-export type ScrollOffsetChangedData = {
-    scroll_x_offset: number;
-    scroll_y_offset: number;
+export type WindowScrolledData = {
+    scrollXOffset: number;
+    scrollYOffset: number;
+}
+
+export type ElementScrolledData = {
+    id: number;
+    scrollXOffset: number;
+    scrollYOffset: number;
 }
 
 export type MouseMovedData = {
@@ -98,7 +115,11 @@ export type KeyPressedData = {
 }
 
 export type ElementFocusedData = {
-    elementId: string;
+    id: string;
+}
+
+export type ElementBlurredData = {
+    id: string;
 }
 
 export type TextSelectionChangedData = {
@@ -155,6 +176,12 @@ export type DomNodeResizedData = {
     nodeId: number;
     width: number;
     height: number;
+}
+
+export type WindowFocusedData = {
+}
+
+export type WindowBlurredData = {
 }
 
 // Everything below here is not needed yet.
