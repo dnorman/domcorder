@@ -11,49 +11,58 @@ import {
   type DomNodeRemovedData,
   type DomTextChangedData,
   type Frame,
-  type KeyframeData
+  type KeyframeData,
+  type AdoptedStyleSheetsChangedData,
+  type AdoptedStyleSheetAddedData
 } from "../common/protocol";
 import type { StringMutationOperation } from "../common/StringMutationOperation";
-import type { VDocument, VNode } from "@domcorder/proto-ts";
+import type { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
 import { StyleSheetWatcher, type StyleSheetWatcherEvent } from "../recorder/StyleSheetWatcher";
+import { AdoptedStyleSheetMutator } from "./AdoptedStyleSheetMutator";
 
-export enum PagePlayerState {
-  UNINITIALIZED,
-  KEYFRAME_OPEN,
-  ADD_NODE_OPEN,
-  IDLE
+
+export type OpenFrame = {
+  type: 'keyframe',
+  document: VDocument,
+  assetCount: number;
+  receivedAssets: Set<number>;
+} | {
+  type: 'add-node',
+  parentId: number,
+  index: number,
+  node: VNode,
+  assetCount: number;
+  receivedAssets: Set<number>;
+} | {
+  type: 'adopted-style-sheets-changed',
+  stylesheets: number[],
+  addedCount: number;
+  receivedSheets: Set<VStyleSheet>;
+} | {
+  type: 'adopted-style-sheet-added',
+  stylesheet: VStyleSheet,
+  assetCount: number;
+  receivedAssets: Set<number>;
 }
 
 export class PagePlayer {
-  private targetDocument: Document;
-  private materializer: DomMaterializer;
-  private assetManager: AssetManager;
-  private state: PagePlayerState;
+  private readonly targetDocument: Document;
+  private readonly materializer: DomMaterializer;
+  private readonly assetManager: AssetManager;
+  
 
-  private activeKeyFrame: {
-    document: VDocument,
-    assetCount: number;
-    receivedAssets: Set<number>;
-  } | null;
+  private readonly openFrameStack: OpenFrame[];
 
-  private activeAddNode: {
-    parentId: number,
-    index: number,
-    node: VNode,
-    assetCount: number;
-    receivedAssets: Set<number>;
-  } | null;
 
   private mutator: DomMutator | null; 
-  styleSheetWatcher: StyleSheetWatcher;
+  private readonly styleSheetWatcher: StyleSheetWatcher;
+  private readonly adoptedStyleSheetMutator: AdoptedStyleSheetMutator;
 
   constructor(targetDocument: Document) {
     this.targetDocument = targetDocument;
     this.assetManager = new AssetManager(this.targetDocument);
     this.materializer = new DomMaterializer(this.targetDocument, this.assetManager);
-    this.state = PagePlayerState.UNINITIALIZED;
-    this.activeKeyFrame = null;
-    this.activeAddNode = null;
+    this.openFrameStack = [];
     this.mutator = null;
 
     this.styleSheetWatcher = new StyleSheetWatcher({
@@ -67,13 +76,11 @@ export class PagePlayer {
       }
     });
     this.styleSheetWatcher.start();
+
+    this.adoptedStyleSheetMutator = new AdoptedStyleSheetMutator(this.targetDocument, this.assetManager);
   }
 
   handleFrame(frame: Frame) {
-    if (this.state === PagePlayerState.UNINITIALIZED && frame.frameType !== FrameType.Keyframe) {
-      throw new Error("First frame must be a keyframe.");
-    }
-
     switch (frame.frameType) {
       case FrameType.Keyframe:
         this._handleKeyFrame(frame.data as KeyframeData);
@@ -103,16 +110,52 @@ export class PagePlayer {
         this._handleAttributeRemovedFrame(frame.data as DomAttributeRemovedData);
         break;
 
+      case FrameType.AdoptedStyleSheetsChanged:
+        this._handleAdoptedStyleSheetsChangedFrame(frame.data as AdoptedStyleSheetsChangedData);
+        break;
+
+      case FrameType.AdoptedStyleSheetAdded:
+        this._handleAdoptedStyleSheetAddedFrame(frame.data as AdoptedStyleSheetAddedData);
+        break;
+
+    }
+  }
+
+  private _handleAdoptedStyleSheetAddedFrame(frame: AdoptedStyleSheetAddedData) {
+    this.openFrameStack.push({
+      type: 'adopted-style-sheet-added',
+      stylesheet: frame.styleSheet,
+      assetCount: frame.assetCount,
+      receivedAssets: new Set(),
+    });
+
+    if (frame.assetCount === 0) {
+      this._applyAdoptedStyleSheetAdded();
+    }
+  }
+
+  private _handleAdoptedStyleSheetsChangedFrame(frame: AdoptedStyleSheetsChangedData) {
+    this.openFrameStack.push({
+      type: 'adopted-style-sheets-changed',
+      stylesheets: frame.styleSheetIds,
+      addedCount: frame.addedCount,
+      receivedSheets: new Set(),
+    });
+    
+    if (frame.addedCount === 0) {
+      this._applyAdoptedStyleSheets();
     }
   }
 
   private _handleKeyFrame(keyframeData: KeyframeData) {
-      this.activeKeyFrame = {
+      const activeKeyFrame: OpenFrame = {
+        type: 'keyframe',
         document: keyframeData.document,
         assetCount: keyframeData.assetCount,
         receivedAssets: new Set(),
       };
-      this.state = PagePlayerState.KEYFRAME_OPEN;
+
+      this.openFrameStack.push(activeKeyFrame);
 
       if (keyframeData.assetCount === 0) {
         this._applyKeyFrame();
@@ -120,14 +163,15 @@ export class PagePlayer {
   }
 
   private _handleNodeAddedFrame(domNodeAddedData: DomNodeAddedData) {
-    this.activeAddNode = {
+    const activeAddNode: OpenFrame = {
+      type: 'add-node',
       parentId: domNodeAddedData.parentNodeId,
       index: domNodeAddedData.index,
       node: domNodeAddedData.node,
       assetCount: domNodeAddedData.assetCount,
       receivedAssets: new Set(),
     };
-    this.state = PagePlayerState.ADD_NODE_OPEN;
+    this.openFrameStack.push(activeAddNode);
 
     if (domNodeAddedData.assetCount === 0) {
       this._applyAddNode();
@@ -187,21 +231,64 @@ export class PagePlayer {
     // Add the asset to the AssetManager
     this.assetManager.addAsset(frame);
 
-    if (this.state === PagePlayerState.KEYFRAME_OPEN && this.activeKeyFrame) {
-      this.activeKeyFrame.receivedAssets.add(frame.id);
-      if (this.activeKeyFrame.receivedAssets.size === this.activeKeyFrame.assetCount) {
+    const activeFrame = this.openFrameStack[this.openFrameStack.length - 1];
+
+    if (activeFrame?.type === 'keyframe') {
+      activeFrame.receivedAssets.add(frame.id);
+      if (activeFrame.receivedAssets.size === activeFrame.assetCount) {
         this._applyKeyFrame();
       }
-    } else if (this.state === PagePlayerState.ADD_NODE_OPEN && this.activeAddNode) {
-      this.activeAddNode.receivedAssets.add(frame.id);
-      if (this.activeAddNode.receivedAssets.size === this.activeAddNode.assetCount) {
+    } else if (activeFrame?.type === 'add-node') {
+      activeFrame.receivedAssets.add(frame.id);
+      if (activeFrame.receivedAssets.size === activeFrame.assetCount) {
         this._applyAddNode();
       }
+    } else if (activeFrame?.type === 'adopted-style-sheet-added') {
+      activeFrame.receivedAssets.add(frame.id);
+      if (activeFrame.receivedAssets.size === activeFrame.assetCount) {
+        this._applyAdoptedStyleSheetAdded();
+      }
+    } else {
+      throw new Error("Expected keyframe, add-node, or added-style-sheet frame");
     }
   }
 
+  private _applyAdoptedStyleSheetAdded() {
+    const activeAddNode = this.openFrameStack.pop();
+    if (activeAddNode?.type !== 'adopted-style-sheet-added') {
+      throw new Error("Expected adopted-style-sheet-added frame");
+    }
+
+    const activeFrame = this.openFrameStack[this.openFrameStack.length - 1];
+    if (activeFrame?.type !== 'adopted-style-sheets-changed') {
+      throw new Error("Expected adopted-style-sheets frame");
+    }
+
+    activeFrame.receivedSheets.add(activeAddNode.stylesheet);
+    if (activeFrame.receivedSheets.size === activeFrame.addedCount) {
+      this._applyAdoptedStyleSheets();
+    }
+  }
+
+  private _applyAdoptedStyleSheets() {
+    const activeFrame = this.openFrameStack.pop();
+    if (activeFrame?.type !== 'adopted-style-sheets-changed') {
+      throw new Error("Expected adopted-style-sheets-changed frame");
+    }
+
+    const { stylesheets } = activeFrame;
+    
+    this.adoptedStyleSheetMutator.updateAdoptedStyleSheets(stylesheets, activeFrame.receivedSheets);
+  }
+
   private _applyAddNode() {
-    const { parentId, index, node } = this.activeAddNode!;
+    const activeAddNode = this.openFrameStack.pop();
+
+    if (activeAddNode?.type !== 'add-node') {
+      throw new Error("Expected add-node frame");
+    }
+
+    const { parentId, index, node } = activeAddNode;
     const materializedNode = this.materializer.materializeNode(node);
 
     this.mutator!.applyOps([{
@@ -210,22 +297,22 @@ export class PagePlayer {
       index,
       parentId,
     }]);
-    
-    this.state = PagePlayerState.IDLE;
-    this.activeAddNode = null;
   }
 
   private _applyKeyFrame() {
-    const vdoc = this.activeKeyFrame!.document;
+    const activeKeyFrame = this.openFrameStack.pop();
+    if (activeKeyFrame?.type !== 'keyframe') {
+      throw new Error("Expected keyframe frame");
+    }
+
+    const vdoc = activeKeyFrame.document;
     
     this.materializer.materializeDocument(vdoc);
     
     const targetDocNodeIdMap = new NodeIdBiMap();
     targetDocNodeIdMap.adoptNodesFromSubTree(this.targetDocument);
 
-    this.mutator = new DomMutator(targetDocNodeIdMap); 
-    this.state = PagePlayerState.IDLE;
-    this.activeKeyFrame = null;
+    this.mutator = new DomMutator(targetDocNodeIdMap);
   }
 
   /**

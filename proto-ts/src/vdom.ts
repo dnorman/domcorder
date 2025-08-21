@@ -334,9 +334,9 @@ export class VElement extends VNode {
 export class VStyleSheet {
   id: number;
   media?: string;
-  text?: string;
+  text: string;
 
-  constructor(id: number, media?: string, text?: string) {
+  constructor(id: number, text: string, media?: string,) {
     this.id = id;
     this.media = media;
     this.text = text;

@@ -1,6 +1,7 @@
 import { NodeIdBiMap } from '../common/NodeIdBiMap';
 import type { VDocument, VNode, VElement, VTextNode, VCDATASection, VComment, VProcessingInstruction, VDocumentType, VStyleSheet } from '@domcorder/proto-ts';
 import { AssetManager } from './AssetManager';
+import { setStyleSheetId } from '../recorder/StyleSheetWatcher';
 
 /**
  * DomMaterializer recreates an HTML document from a VDocument and associated assets.
@@ -145,7 +146,7 @@ export class DomMaterializer {
 
     // Handle style attribute (inline CSS)
     if (key === 'style') {
-      return this.processCssText(value, element);
+      return DomMaterializer.processCssText(value, this.assetManager, this.targetWindow, element);
     }
 
     return value;
@@ -195,7 +196,7 @@ export class DomMaterializer {
   private createTextNode(vnode: VTextNode): Node {
     if (this.currentStyleElement) {
       // Process CSS content to replace asset URLs using the current style element as context
-      const processedText = this.processCssText(vnode.text, this.currentStyleElement);
+      const processedText = DomMaterializer.processCssText(vnode.text, this.assetManager, this.targetWindow, this.currentStyleElement);
       return this.document.createTextNode(processedText);
     } else {
       return this.document.createTextNode(vnode.text);
@@ -247,52 +248,34 @@ export class DomMaterializer {
 
       // Create a new stylesheet using CSSOM API
       const win = this.document.defaultView!;
+      const stylesheet = DomMaterializer.createStyleSheet(sheet, this.assetManager, win);
 
-      if (win.CSSStyleSheet) {
-        const stylesheet = new win.CSSStyleSheet();
-
-        // Process the CSS text to inline asset data using the stylesheet as consumer
-        const processedText = this.processCssText(sheet.text, stylesheet);
-
-        // Set the CSS text content
-        try {
-          stylesheet.replaceSync(processedText);
-        } catch (error) {
-          console.warn('Failed to parse CSS stylesheet:', error);
-          continue;
-        }
-
-        // Set media if specified
-        if (sheet.media) {
-          stylesheet.media.mediaText = sheet.media;
-        }
-
-        // Add the stylesheet to the document's stylesheet collection
-        this.document.adoptedStyleSheets = [
-          ...this.document.adoptedStyleSheets,
-          stylesheet
-        ];
-      } else {
-        const styleElement = this.document.createElement('style');
-
-        if (sheet.id) {
-          styleElement.id = sheet.id;
-        }
-
-        if (sheet.media) {
-          styleElement.setAttribute('media', sheet.media);
-        }
-
-        // Process the CSS text using the style element as consumer
-        const processedText = this.processCssText(sheet.text, styleElement);
-
-        if (processedText) {
-          styleElement.textContent = processedText;
-        }
-
-        this.document.head?.appendChild(styleElement);
-      }
+      // Add the stylesheet to the document's stylesheet collection
+      this.document.adoptedStyleSheets = [
+        ...this.document.adoptedStyleSheets,
+        stylesheet
+      ];
     }
+  }
+
+  public static createStyleSheet(
+    sheet: VStyleSheet, 
+    assetManager: AssetManager,
+    targetWindow: Window & typeof globalThis): CSSStyleSheet {
+    
+    const stylesheet = new targetWindow.CSSStyleSheet();
+    
+    const processedText = DomMaterializer.processCssText(sheet.text, assetManager, targetWindow, stylesheet);
+    stylesheet.replaceSync(processedText);
+
+    setStyleSheetId(stylesheet, sheet.id);
+    
+    // Set media if specified
+    if (sheet.media) {
+      stylesheet.media.mediaText = sheet.media;
+    }
+
+    return stylesheet;
   }
 
   /**
@@ -300,7 +283,11 @@ export class DomMaterializer {
    * @param cssText The CSS text to process
    * @param consumer Optional element or adopted stylesheet context for asset reference tracking
    */
-  private processCssText(cssText: string, consumer?: Element | CSSStyleSheet): string {
+  private static processCssText(
+    cssText: string,
+    assetManager: AssetManager,
+    targetWindow: Window & typeof globalThis,
+    consumer?: Element | CSSStyleSheet): string {
     // This is a simplified implementation - in practice, you might want to use a CSS parser
     // to properly handle all URL references in CSS
 
@@ -313,11 +300,11 @@ export class DomMaterializer {
         try {
           if (consumer) {
             // Use the appropriate method based on the consumer type
-            if (consumer instanceof this.targetWindow.Element) {
-              const blobUrl = this.assetManager.useAssetInElement(assetId, consumer);
+            if (consumer instanceof targetWindow.Element) {
+              const blobUrl = assetManager.useAssetInElement(assetId, consumer);
               return `url(${blobUrl})`;
-            } else if (consumer instanceof this.targetWindow.CSSStyleSheet) {
-              const blobUrl = this.assetManager.useAssetInStyleSheet(assetId, consumer);
+            } else if (consumer instanceof targetWindow.CSSStyleSheet) {
+              const blobUrl = assetManager.useAssetInStyleSheet(assetId, consumer);
               return `url(${blobUrl})`;
             }
           }

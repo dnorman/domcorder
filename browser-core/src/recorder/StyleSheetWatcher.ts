@@ -1,15 +1,10 @@
 declare global { interface CSSStyleSheet { __css_stylesheet_id__?: number } }
 
 let __nextStyleSheetId = 1;
-function ensureStyleSheetId(sheet: CSSStyleSheet): number {
+export function ensureStyleSheetId(sheet: CSSStyleSheet): number {
   const anySheet = sheet as any;
   if (typeof anySheet.__css_stylesheet_id__ !== 'number') {
-    Object.defineProperty(anySheet, "__css_stylesheet_id__", {
-      value: __nextStyleSheetId++,
-      configurable: false,
-      writable: false,
-      enumerable: false,
-    });
+    setStyleSheetId(sheet, __nextStyleSheetId++);
   }
   return anySheet.__css_stylesheet_id__ as number;
 }
@@ -20,6 +15,20 @@ export function getStyleSheetId(sheet: CSSStyleSheet): number {
     ensureStyleSheetId(sheet);
   }
   return anySheet.__css_stylesheet_id__ as number;
+}
+
+export function setStyleSheetId(sheet: CSSStyleSheet, id: number): void {
+  if (id === undefined) {
+    throw new Error("Style sheet id is undefined");
+  }
+
+  const anySheet = sheet as any;
+  Object.defineProperty(anySheet, "__css_stylesheet_id__", {
+    value: id,
+    configurable: false,
+    writable: false,
+    enumerable: false,
+  });
 }
 
 /*

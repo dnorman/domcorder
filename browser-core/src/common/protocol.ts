@@ -1,8 +1,25 @@
-import type { VDocument, VNode } from "@domcorder/proto-ts";
+import type { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
 
 export type Frame = {
     frameType: FrameType;
-    data: TimestampData | KeyframeData | AssetData| ViewportResizedData | ScrollOffsetChangedData | MouseMovedData | MouseClickedData | KeyPressedData | ElementFocusedData | TextSelectionChangedData | DomNodeAddedData | DomNodeRemovedData | DomAttributeChangedData | DomAttributeRemovedData | DomTextChangedData | DomNodeResizedData;
+    data: TimestampData | 
+      KeyframeData |
+      AssetData |
+      ViewportResizedData |
+      ScrollOffsetChangedData |
+      MouseMovedData |
+      MouseClickedData |
+      KeyPressedData |
+      ElementFocusedData |
+      TextSelectionChangedData |
+      DomNodeAddedData |
+      DomNodeRemovedData |
+      DomAttributeChangedData |
+      DomAttributeRemovedData |
+      DomTextChangedData |
+      DomNodeResizedData |
+      AdoptedStyleSheetsChangedData |
+      AdoptedStyleSheetAddedData;
 }
 
 export enum FrameType {
@@ -27,7 +44,8 @@ export enum FrameType {
     DomTextChanged = 14,
     DomNodeResized = 15,
 
-    StyleSheetChanged = 16,
+    AdoptedStyleSheetsChanged = 16,
+    AdoptedStyleSheetAdded = 17,
 }
 
 export type TimestampData = {
@@ -140,14 +158,14 @@ export type DomNodeResizedData = {
 }
 
 // Everything below here is not needed yet.
-export type StyleSheetAddedData = {
-    styleSheetId: number;
-    content: string;
-    assetCount: number;
+export type AdoptedStyleSheetsChangedData = {
+    styleSheetIds: number[];
+    addedCount: number;
 }
 
-export type StyleSheetRemovedData = {
-    styleSheetId: number;
+export type AdoptedStyleSheetAddedData = {
+    styleSheet: VStyleSheet;
+    assetCount: number;
 }
 
 export type StyleSheetRuleInsertedData = {

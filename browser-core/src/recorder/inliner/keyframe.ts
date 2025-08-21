@@ -9,6 +9,7 @@ import {
   snapshotNode
 } from "./inline";
 import type { Asset } from "./Asset";
+import { ensureStyleSheetId } from "../StyleSheetWatcher";
 
 export interface KeyFrameStartedEvent {
   document: VDocument;
@@ -110,6 +111,7 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, antiAnimat
   if (doc.adoptedStyleSheets && doc.adoptedStyleSheets.length > 0) {
     for (let i = 0; i < doc.adoptedStyleSheets.length; i++) {
       const sheet = doc.adoptedStyleSheets[i];
+      ensureStyleSheetId(sheet);
 
       // Skip the anti-animation stylesheet
       if (antiAnimationStylesheet && sheet === antiAnimationStylesheet) {

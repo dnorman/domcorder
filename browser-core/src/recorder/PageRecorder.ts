@@ -3,6 +3,8 @@ import type { Asset } from "./inliner/Asset";
 import { DomChangeDetector } from "./DomChangeDetector";
 import {
   FrameType,
+  type AdoptedStyleSheetAddedData,
+  type AdoptedStyleSheetsChangedData,
   type AssetData,
   type DomAttributeChangedData,
   type DomAttributeRemovedData,
@@ -119,15 +121,36 @@ export class PageRecorder {
       root: this.sourceDocument,
       handler: async (event: StyleSheetWatcherEvent) => {
         if (event.type === 'adopted-style-sheets') {
-          const ids = event.now.map(sheet => getStyleSheetId(sheet));
-          console.log("stylesheets now", ids);
+          this.frameHandler({
+            frameType: FrameType.AdoptedStyleSheetsChanged,
+            data: {
+              styleSheetIds: event.now.map(sheet => getStyleSheetId(sheet)),
+              addedCount: event.added.length,
+            } as AdoptedStyleSheetsChangedData
+          });
+          
           for (const sheet of event.added) {
             await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, {
               onInlineStarted: (ev: InlineAdoptedStyleSheetEvent) => {
-                console.log("sending added sheet", ev);
+                this.frameHandler({
+                  frameType: FrameType.AdoptedStyleSheetAdded,
+                  data: {
+                    styleSheet: ev.styleSheet,
+                    assetCount: ev.assetCount,
+                  } as AdoptedStyleSheetAddedData
+                });
               },
               onAsset: (asset: Asset) => {
-                console.log("sending added sheet asset", asset);
+                this.frameHandler({
+                  frameType: FrameType.Asset,
+                  data: {
+                    id: asset.id,
+                    url: asset.url,
+                    assetType: asset.assetType,
+                    mime: asset.mime,
+                    buf: asset.buf
+                  } as AssetData,
+                });
               },
               onInlineComplete: () => { }
             });
