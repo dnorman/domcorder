@@ -7,6 +7,10 @@ body {
   background: lightblue;
 }
 
+h2 {
+  font-size: 1.25em;
+}
+
 .red {
   background: var(--pink-color);
   color: var(--red-color);
@@ -21,7 +25,7 @@ span.unicode:after {
 }
 
 .bg-image{
-  background-image: url('x-wing.png');
+  background-image: url('images/x-wing.png');
   background-size: 75px;
   height: 75px;
   width: 75px;
@@ -44,7 +48,7 @@ span.unicode:after {
 
 @media screen and (min-width: 20px) {
   .r2d2 {
-      background: url(r2d2.png) center bottom / cover no-repeat;
+      background: url(images/r2d2.png) center bottom / cover no-repeat;
       position: relative;
       height: 100px;
       width: 75px;

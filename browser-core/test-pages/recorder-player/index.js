@@ -1,27 +1,14 @@
-import { 
-  PageRecorder,
-  PagePlayer
-} from "../../dist/index.js";
+import { PagePlayerComponent } from "../../../dist/index.js";
 
-// General Page Set Up
-const stylesheet = new CSSStyleSheet();
-stylesheet.replaceSync(`
-  .adopted-style-sheet {
-    background-color: green;
-    color: white;
-  }
-`);
-document.adoptedStyleSheets = [stylesheet];
+const targetContainer = document.getElementById('target');
 
+const player = new PagePlayerComponent(targetContainer);
 
-// Player / Recorder Set Up
+const frameHandler = (frame) => {
+  player.handleFrame(frame);
+}
 
-const iFrame = document.getElementById('target');
-const pagePlayer = new PagePlayer(iFrame.contentWindow.document);
+window.frameHandler = frameHandler;
 
-const screenRecorder = new PageRecorder(document, (frame) => {
-  // console.log("frame", frame);
-  pagePlayer.handleFrame(frame);
-});
-screenRecorder.start();
-
+const sourceIframe = document.getElementById('source');
+sourceIframe.src = "source-page/index.html";

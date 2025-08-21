@@ -13,7 +13,8 @@ import {
   type Frame,
   type KeyframeData,
   type AdoptedStyleSheetsChangedData,
-  type NewAdoptedStyleSheetData
+  type NewAdoptedStyleSheetData,
+  type WindowScrolledData
 } from "../common/protocol";
 import type { StringMutationOperation } from "../common/StringMutationOperation";
 import type { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
@@ -50,16 +51,14 @@ export class PagePlayer {
   private readonly materializer: DomMaterializer;
   private readonly assetManager: AssetManager;
   
-
   private readonly openFrameStack: OpenFrame[];
-
 
   private mutator: DomMutator | null; 
   private readonly styleSheetWatcher: StyleSheetWatcher;
   private readonly adoptedStyleSheetMutator: AdoptedStyleSheetMutator;
 
-  constructor(targetDocument: Document) {
-    this.targetDocument = targetDocument;
+  constructor(targetIframe: HTMLIFrameElement) {
+    this.targetDocument = targetIframe.contentDocument!;
     this.assetManager = new AssetManager(this.targetDocument);
     this.materializer = new DomMaterializer(this.targetDocument, this.assetManager);
     this.openFrameStack = [];
@@ -81,6 +80,7 @@ export class PagePlayer {
   }
 
   handleFrame(frame: Frame) {
+    console.log("handleFrame", frame);
     switch (frame.frameType) {
       case FrameType.Keyframe:
         this._handleKeyFrame(frame.data as KeyframeData);
@@ -118,7 +118,14 @@ export class PagePlayer {
         this._handleAdoptedStyleSheetAddedFrame(frame.data as NewAdoptedStyleSheetData);
         break;
 
+      case FrameType.WindowScrolled:
+        this._handleWindowScrolledFrame(frame.data as WindowScrolledData);
+        break;
     }
+  }
+
+  private _handleWindowScrolledFrame(scrollFrame: WindowScrolledData) {
+    this.targetDocument.defaultView!.scrollTo(scrollFrame.scrollXOffset, scrollFrame.scrollYOffset);
   }
 
   private _handleAdoptedStyleSheetAddedFrame(frame: NewAdoptedStyleSheetData) {

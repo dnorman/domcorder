@@ -3,72 +3,70 @@
 <head>
   <meta charset="utf-8">
   <title>Screen Capture Test</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="index.css" />
-  <link rel="stylesheet" href="mdi.css" />
-
-  <script src="./empty.js"></script>
-  <script language="javascript" type="text/javascript">
-    const addedStyleSheet = new CSSStyleSheet();
-    addedStyleSheet.replaceSync(`
-        .added-style-sheet { background-color: white; } 
-        .added-style-sheet div { 
-          background-image: url('x-wing.png'); 
-          background-size: 75px;
-          height: 75px; 
-          width: 75px; 
-        }
-    `);
-
-    function addStyleSheet() {
-      if (!document.adoptedStyleSheets.includes(addedStyleSheet)) {
-        document.adoptedStyleSheets = [...document.adoptedStyleSheets, addedStyleSheet];
-      }
+  <style>
+    .container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      
+      box-sizing: border-box;
     }
 
-    function removeStyleSheet() {
-      document.adoptedStyleSheets = document.adoptedStyleSheets.filter(sheet => sheet !== addedStyleSheet);
+    .iframe-container {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      height: 100%;
+      box-sizing: border-box;
+      padding: 10px;
     }
-  </script>
 
-</head>
+    .iframe-container > iframe, .target-container {
+      flex: 1;
+      box-sizing: border-box;
+      width: 100%;
+      border: 1px solid black;
+    }
+    
+    .target-container {
+      position: relative;
+      display: flex;
+    }
+
+    .target-container > iframe {
+      position: absolute;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    iframe {
+      border: none
+    }
+  </style>
 <body>
-  <div style="float: left">
-    <h1>Screen Recording Util Test</h1>
-    <div class="red">This text should be red with a pink background (Set via CSS Variables)</div>
-    <div class="adopted-style-sheet">This element has a background color set via an adopted stylesheet.</div>
-    
-    <div style="font-size: 30px; margin-bottom: 20px;">
-      <i style="font-family: Material Design Icons" class="mdi-home"></i> 
-      <span class="unicode"></span> 
+  <div class="container">
+    <div class="iframe-container">
+      <h1>Source Document</h1>
+      <iframe id="source" src=""></iframe>    
     </div>
-    
-    <div>
-      <img src="death_star.png" height="75"/> 
-      <img src="death_star.png" height="75"/> 
-    </div>
-    
-    <div class="bg-image-container">
-      <div class="bg-image"></div> 
-      <div class="r2d2"></div>
-      <div style="background-image: url('millennium_falcon.png'); background-size: 75px; width: 75px; height: 45px;"></div> 
-    </div>
-
-    <button onclick="addStyleSheet()">Add Style Sheet</button>
-    <button onclick="removeStyleSheet()">Remove Style Sheet</button>
-    <div class="added-style-sheet">Styled via added adopted stylesheet. <div></div></div>
-
-    <div class="editor-title">Text Editor</div>
-    <div class="editor" contenteditable="true">
-      <p>Hello World!</p>
-      <p>Some initial <strong>bold</strong> text</p>
-      <p><br /></p>
+    <div class="iframe-container">
+      <h1>Target Document</h1>
+      <div id="target" class="target-container"></div>
     </div>
   </div>
 
-  <div style="float: right">
-    <iframe id="target" width="600" height="600"></iframe>
-  </div>
   <script src="index.js" type="module"></script>
 </body>
 </html>
