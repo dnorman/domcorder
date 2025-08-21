@@ -21,7 +21,9 @@
     `);
 
     function addStyleSheet() {
-      document.adoptedStyleSheets = [...document.adoptedStyleSheets, addedStyleSheet];
+      if (!document.adoptedStyleSheets.includes(addedStyleSheet)) {
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, addedStyleSheet];
+      }
     }
 
     function removeStyleSheet() {
