@@ -31,7 +31,7 @@ describe('DomChangeDetector', () => {
     };
 
     // Create change detector
-                 changeDetector = new DomChangeDetector(root, nodeIdBiMap, callback, 100);
+    changeDetector = new DomChangeDetector(root, nodeIdBiMap, callback, 100);
   });
 
   afterEach(() => {
