@@ -174,7 +174,6 @@ export class AssetManager {
    * Releases an asset reference for a specific element
    */
   private releaseAssetFromElement(assetId: number, element: Element): void {
-    console.log("releaseAssetFromElement", assetId, element);
     const asset = this.assets.get(assetId);
     if (!asset) return;
 
@@ -226,7 +225,6 @@ export class AssetManager {
    */
   public releaseAssetById(assetId: number): void {
     const asset = this.assets.get(assetId);
-    console.log("releaseAssetById", asset);
     if (!asset) return;
 
     // Remove all element associations

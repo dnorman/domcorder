@@ -15,6 +15,7 @@ import {
 } from "../common/protocol";
 import type { StringMutationOperation } from "../common/StringMutationOperation";
 import type { VDocument, VNode } from "@domcorder/proto-ts";
+import { StyleSheetWatcher, type StyleSheetWatcherEvent } from "../recorder/StyleSheetWatcher";
 
 export enum PagePlayerState {
   UNINITIALIZED,
@@ -44,6 +45,7 @@ export class PagePlayer {
   } | null;
 
   private mutator: DomMutator | null; 
+  styleSheetWatcher: StyleSheetWatcher;
 
   constructor(targetDocument: Document) {
     this.targetDocument = targetDocument;
@@ -53,6 +55,18 @@ export class PagePlayer {
     this.activeKeyFrame = null;
     this.activeAddNode = null;
     this.mutator = null;
+
+    this.styleSheetWatcher = new StyleSheetWatcher({
+      root: this.targetDocument,
+      handler: (event: StyleSheetWatcherEvent) => {
+        if (event.type === 'adopted-style-sheets') {
+          event.removed.forEach(sheet => {
+            this.assetManager.adoptedStyleSheetRemoved(sheet);
+          });
+        }
+      }
+    });
+    this.styleSheetWatcher.start();
   }
 
   handleFrame(frame: Frame) {
