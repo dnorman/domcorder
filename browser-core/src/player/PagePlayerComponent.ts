@@ -20,8 +20,6 @@ export class PagePlayerComponent {
 
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(`
-
-
       iframe {
         width: 100%;
         height: 100%;
@@ -36,34 +34,28 @@ export class PagePlayerComponent {
         height: 100%;
         z-index: 1000;
       }
-
     `);
 
     shadow.adoptedStyleSheets = [sheet];
     
-    this.player = new PagePlayer(this.iframe);
+    this.player = new PagePlayer(this.iframe, this.overlayElement);
   }
 
   handleFrame(frame: Frame) {
     this.player.handleFrame(frame);
   }
-}  
 
+  /**
+   * Start mouse simulation
+   */
+  startMouseSimulation(): void {
+    this.player.startMouseSimulation();
+  }
 
-class HelloWorld extends HTMLElement {
-  constructor() {
-    super();
-    // Attach a shadow DOM
-    const shadow = this.attachShadow({ mode: 'open' });
-
-    // Create some content
-    const wrapper = document.createElement('div');
-    wrapper.textContent = "Hello from a Web Component!";
-    wrapper.style.padding = "10px";
-    wrapper.style.background = "#f0f0f0";
-    wrapper.style.border = "1px solid #ccc";
-
-    // Attach it to the shadow DOM
-    shadow.appendChild(wrapper);
+  /**
+   * Stop mouse simulation
+   */
+  stopMouseSimulation(): void {
+    this.player.stopMouseSimulation();
   }
 }

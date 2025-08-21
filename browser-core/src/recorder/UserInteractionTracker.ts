@@ -218,8 +218,8 @@ export class UserInteractionTracker {
   // Event handlers
   private handleMouseMove = (event: MouseEvent): void => {
     this.rateLimiter.rateLimit('mousemove', this.config.mouseMoveRateLimitMs, {
-      x: event.pageX,
-      y: event.pageY,
+      x: event.clientX,
+      y: event.clientY,
       timestamp: Date.now()
     }, (data) => {
       this.eventHandler.onMouseMove?.(data);
@@ -228,8 +228,8 @@ export class UserInteractionTracker {
 
   private handleMouseClick = (event: MouseEvent): void => {
     this.eventHandler.onMouseClick?.({
-      x: event.pageX,
-      y: event.pageY,
+      x: event.clientX,
+      y: event.clientY,
       timestamp: Date.now()
     });
   };

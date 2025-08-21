@@ -14,12 +14,15 @@ import {
   type KeyframeData,
   type AdoptedStyleSheetsChangedData,
   type NewAdoptedStyleSheetData,
-  type WindowScrolledData
+  type WindowScrolledData,
+  type MouseMovedData,
+  type MouseClickedData
 } from "../common/protocol";
 import type { StringMutationOperation } from "../common/StringMutationOperation";
 import type { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
 import { StyleSheetWatcher, type StyleSheetWatcherEvent } from "../recorder/StyleSheetWatcher";
 import { AdoptedStyleSheetMutator } from "./AdoptedStyleSheetMutator";
+import { MouseSimulator } from "./MouseSimulator";
 
 
 export type OpenFrame = {
@@ -50,6 +53,8 @@ export class PagePlayer {
   private readonly targetDocument: Document;
   private readonly materializer: DomMaterializer;
   private readonly assetManager: AssetManager;
+  private readonly overlayElement: HTMLElement;
+  private readonly mouseSimulator: MouseSimulator;
   
   private readonly openFrameStack: OpenFrame[];
 
@@ -57,10 +62,12 @@ export class PagePlayer {
   private readonly styleSheetWatcher: StyleSheetWatcher;
   private readonly adoptedStyleSheetMutator: AdoptedStyleSheetMutator;
 
-  constructor(targetIframe: HTMLIFrameElement) {
+  constructor(targetIframe: HTMLIFrameElement, overlayElement: HTMLElement) {
     this.targetDocument = targetIframe.contentDocument!;
     this.assetManager = new AssetManager(this.targetDocument);
     this.materializer = new DomMaterializer(this.targetDocument, this.assetManager);
+    this.overlayElement = overlayElement;
+    this.mouseSimulator = new MouseSimulator(overlayElement);
     this.openFrameStack = [];
     this.mutator = null;
 
@@ -77,10 +84,11 @@ export class PagePlayer {
     this.styleSheetWatcher.start();
 
     this.adoptedStyleSheetMutator = new AdoptedStyleSheetMutator(this.targetDocument, this.assetManager);
+    this.mouseSimulator.start();
   }
 
   handleFrame(frame: Frame) {
-    console.log("handleFrame", frame);
+    // console.log("handleFrame", frame);
     switch (frame.frameType) {
       case FrameType.Keyframe:
         this._handleKeyFrame(frame.data as KeyframeData);
@@ -120,6 +128,14 @@ export class PagePlayer {
 
       case FrameType.WindowScrolled:
         this._handleWindowScrolledFrame(frame.data as WindowScrolledData);
+        break;
+
+      case FrameType.MouseMoved:
+        this._handleMouseMovedFrame(frame.data as MouseMovedData);
+        break;
+
+      case FrameType.MouseClicked:
+        this._handleMouseClickedFrame(frame.data as MouseClickedData);
         break;
     }
   }
@@ -327,5 +343,15 @@ export class PagePlayer {
    */
   public dispose(): void {
     this.assetManager.dispose();
+    this.mouseSimulator.stop();
+  }
+
+  private _handleMouseMovedFrame(mouseMovedData: MouseMovedData): void {
+    console.log("handleMouseMovedFrame", mouseMovedData);
+    this.mouseSimulator.moveTo(mouseMovedData.x, mouseMovedData.y);
+  }
+
+  private _handleMouseClickedFrame(mouseClickedData: MouseClickedData): void {
+    this.mouseSimulator.click(mouseClickedData.x, mouseClickedData.y);
   }
 }
