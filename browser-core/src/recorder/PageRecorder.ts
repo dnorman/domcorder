@@ -27,7 +27,8 @@ import {
 } from "@domcorder/proto-ts";
 import { NodeIdBiMap } from "../common";
 import type { DomOperation } from "../common/DomOperation";
-import { StyleSheetWatcher, type StyleSheetWatcherEvent } from "./StyleSheetWatcher";
+import { getStyleSheetId, StyleSheetWatcher, type StyleSheetWatcherEvent } from "./StyleSheetWatcher";
+import { inlineAdoptedStyleSheet, type InlineAdoptedStyleSheetEvent } from "./inliner/inlineAdoptedStyleSheet";
 
 // This 100% no matter how far we refactor this.. should
 // def be the real binary frame.
@@ -116,8 +117,22 @@ export class PageRecorder {
     this.styleSheetWatcher = new StyleSheetWatcher({
       patchCSSOM: true,
       root: this.sourceDocument,
-      handler: (event: StyleSheetWatcherEvent) => {
-        console.log("style sheet watcher event", event);
+      handler: async (event: StyleSheetWatcherEvent) => {
+        if (event.type === 'adopted-style-sheets') {
+          const ids = event.now.map(sheet => getStyleSheetId(sheet));
+          console.log("stylesheets now", ids);
+          for (const sheet of event.added) {
+            await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, {
+              onInlineStarted: (ev: InlineAdoptedStyleSheetEvent) => {
+                console.log("sending added sheet", ev);
+              },
+              onAsset: (asset: Asset) => {
+                console.log("sending added sheet asset", asset);
+              },
+              onInlineComplete: () => { }
+            });
+          }
+        }
       }
     });
 

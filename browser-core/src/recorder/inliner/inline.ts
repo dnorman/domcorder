@@ -406,9 +406,6 @@ function safeAbs(raw: string, base: string): string {
   try { return new URL(raw, base).href; } catch { return raw; }
 }
 
-export function makeId() { return Math.random().toString(36).slice(2); }
-
-
 function makeSemaphore(max: number) {
   let active = 0;
   const q: Array<() => void> = [];

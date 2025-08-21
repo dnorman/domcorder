@@ -5,7 +5,6 @@ import type { VNode, VStyleSheet } from "@domcorder/proto-ts";
 import {
   collectCssUrlsAssign,
   fetchAssets,
-  makeId,
   rewriteAllRefsToPendingIds,
   snapshotNode
 } from "./inline";
@@ -120,11 +119,8 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, antiAnimat
       try {
         const rules = Array.from(sheet.cssRules);
         const text = rules.map(rule => rule.cssText).join('\n');
-        // FIXME_MM the ids here needs to be linked to the
-        // stylesheet object and can be monotonically incremented
-        // just like node ids.
         adoptedStyleSheets.push({
-          id: makeId(),
+          id: (sheet as any).__css_stylesheet_id__,
           media: sheet.media.mediaText || undefined,
           text
         });

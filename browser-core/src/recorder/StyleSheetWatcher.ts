@@ -14,6 +14,14 @@ function ensureStyleSheetId(sheet: CSSStyleSheet): number {
   return anySheet.__css_stylesheet_id__ as number;
 }
 
+export function getStyleSheetId(sheet: CSSStyleSheet): number {
+  const anySheet = sheet as any;
+  if (typeof anySheet.__css_stylesheet_id__ !== 'number') {
+    ensureStyleSheetId(sheet);
+  }
+  return anySheet.__css_stylesheet_id__ as number;
+}
+
 /*
   Stylesheet Watcher — observe changes to document.styleSheets and adoptedStyleSheets
 

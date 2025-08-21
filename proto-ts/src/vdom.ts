@@ -332,11 +332,11 @@ export class VElement extends VNode {
 // VNode is now the parent class - no need for union type
 
 export class VStyleSheet {
-  id: string;
+  id: number;
   media?: string;
   text?: string;
 
-  constructor(id: string, media?: string, text?: string) {
+  constructor(id: number, media?: string, text?: string) {
     this.id = id;
     this.media = media;
     this.text = text;
