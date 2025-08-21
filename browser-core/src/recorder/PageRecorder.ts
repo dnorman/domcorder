@@ -91,7 +91,7 @@ export class PageRecorder {
           await this.processOperation(operation, sourceDocNodeIdMap, this.frameHandler);
         }
       }
-    });
+    }, 1000);
 
     this.styleSheetWatcher = new StyleSheetWatcher({
       patchCSSOM: true,

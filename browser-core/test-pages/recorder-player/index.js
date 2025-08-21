@@ -20,7 +20,7 @@ const iFrame = document.getElementById('target');
 const pagePlayer = new PagePlayer(iFrame.contentWindow.document);
 
 const screenRecorder = new PageRecorder(document, (frame) => {
-  console.log("frame", frame);
+  // console.log("frame", frame);
   pagePlayer.handleFrame(frame);
 });
 screenRecorder.start();

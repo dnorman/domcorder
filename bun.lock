@@ -17,6 +17,7 @@
         "@types/bun": "latest",
         "@types/jsdom": "^21.1.7",
         "express": "^5.1.0",
+        "global-jsdom": "^26.0.0",
       },
       "peerDependencies": {
         "typescript": "^5.0.0",
@@ -60,7 +61,7 @@
 
     "@csstools/css-tokenizer": ["@csstools/css-tokenizer@3.0.4", "", {}, "sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw=="],
 
-    "@domcorder/browser-core": ["@domcorder/browser-core@workspace:browser-core", { "dependencies": { "@domcorder/proto-ts": "proto-ts", "jsdom": "^26.1.0" }, "devDependencies": { "@types/bun": "latest", "@types/jsdom": "^21.1.7", "express": "^5.1.0" }, "peerDependencies": { "typescript": "^5.0.0" } }],
+    "@domcorder/browser-core": ["@domcorder/browser-core@workspace:browser-core", { "dependencies": { "@domcorder/proto-ts": "proto-ts", "jsdom": "^26.1.0" }, "devDependencies": { "@types/bun": "latest", "@types/jsdom": "^21.1.7", "express": "^5.1.0", "global-jsdom": "^26.0.0" }, "peerDependencies": { "typescript": "^5.0.0" } }],
 
     "@domcorder/proto-ts": ["@domcorder/proto-ts@workspace:proto-ts", { "devDependencies": { "jsdom": "^22.1.0" } }],
 
@@ -159,6 +160,8 @@
     "get-intrinsic": ["get-intrinsic@1.3.0", "", { "dependencies": { "call-bind-apply-helpers": "^1.0.2", "es-define-property": "^1.0.1", "es-errors": "^1.3.0", "es-object-atoms": "^1.1.1", "function-bind": "^1.1.2", "get-proto": "^1.0.1", "gopd": "^1.2.0", "has-symbols": "^1.1.0", "hasown": "^2.0.2", "math-intrinsics": "^1.1.0" } }, "sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ=="],
 
     "get-proto": ["get-proto@1.0.1", "", { "dependencies": { "dunder-proto": "^1.0.1", "es-object-atoms": "^1.0.0" } }, "sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g=="],
+
+    "global-jsdom": ["global-jsdom@26.0.0", "", { "peerDependencies": { "jsdom": ">=26 <27" } }, "sha512-BqXpTNZFjP40N+s4k8Bk9HS8GFVPJB/+TKtwcShM84wLv6C5dH9o1dydI3pL6potanhfDiIAVDbaaGj/uSdRSA=="],
 
     "gopd": ["gopd@1.2.0", "", {}, "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg=="],
 

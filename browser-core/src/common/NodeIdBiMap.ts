@@ -49,6 +49,20 @@ export class NodeIdBiMap {
     }
   }
 
+  public mirrorNodeIdsToSubTree(sourceNode: Node, targetNode: Node) {
+    const id = NodeIdBiMap.getNodeId(sourceNode);
+    if (id === undefined) {
+      throw new Error("Can not mirror node without an ID");
+    }
+    
+    NodeIdBiMap.setNodeId(targetNode, id);
+    this.idToNodeMap.set(id, targetNode);
+
+    for (let i = 0; i < sourceNode.childNodes.length; i++) {
+      this.mirrorNodeIdsToSubTree(sourceNode.childNodes[i], targetNode.childNodes[i]);
+    }
+  }
+
   public getNodeId(node: Node): number {
     let id = NodeIdBiMap.getNodeId(node);
     if (id === undefined) {

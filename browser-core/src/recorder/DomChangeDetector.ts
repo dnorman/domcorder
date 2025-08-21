@@ -16,10 +16,10 @@ export class DomChangeDetector {
 
   private callback: (ops: DomOperation[]) => void;
   private batchTimeout: number | null = null;
-  private batchTimeoutMs = 1000;
+  private batchTimeoutMs: number;
 
 
-  constructor(root: Node, liveNodeMap: NodeIdBiMap, callback: (ops: DomOperation[]) => void) {
+  constructor(root: Node, liveNodeMap: NodeIdBiMap, callback: (ops: DomOperation[]) => void, batchTimeoutMs: number = 1000) {
     this.liveDomRoot = root;
     this.snapshotDomRoot = root.cloneNode(true);
     this.liveNodeMap = liveNodeMap;
@@ -27,6 +27,7 @@ export class DomChangeDetector {
     this.snapshotNodeMap.assignNodeIdsToSubTree(this.snapshotDomRoot);
     this.snapshotMutator = new DomMutator(this.snapshotNodeMap);
     this.callback = callback;
+    this.batchTimeoutMs = batchTimeoutMs;
 
     this.liveDomObserver = new MutationObserver(this.handleMutations.bind(this));
 
@@ -178,8 +179,13 @@ export class DomChangeDetector {
           j++;
         } else if (j < newChildren.length && (i >= oldChildren.length || !oldChildren.includes(newChildren[j]))) {
           // element in newChildren[j] is new → insert
-          ops.push({ op: "insert", parentId: liveNodeId, index: j, node: newChildren[j].cloneNode(true) });
-          this.liveNodeMap.assignNodeIdsToSubTree(newChildren[j]);
+          const existingChild = newChildren[i];
+          const clonedChild = existingChild.cloneNode(true);
+          
+          this.liveNodeMap.assignNodeIdsToSubTree(existingChild);
+          this.snapshotNodeMap.mirrorNodeIdsToSubTree(existingChild, clonedChild);
+
+          ops.push({ op: "insert", parentId: liveNodeId, index: j, node: clonedChild });
           j++;
         } else if (i < oldChildren.length && (j >= newChildren.length || !newChildren.includes(oldChildren[i]))) {
           // element in oldChildren[i] is missing → remove
@@ -191,8 +197,15 @@ export class DomChangeDetector {
           // fallback: if elements differ but both exist later, remove + insert
           ops.push({ op: "remove", nodeId: this.liveNodeMap.getNodeId(oldChildren[i])! });
           this.liveNodeMap.removeNodesInSubtree(oldChildren[i]);
-          ops.push({ op: "insert", parentId: liveNodeId, index: j, node: newChildren[j].cloneNode(true) });
-          this.liveNodeMap.assignNodeIdsToSubTree(newChildren[j]);
+
+          const existingChild = newChildren[j];
+          const clonedChild = existingChild.cloneNode(true);
+          
+          this.liveNodeMap.assignNodeIdsToSubTree(existingChild);
+          this.snapshotNodeMap.mirrorNodeIdsToSubTree(existingChild, clonedChild);
+
+          ops.push({ op: "insert", parentId: liveNodeId, index: j, node: clonedChild });
+
           i++;
           j++;
         }
@@ -215,5 +228,13 @@ export class DomChangeDetector {
     }
     
     throw new Error('Unexpected change');
+  }
+
+  disconnect(): void {
+    this.liveDomObserver.disconnect();
+    if (this.batchTimeout) {
+      clearTimeout(this.batchTimeout);
+      this.batchTimeout = null;
+    }
   }
 }

@@ -16,7 +16,7 @@ export class DomMutator {
           const parent = this.nodeMap.getNodeById(op.parentId)!;
           const node = op.node;
           parent.insertBefore(node, parent.childNodes[op.index] || null);
-          this.nodeMap.assignNodeIdsToSubTree(node);
+          this.nodeMap.adoptNodesFromSubTree(node);
           break;
         }
         case 'remove': {
@@ -31,7 +31,7 @@ export class DomMutator {
             const newChild = op.node;
             oldChild.parentNode.replaceChild(newChild, oldChild);
             this.nodeMap.removeNodesInSubtree(oldChild);
-            this.nodeMap.assignNodeIdsToSubTree(newChild);
+            this.nodeMap.adoptNodesFromSubTree(newChild);
           }
           
           break;

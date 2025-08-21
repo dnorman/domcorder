@@ -243,11 +243,11 @@ export class VElement extends VNode {
   nodeType: "element" = "element";
   tag: string;
   ns?: string;
-  attrs?: Record<string, string>;
-  children?: VNode[];
+  attrs: Record<string, string>;
+  children: VNode[];
   shadow?: VNode[];
 
-  constructor(id: number, tag: string, ns?: string, attrs?: Record<string, string>, children?: VNode[], shadow?: VNode[]) {
+  constructor(id: number, tag: string, ns: string | undefined, attrs: Record<string, string>, children: VNode[], shadow?: VNode[]) {
     super(id);
     this.tag = tag;
     this.ns = ns;
