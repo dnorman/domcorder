@@ -3,7 +3,7 @@ import type { Asset } from "./inliner/Asset";
 import { DomChangeDetector } from "./DomChangeDetector";
 import {
   FrameType,
-  type AdoptedStyleSheetAddedData,
+  type NewAdoptedStyleSheetData,
   type AdoptedStyleSheetsChangedData,
   type AssetData,
   type DomAttributeChangedData,
@@ -128,7 +128,7 @@ export class PageRecorder {
               addedCount: event.added.length,
             } as AdoptedStyleSheetsChangedData
           });
-          
+
           for (const sheet of event.added) {
             await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, {
               onInlineStarted: (ev: InlineAdoptedStyleSheetEvent) => {
@@ -137,7 +137,7 @@ export class PageRecorder {
                   data: {
                     styleSheet: ev.styleSheet,
                     assetCount: ev.assetCount,
-                  } as AdoptedStyleSheetAddedData
+                  } as NewAdoptedStyleSheetData
                 });
               },
               onAsset: (asset: Asset) => {

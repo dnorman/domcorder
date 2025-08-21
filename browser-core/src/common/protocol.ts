@@ -19,7 +19,7 @@ export type Frame = {
       DomTextChangedData |
       DomNodeResizedData |
       AdoptedStyleSheetsChangedData |
-      AdoptedStyleSheetAddedData;
+      NewAdoptedStyleSheetData;
 }
 
 export enum FrameType {
@@ -163,7 +163,7 @@ export type AdoptedStyleSheetsChangedData = {
     addedCount: number;
 }
 
-export type AdoptedStyleSheetAddedData = {
+export type NewAdoptedStyleSheetData = {
     styleSheet: VStyleSheet;
     assetCount: number;
 }

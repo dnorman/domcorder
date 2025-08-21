@@ -13,7 +13,7 @@ import {
   type Frame,
   type KeyframeData,
   type AdoptedStyleSheetsChangedData,
-  type AdoptedStyleSheetAddedData
+  type NewAdoptedStyleSheetData
 } from "../common/protocol";
 import type { StringMutationOperation } from "../common/StringMutationOperation";
 import type { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
@@ -115,13 +115,13 @@ export class PagePlayer {
         break;
 
       case FrameType.AdoptedStyleSheetAdded:
-        this._handleAdoptedStyleSheetAddedFrame(frame.data as AdoptedStyleSheetAddedData);
+        this._handleAdoptedStyleSheetAddedFrame(frame.data as NewAdoptedStyleSheetData);
         break;
 
     }
   }
 
-  private _handleAdoptedStyleSheetAddedFrame(frame: AdoptedStyleSheetAddedData) {
+  private _handleAdoptedStyleSheetAddedFrame(frame: NewAdoptedStyleSheetData) {
     this.openFrameStack.push({
       type: 'adopted-style-sheet-added',
       stylesheet: frame.styleSheet,
