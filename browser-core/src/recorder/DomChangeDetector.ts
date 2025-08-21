@@ -25,7 +25,7 @@ export class DomChangeDetector {
     this.liveNodeMap = liveNodeMap;
     this.snapshotNodeMap = new NodeIdBiMap();
     this.snapshotNodeMap.assignNodeIdsToSubTree(this.snapshotDomRoot);
-    this.snapshotMutator = new DomMutator(this.snapshotDomRoot, this.snapshotNodeMap);
+    this.snapshotMutator = new DomMutator(this.snapshotNodeMap);
     this.callback = callback;
 
     this.liveDomObserver = new MutationObserver(this.handleMutations.bind(this));

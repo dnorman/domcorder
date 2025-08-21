@@ -1,44 +1,42 @@
 import { NodeIdBiMap } from '../common/NodeIdBiMap';
 import type { VDocument, VNode, VElement, VTextNode, VCDATASection, VComment, VProcessingInstruction, VDocumentType, VStyleSheet } from '@domcorder/proto-ts';
-import type { Asset } from '../recorder/inliner/Asset';
+import { AssetManager } from './AssetManager';
 
 /**
  * DomMaterializer recreates an HTML document from a VDocument and associated assets.
  * 
- * This class takes a virtual DOM representation (VDocument) and an array of asset events
+ * This class takes a virtual DOM representation (VDocument) and an AssetManager
  * containing binary data (images, fonts, etc.) and materializes them into a real DOM Document.
  * 
  * The materialization process:
  * 1. Creates a new Document instance
  * 2. Reconstructs all document children (including DOCTYPE, HTML element, etc.)
  * 3. Applies adopted stylesheets with inlined asset data
- * 4. Handles "asset:<id>" references by creating data URLs from binary buffers
+ * 4. Handles "asset:<id>" references by using the AssetManager to get blob URLs
  * 
  * The VDocument contains "asset:<id>" URLs that reference assets by their ID,
- * which are resolved to actual binary data from the AssetEvt array.
+ * which are resolved to actual blob URLs from the AssetManager.
  * 
  * Regular stylesheets from <style> and <link> elements are processed and kept as
  * <style> elements in the DOM with their processed CSS content.
  */
 export class DomMaterializer {
   private document: Document;
-  private assetMap: Map<number, Asset>;
-  private isInStyleElement: boolean = false;
+  private assetManager: AssetManager;
+  private currentStyleElement: Element | null = null;
+  private targetWindow: (Window & typeof globalThis);
 
-  constructor(document: Document) {
+  constructor(document: Document, assetManager: AssetManager) {
     this.document = document;
-    this.assetMap = new Map();
+    this.assetManager = assetManager;
+    this.targetWindow = this.document.defaultView!;
   }
 
   /**
    * Materializes a VDocument into a real DOM Document
    * @param vdoc The virtual document representation
-   * @param assets Array of asset events containing binary data
    */
-  public materializeDocument(vdoc: VDocument, assets: Asset[]): void {
-    // Build asset map for quick lookup
-    this.buildAssetMap(assets);
-
+  public materializeDocument(vdoc: VDocument): void {
     // Clear existing document children
     this.clearDocumentChildren();
 
@@ -52,24 +50,13 @@ export class DomMaterializer {
     this.clear();
   }
 
-  public materializeNode(vNode: VNode, assets: Asset[]): Node {
-    this.buildAssetMap(assets);
+  public materializeNode(vNode: VNode): Node {
     const node = this.createNode(vNode);
     if (!node) {
       throw new Error(`Failed to materialize node ${vNode.id}`);
     }
     this.clear();
     return node;
-  }
-
-  /**
-   * Builds a map of asset IDs to their assets for quick lookup
-   */
-  private buildAssetMap(assets: Asset[]): void {
-    this.assetMap.clear();
-    for (const asset of assets) {
-      this.assetMap.set(asset.id, asset);
-    }
   }
 
   /**
@@ -92,18 +79,17 @@ export class DomMaterializer {
     if (vElement.attrs) {
       for (const [key, value] of Object.entries(vElement.attrs)) {
         // Handle "asset:" URLs in attributes
-        const processedValue = this.processAttributeValue(key, value);
+        const processedValue = this.processAttributeValue(key, value, element);
         if (key !== "contenteditable") {
           element.setAttribute(key, processedValue);
         }
       }
     }
 
-    // TODO find a better way to handle this.
     // Track if we're entering a style element
-    const wasInStyleElement = this.isInStyleElement;
+    const previousStyleElement = this.currentStyleElement;
     if (vElement.tag === 'style') {
-      this.isInStyleElement = true;
+      this.currentStyleElement = element;
     }
 
     // Process children
@@ -117,7 +103,7 @@ export class DomMaterializer {
     }
 
     // Restore previous state
-    this.isInStyleElement = wasInStyleElement;
+    this.currentStyleElement = previousStyleElement;
 
     // Handle shadow DOM
     if (vElement.shadow) {
@@ -136,30 +122,30 @@ export class DomMaterializer {
   /**
    * Processes attribute values to handle "asset:" URLs
    */
-  private processAttributeValue(key: string, value: string): string {
+  private processAttributeValue(key: string, value: string, element: Element): string {
     // Handle attributes that commonly contain URLs
     const urlAttributes = ['src', 'href', 'poster', 'xlink:href', 'data-src'];
     if (urlAttributes.includes(key)) {
       const assetMatch = value.match(/^asset:(\d+)$/);
       if (assetMatch) {
         const assetId = parseInt(assetMatch[1], 10);
-        const asset = this.assetMap.get(assetId);
-        if (asset) {
-          const base64 = this.arrayBufferToBase64(asset.buf);
-          const mimeType = asset.mime || this.detectMimeType(asset.url);
-          return `data:${mimeType};base64,${base64}`;
+        try {
+          return this.assetManager.useAssetInElement(assetId, element);
+        } catch (error) {
+          console.warn(`Asset ${assetId} not found in AssetManager`);
+          return value; // Return original value if asset not found
         }
       }
     }
 
     // Handle srcset attribute (multiple URLs)
     if (key === 'srcset') {
-      return this.processSrcsetValue(value);
+      return this.processSrcsetValue(value, element);
     }
 
     // Handle style attribute (inline CSS)
     if (key === 'style') {
-      return this.processCssText(value);
+      return this.processCssText(value, element);
     }
 
     return value;
@@ -168,7 +154,7 @@ export class DomMaterializer {
   /**
    * Processes srcset attribute to handle "asset:" URLs
    */
-  private processSrcsetValue(srcset: string): string {
+  private processSrcsetValue(srcset: string, element: Element): string {
     const parts = srcset.split(',').map(s => s.trim()).filter(Boolean);
     return parts
       .map(part => {
@@ -176,20 +162,18 @@ export class DomMaterializer {
         const assetMatch = url.match(/^asset:(\d+)$/);
         if (assetMatch) {
           const assetId = parseInt(assetMatch[1], 10);
-          const asset = this.assetMap.get(assetId);
-          if (asset) {
-            const base64 = this.arrayBufferToBase64(asset.buf);
-            const mimeType = asset.mime || this.detectMimeType(asset.url);
-            const dataUrl = `data:${mimeType};base64,${base64}`;
-            return desc.length ? [dataUrl, ...desc].join(' ') : dataUrl;
+          try {
+            const blobUrl = this.assetManager.useAssetInElement(assetId, element);
+            return desc.length ? [blobUrl, ...desc].join(' ') : blobUrl;
+          } catch (error) {
+            console.warn(`Asset ${assetId} not found in AssetManager for srcset`);
+            return part; // Keep original if asset not found
           }
         }
         return part; // Keep original if asset not found
       })
       .join(', ');
   }
-
-
 
   /**
    * Processes all document children and adds them to the document
@@ -209,9 +193,9 @@ export class DomMaterializer {
    * Creates a text node, processing CSS if inside a style element
    */
   private createTextNode(vnode: VTextNode): Node {
-    if (this.isInStyleElement) {
-      // Process CSS content to replace asset URLs
-      const processedText = this.processCssText(vnode.text);
+    if (this.currentStyleElement) {
+      // Process CSS content to replace asset URLs using the current style element as context
+      const processedText = this.processCssText(vnode.text, this.currentStyleElement);
       return this.document.createTextNode(processedText);
     } else {
       return this.document.createTextNode(vnode.text);
@@ -261,14 +245,14 @@ export class DomMaterializer {
     for (const sheet of adoptedStyleSheets) {
       if (!sheet.text) continue;
 
-      // Process the CSS text to inline asset data
-      const processedText = this.processCssText(sheet.text);
-
       // Create a new stylesheet using CSSOM API
       const win = this.document.defaultView!;
 
       if (win.CSSStyleSheet) {
         const stylesheet = new win.CSSStyleSheet();
+
+        // Process the CSS text to inline asset data using the stylesheet as consumer
+        const processedText = this.processCssText(sheet.text, stylesheet);
 
         // Set the CSS text content
         try {
@@ -299,6 +283,9 @@ export class DomMaterializer {
           styleElement.setAttribute('media', sheet.media);
         }
 
+        // Process the CSS text using the style element as consumer
+        const processedText = this.processCssText(sheet.text, styleElement);
+
         if (processedText) {
           styleElement.textContent = processedText;
         }
@@ -309,81 +296,41 @@ export class DomMaterializer {
   }
 
   /**
-   * Processes CSS text to replace asset URLs with data URLs
+   * Processes CSS text to replace asset URLs with blob URLs
+   * @param cssText The CSS text to process
+   * @param consumer Optional element or adopted stylesheet context for asset reference tracking
    */
-  private processCssText(cssText: string): string {
+  private processCssText(cssText: string, consumer?: Element | CSSStyleSheet): string {
     // This is a simplified implementation - in practice, you might want to use a CSS parser
     // to properly handle all URL references in CSS
 
-    // Look for url() references and replace them with data URLs if the asset exists
+    // Look for url() references and replace them with blob URLs if the asset exists
     return cssText.replace(/url\(['"]?([^'"]+)['"]?\)/g, (match, url) => {
       // Handle "asset:<id>" format
       const assetMatch = url.match(/^asset:(\d+)$/);
       if (assetMatch) {
         const assetId = parseInt(assetMatch[1], 10);
-        const asset = this.assetMap.get(assetId);
-        if (asset) {
-          // Convert ArrayBuffer to base64 data URL
-          const base64 = this.arrayBufferToBase64(asset.buf);
-          const mimeType = asset.mime || this.detectMimeType(asset.url);
-          return `url(data:${mimeType};base64,${base64})`;
+        try {
+          if (consumer) {
+            // Use the appropriate method based on the consumer type
+            if (consumer instanceof this.targetWindow.Element) {
+              const blobUrl = this.assetManager.useAssetInElement(assetId, consumer);
+              return `url(${blobUrl})`;
+            } else if (consumer instanceof this.targetWindow.CSSStyleSheet) {
+              const blobUrl = this.assetManager.useAssetInStyleSheet(assetId, consumer);
+              return `url(${blobUrl})`;
+            }
+          }
+          // If no consumer provided, skip asset processing
+          return match;
+        } catch (error) {
+          console.warn(`Asset ${assetId} not found in AssetManager for CSS`);
+          return match; // Keep original if asset not found
         }
       }
       return match; // Keep original if asset not found
     });
   }
-
-  /**
-   * Converts an ArrayBuffer to a base64 string
-   */
-  private arrayBufferToBase64(buffer: ArrayBuffer): string {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
-  }
-
-  /**
-   * Detects MIME type based on file extension or asset ID
-   */
-  private detectMimeType(url: string): string {
-    // Handle "asset:" URLs - we can't determine MIME type from these
-    // In practice, the AssetEvt should contain the mime type
-    if (url.startsWith('asset:')) {
-      return 'application/octet-stream'; // Default fallback
-    }
-
-    const extension = url.split('.').pop()?.toLowerCase();
-    switch (extension) {
-      case 'png':
-        return 'image/png';
-      case 'jpg':
-      case 'jpeg':
-        return 'image/jpeg';
-      case 'gif':
-        return 'image/gif';
-      case 'svg':
-        return 'image/svg+xml';
-      case 'webp':
-        return 'image/webp';
-      case 'woff':
-        return 'font/woff';
-      case 'woff2':
-        return 'font/woff2';
-      case 'ttf':
-        return 'font/ttf';
-      case 'otf':
-        return 'font/otf';
-      case 'eot':
-        return 'application/vnd.ms-fontobject';
-      default:
-        return 'application/octet-stream';
-    }
-  }
-
-
 
   /**
    * Gets the materialized document
@@ -396,7 +343,6 @@ export class DomMaterializer {
    * Clears the materializer state
    */
   clear(): void {
-    this.assetMap.clear();
-    this.isInStyleElement = false;
+    this.currentStyleElement = null;
   }
 }

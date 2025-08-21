@@ -1,6 +1,7 @@
 import { DomMaterializer } from "./DomMaterializer";
 import { NodeIdBiMap } from "../common";
 import { DomMutator } from "./DomMutator";
+import { AssetManager } from "./AssetManager";
 import { 
   FrameType,
   type AssetData,
@@ -25,28 +26,29 @@ export enum PagePlayerState {
 export class PagePlayer {
   private targetDocument: Document;
   private materializer: DomMaterializer;
+  private assetManager: AssetManager;
   private state: PagePlayerState;
 
   private activeKeyFrame: {
     document: VDocument,
-    assets: AssetData[]
     assetCount: number;
+    receivedAssets: Set<number>;
   } | null;
 
   private activeAddNode: {
     parentId: number,
     index: number,
     node: VNode,
-    assets: AssetData[]
     assetCount: number;
+    receivedAssets: Set<number>;
   } | null;
 
-  private mutator: DomMutator | null;
-
+  private mutator: DomMutator | null; 
 
   constructor(targetDocument: Document) {
     this.targetDocument = targetDocument;
-    this.materializer = new DomMaterializer(this.targetDocument);
+    this.assetManager = new AssetManager(this.targetDocument);
+    this.materializer = new DomMaterializer(this.targetDocument, this.assetManager);
     this.state = PagePlayerState.UNINITIALIZED;
     this.activeKeyFrame = null;
     this.activeAddNode = null;
@@ -89,11 +91,12 @@ export class PagePlayer {
 
     }
   }
+
   private _handleKeyFrame(keyframeData: KeyframeData) {
       this.activeKeyFrame = {
         document: keyframeData.document,
-        assets: [],
         assetCount: keyframeData.assetCount,
+        receivedAssets: new Set(),
       };
       this.state = PagePlayerState.KEYFRAME_OPEN;
 
@@ -107,8 +110,8 @@ export class PagePlayer {
       parentId: domNodeAddedData.parentNodeId,
       index: domNodeAddedData.index,
       node: domNodeAddedData.node,
-      assets: [],
       assetCount: domNodeAddedData.assetCount,
+      receivedAssets: new Set(),
     };
     this.state = PagePlayerState.ADD_NODE_OPEN;
 
@@ -167,22 +170,25 @@ export class PagePlayer {
   }
 
   private _handleAssetFrame(frame: AssetData) {
+    // Add the asset to the AssetManager
+    this.assetManager.addAsset(frame);
+
     if (this.state === PagePlayerState.KEYFRAME_OPEN && this.activeKeyFrame) {
-      this.activeKeyFrame.assets.push(frame);
-      if (this.activeKeyFrame.assets.length === this.activeKeyFrame.assetCount) {
+      this.activeKeyFrame.receivedAssets.add(frame.id);
+      if (this.activeKeyFrame.receivedAssets.size === this.activeKeyFrame.assetCount) {
         this._applyKeyFrame();
       }
     } else if (this.state === PagePlayerState.ADD_NODE_OPEN && this.activeAddNode) {
-      this.activeAddNode.assets.push(frame);
-      if (this.activeAddNode.assets.length === this.activeAddNode.assetCount) {
+      this.activeAddNode.receivedAssets.add(frame.id);
+      if (this.activeAddNode.receivedAssets.size === this.activeAddNode.assetCount) {
         this._applyAddNode();
       }
     }
   }
 
   private _applyAddNode() {
-    const { parentId, index, node, assets } = this.activeAddNode!;
-    const materializedNode = this.materializer.materializeNode(node, assets);
+    const { parentId, index, node } = this.activeAddNode!;
+    const materializedNode = this.materializer.materializeNode(node);
 
     this.mutator!.applyOps([{
       op: 'insert',
@@ -197,15 +203,21 @@ export class PagePlayer {
 
   private _applyKeyFrame() {
     const vdoc = this.activeKeyFrame!.document;
-    const assets = this.activeKeyFrame!.assets;
     
-    this.materializer.materializeDocument(vdoc, assets);
+    this.materializer.materializeDocument(vdoc);
     
     const targetDocNodeIdMap = new NodeIdBiMap();
     targetDocNodeIdMap.adoptNodesFromSubTree(this.targetDocument);
 
-    this.mutator = new DomMutator(this.targetDocument.documentElement, targetDocNodeIdMap); 
+    this.mutator = new DomMutator(targetDocNodeIdMap); 
     this.state = PagePlayerState.IDLE;
     this.activeKeyFrame = null;
+  }
+
+  /**
+   * Clean up the AssetManager when the player is disposed
+   */
+  public dispose(): void {
+    this.assetManager.dispose();
   }
 }

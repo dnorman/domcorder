@@ -7,7 +7,7 @@
   "workspaces": [
     "demo-app",
     "proto-ts",
-    "recorder-player"
+    "browser-core"
   ],
   "scripts": {
     "dev": "cd demo-app && bun run dev",

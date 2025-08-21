@@ -3,17 +3,10 @@ import type { DomOperation } from '../common/DomOperation';
 import { applyChanges } from '../recorder/StringChangeDetector';
 
 export class DomMutator {
-  private root: Node;
   private nodeMap: NodeIdBiMap;
 
-  constructor(root: Node, nodeMap?: NodeIdBiMap) {
-    this.root = root;
-    if (nodeMap) {
+  constructor(nodeMap: NodeIdBiMap) {
       this.nodeMap = nodeMap;
-    } else{
-      this.nodeMap = new NodeIdBiMap();
-      this.nodeMap.assignNodeIdsToSubTree(root);
-    } 
   }
 
   applyOps(ops: DomOperation[]): void {
