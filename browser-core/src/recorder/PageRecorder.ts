@@ -346,6 +346,7 @@ export class PageRecorder {
         });
       },
       onTextSelection: (event) => {
+        console.log('onTextSelection', event);
         this.frameHandler({
           frameType: FrameType.TextSelectionChanged,
           data: {

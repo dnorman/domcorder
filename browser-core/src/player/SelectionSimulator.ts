@@ -1,45 +1,65 @@
 import { NodeIdBiMap } from '../common';
 
 /**
- * SelectionSimulator - Simulates text selection during playback
+ * SelectionOverlaySimulator - Simulates text selection using overlay elements
  * 
  * This class is responsible for:
- * - Setting text selections on a target document using node IDs and offsets
- * - Validating that node IDs exist in the provided NodeIdBiMap
- * - Validating that offsets are within valid ranges for text nodes
- * - Clearing all selections from the document
+ * - Creating visual selection overlays that appear on top of the page content
+ * - Positioning overlay elements to match the exact bounds of text selections
+ * - Handling multi-line selections with multiple overlay elements
+ * - Providing consistent selection appearance regardless of window focus
  * 
  * Design Specifications:
  * 
- * Selection Behavior:
- * - Creates standard DOM Range objects for text selection
- * - Supports selections across multiple nodes (start/end nodes can be different)
- * - Validates node IDs exist in the provided NodeIdBiMap
- * - Validates offsets are within valid text content bounds
- * - Throws descriptive errors for invalid inputs
+ * Selection Appearance:
+ * - Semi-transparent blue background (similar to browser default selection)
+ * - Positioned absolutely over the target text content
+ * - Multiple elements for multi-line selections
+ * - Responsive to page scrolling and zoom
  * 
- * Error Handling:
- * - Throws error if start or end node IDs don't exist in the map
- * - Throws error if offsets are outside valid text content range
- * - Throws error if target nodes are not text nodes
+ * Overlay Elements:
+ * - Created as div elements with specific styling
+ * - Positioned using getBoundingClientRect() of text nodes
+ * - Sized to match the exact text content bounds
+ * - Added to the overlayElement container
+ * 
+ * Multi-line Handling:
+ * - Splits selections across line boundaries
+ * - Creates separate overlay elements for each line
+ * - Handles partial line selections (start/end of lines)
  * 
  * API:
- * - Constructor takes NodeIdBiMap and Document
- * - setSelection(startNodeId, startOffset, endNodeId, endOffset) for setting text selection
- * - clearSelection() for removing all selections
+ * - Constructor takes overlayElement and NodeIdBiMap
+ * - setSelection(startNodeId, startOffset, endNodeId, endOffset) for setting visual selection
+ * - clearSelection() for removing all selection overlays
  */
 
-export class SelectionSimulator {
-  private nodeIdBiMap: NodeIdBiMap;
-  private document: Document;
+export interface SelectionOverlayConfig {
+  backgroundColor?: string;
+  opacity?: number;
+  zIndex?: number;
+}
 
-  constructor(nodeIdBiMap: NodeIdBiMap, document: Document) {
+const DEFAULT_CONFIG: Required<SelectionOverlayConfig> = {
+  backgroundColor: '#0078d7',
+  opacity: 0.3,
+  zIndex: 1000
+};
+
+export class SelectionSimulator {
+  private overlayElement: HTMLElement;
+  private nodeIdBiMap: NodeIdBiMap;
+  private config: Required<SelectionOverlayConfig>;
+  private currentSelectionElements: HTMLElement[] = [];
+
+  constructor(overlayElement: HTMLElement, nodeIdBiMap: NodeIdBiMap, config: SelectionOverlayConfig = {}) {
+    this.overlayElement = overlayElement;
     this.nodeIdBiMap = nodeIdBiMap;
-    this.document = document;
+    this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
   /**
-   * Sets a text selection on the document using node IDs and offsets
+   * Sets a visual text selection using overlay elements
    * 
    * @param startNodeId - The ID of the starting node for the selection
    * @param startOffset - The offset within the starting node (0-based)
@@ -55,6 +75,9 @@ export class SelectionSimulator {
     endNodeId: number,
     endOffset: number
   ): void {
+    // Clear any existing selection
+    this.clearSelection();
+
     // Get the nodes from the bi-directional map
     const startNode = this.nodeIdBiMap.getNodeById(startNodeId);
     const endNode = this.nodeIdBiMap.getNodeById(endNodeId);
@@ -65,15 +88,6 @@ export class SelectionSimulator {
 
     if (!endNode) {
       throw new Error(`End node with ID ${endNodeId} not found in NodeIdBiMap`);
-    }
-
-    // Validate that both nodes are text nodes
-    if (startNode.nodeType !== Node.TEXT_NODE) {
-      throw new Error(`Start node with ID ${startNodeId} is not a text node (nodeType: ${startNode.nodeType})`);
-    }
-
-    if (endNode.nodeType !== Node.TEXT_NODE) {
-      throw new Error(`End node with ID ${endNodeId} is not a text node (nodeType: ${endNode.nodeType})`);
     }
 
     // Validate offsets
@@ -98,27 +112,142 @@ export class SelectionSimulator {
     const { documentStartNode, documentStartOffset, documentEndNode, documentEndOffset } = 
       this.getDocumentOrderedPositions(startNode, startOffset, endNode, endOffset);
 
-    // Create the range
-    const range = this.document.createRange();
-    range.setStart(documentStartNode, documentStartOffset);
-    range.setEnd(documentEndNode, documentEndOffset);
+    // Create overlay elements for the selection
+    this.createSelectionOverlays(documentStartNode, documentStartOffset, documentEndNode, documentEndOffset);
+  }
 
-    // Clear any existing selection and set the new one
-    const selection = this.document.getSelection();
-    if (selection) {
-      selection.removeAllRanges();
-      selection.addRange(range);
+  /**
+   * Clears all selection overlays
+   */
+  public clearSelection(): void {
+    this.currentSelectionElements.forEach(element => {
+      if (element.parentNode) {
+        element.parentNode.removeChild(element);
+      }
+    });
+    this.currentSelectionElements = [];
+  }
+
+  /**
+   * Updates the NodeIdBiMap reference (called when the map is recreated)
+   */
+  public updateNodeIdBiMap(nodeIdBiMap: NodeIdBiMap): void {
+    this.nodeIdBiMap = nodeIdBiMap;
+  }
+
+  /**
+   * Creates overlay elements for the given selection range
+   */
+  private createSelectionOverlays(
+    startNode: Node,
+    startOffset: number,
+    endNode: Node,
+    endOffset: number
+  ): void {
+    // Create a range for the entire selection
+    const range = startNode.ownerDocument!.createRange();
+    range.setStart(startNode, startOffset);
+    range.setEnd(endNode, endOffset);
+
+    // Get all the client rectangles for this range
+    const rects = Array.from(range.getClientRects());
+    
+    // Merge overlapping rectangles to avoid duplicate overlays
+    const mergedRects = this.mergeOverlappingRectangles(rects);
+    
+    // Create overlay elements for each merged rectangle
+    mergedRects.forEach(rect => {
+      if (rect.width > 0 && rect.height > 0) {
+        const overlayElement = this.createOverlayElement(rect);
+        this.overlayElement.appendChild(overlayElement);
+        this.currentSelectionElements.push(overlayElement);
+      }
+    });
+  }
+
+  /**
+   * Merges overlapping rectangles to avoid duplicate overlays
+   */
+  private mergeOverlappingRectangles(rects: DOMRect[]): DOMRect[] {
+    if (rects.length <= 1) return rects;
+
+    const merged: DOMRect[] = [];
+    const processed = new Set<number>();
+
+    for (let i = 0; i < rects.length; i++) {
+      if (processed.has(i)) continue;
+
+      let currentRect = rects[i];
+      processed.add(i);
+
+      // Check for overlaps with other rectangles
+      for (let j = i + 1; j < rects.length; j++) {
+        if (processed.has(j)) continue;
+
+        const otherRect = rects[j];
+        
+        // Check if rectangles overlap (including touching edges)
+        if (this.rectanglesOverlap(currentRect, otherRect)) {
+          // Merge the rectangles
+          currentRect = this.mergeRectangles(currentRect, otherRect);
+          processed.add(j);
+        }
+      }
+
+      merged.push(currentRect);
     }
+
+    return merged;
+  }
+
+  /**
+   * Checks if two rectangles overlap
+   */
+  private rectanglesOverlap(rect1: DOMRect, rect2: DOMRect): boolean {
+    return !(
+      rect1.right < rect2.left ||
+      rect1.left > rect2.right ||
+      rect1.bottom < rect2.top ||
+      rect1.top > rect2.bottom
+    );
+  }
+
+  /**
+   * Merges two overlapping rectangles into one
+   */
+  private mergeRectangles(rect1: DOMRect, rect2: DOMRect): DOMRect {
+    const left = Math.min(rect1.left, rect2.left);
+    const top = Math.min(rect1.top, rect2.top);
+    const right = Math.max(rect1.right, rect2.right);
+    const bottom = Math.max(rect1.bottom, rect2.bottom);
+
+    return new DOMRect(left, top, right - left, bottom - top);
+  }
+
+
+
+  /**
+   * Creates a single overlay element with the given bounds
+   */
+  private createOverlayElement(bounds: DOMRect): HTMLElement {
+    const element = document.createElement('div');
+    
+    element.style.position = 'absolute';
+    element.style.left = `${bounds.left}px`;
+    element.style.top = `${bounds.top}px`;
+    element.style.width = `${bounds.width}px`;
+    element.style.height = `${bounds.height}px`;
+    element.style.backgroundColor = this.config.backgroundColor;
+    element.style.opacity = this.config.opacity.toString();
+    element.style.zIndex = this.config.zIndex.toString();
+    element.style.pointerEvents = 'none';
+    element.style.borderRadius = '2px';
+    
+    return element;
   }
 
   /**
    * Determines the correct document order for two positions and returns them in start/end order
-   * 
-   * @param node1 - First node
-   * @param offset1 - Offset within first node
-   * @param node2 - Second node
-   * @param offset2 - Offset within second node
-   * @returns Object with documentStartNode, documentStartOffset, documentEndNode, documentEndOffset
    */
   private getDocumentOrderedPositions(
     node1: Node,
@@ -151,8 +280,8 @@ export class SelectionSimulator {
     }
 
     // Create two ranges to compare positions
-    const range1 = this.document.createRange();
-    const range2 = this.document.createRange();
+    const range1 = node1.ownerDocument!.createRange();
+    const range2 = node2.ownerDocument!.createRange();
     
     range1.setStart(node1, offset1);
     range1.setEnd(node1, offset1);
@@ -179,16 +308,6 @@ export class SelectionSimulator {
         documentEndNode: node1,
         documentEndOffset: offset1
       };
-    }
-  }
-
-  /**
-   * Clears all selections from the document
-   */
-  public clearSelection(): void {
-    const selection = this.document.getSelection();
-    if (selection) {
-      selection.removeAllRanges();
     }
   }
 }
