@@ -5,17 +5,17 @@ import { EventRateLimiter } from './EventRateLimiter';
  * Event handler interface for user interaction events
  */
 export interface UserInteractionEventHandler {
-  onMouseMove?: (event: { x: number; y: number; timestamp: number }) => void;
-  onMouseClick?: (event: { x: number; y: number; timestamp: number }) => void;
-  onKeyPress?: (event: { key: string; code: string; ctrlKey: boolean; altKey: boolean; shiftKey: boolean; metaKey: boolean; timestamp: number }) => void;
-  onWindowResize?: (event: { width: number; height: number; timestamp: number }) => void;
-  onScroll?: (event: { scrollX: number; scrollY: number; timestamp: number }) => void;
-  onElementScroll?: (event: { elementId: number; scrollLeft: number; scrollTop: number; timestamp: number }) => void;
-  onElementFocus?: (event: { elementId: number; timestamp: number }) => void;
-  onElementBlur?: (event: { elementId: number; timestamp: number }) => void;
-  onTextSelection?: (event: { startNodeId: number; startOffset: number; endNodeId: number; endOffset: number; timestamp: number }) => void;
-  onWindowFocus?: (event: { timestamp: number }) => void;
-  onWindowBlur?: (event: { timestamp: number }) => void;
+  onMouseMove?: (event: { x: number; y: number }) => void;
+  onMouseClick?: (event: { x: number; y: number }) => void;
+  onKeyPress?: (event: { key: string; code: string; ctrlKey: boolean; altKey: boolean; shiftKey: boolean; metaKey: boolean }) => void;
+  onWindowResize?: (event: { width: number; height: number }) => void;
+  onScroll?: (event: { scrollX: number; scrollY: number }) => void;
+  onElementScroll?: (event: { elementId: number; scrollLeft: number; scrollTop: number }) => void;
+  onElementFocus?: (event: { elementId: number }) => void;
+  onElementBlur?: (event: { elementId: number }) => void;
+  onTextSelection?: (event: { startNodeId: number; startOffset: number; endNodeId: number; endOffset: number }) => void;
+  onWindowFocus?: (event: {}) => void;
+  onWindowBlur?: (event: {}) => void;
 }
 
 /**
@@ -242,8 +242,7 @@ export class UserInteractionTracker {
 
     this.rateLimiter.rateLimit('mousemove', this.config.mouseMoveRateLimitMs, {
       x: event.clientX,
-      y: event.clientY,
-      timestamp: Date.now()
+      y: event.clientY
     }, (data) => {
       this.eventHandler.onMouseMove?.(data);
     });
@@ -269,8 +268,7 @@ export class UserInteractionTracker {
     if (!this.isDragging) {
       this.eventHandler.onMouseClick?.({
         x: event.clientX,
-        y: event.clientY,
-        timestamp: Date.now()
+        y: event.clientY
       });
     }
   };
@@ -282,16 +280,14 @@ export class UserInteractionTracker {
       ctrlKey: event.ctrlKey,
       altKey: event.altKey,
       shiftKey: event.shiftKey,
-      metaKey: event.metaKey,
-      timestamp: Date.now()
+      metaKey: event.metaKey
     });
   };
 
   private handleWindowResize = (): void => {
     this.rateLimiter.rateLimit('resize', this.config.resizeRateLimitMs, {
       width: this.targetWindow.innerWidth,
-      height: this.targetWindow.innerHeight,
-      timestamp: Date.now()
+      height: this.targetWindow.innerHeight
     }, (data) => {
       this.eventHandler.onWindowResize?.(data);
     });
@@ -300,8 +296,7 @@ export class UserInteractionTracker {
   private handleScroll = (): void => {
     this.rateLimiter.rateLimit('scroll', this.config.scrollRateLimitMs, {
       scrollX: this.targetWindow.scrollX,
-      scrollY: this.targetWindow.scrollY,
-      timestamp: Date.now()
+      scrollY: this.targetWindow.scrollY
     }, (data) => {
       this.eventHandler.onScroll?.(data);
     });
@@ -315,8 +310,7 @@ export class UserInteractionTracker {
     this.rateLimiter.rateLimit('elementScroll', this.config.elementScrollRateLimitMs, {
       elementId: this.getElementId(event.target as Element) || -1, // Use -1 for no element
       scrollLeft: (event.target as Element).scrollLeft,
-      scrollTop: (event.target as Element).scrollTop,
-      timestamp: Date.now()
+      scrollTop: (event.target as Element).scrollTop
     }, (data) => {
       this.eventHandler.onElementScroll?.(data);
     });
@@ -326,8 +320,7 @@ export class UserInteractionTracker {
     const elementId = this.getElementId(event.target as Element);
     if (elementId !== null) {
       this.eventHandler.onElementFocus?.({
-        elementId,
-        timestamp: Date.now()
+        elementId
       });
     }
   };
@@ -336,8 +329,7 @@ export class UserInteractionTracker {
     const elementId = this.getElementId(event.target as Element);
     if (elementId !== null) {
       this.eventHandler.onElementBlur?.({
-        elementId,
-        timestamp: Date.now()
+        elementId
       });
     }
   };
@@ -347,22 +339,17 @@ export class UserInteractionTracker {
       startNodeId: this.getElementId(this.targetWindow.getSelection()?.anchorNode as Element) || -1,
       startOffset: this.targetWindow.getSelection()?.anchorOffset || 0,
       endNodeId: this.getElementId(this.targetWindow.getSelection()?.focusNode as Element) || -1,
-      endOffset: this.targetWindow.getSelection()?.focusOffset || 0,
-      timestamp: Date.now()
+      endOffset: this.targetWindow.getSelection()?.focusOffset || 0
     }, (data) => {
       this.eventHandler.onTextSelection?.(data);
     });
   };
 
   private handleWindowFocus = (): void => {
-    this.eventHandler.onWindowFocus?.({
-      timestamp: Date.now()
-    });
+    this.eventHandler.onWindowFocus?.({});
   };
 
   private handleWindowBlur = (): void => {
-    this.eventHandler.onWindowBlur?.({
-      timestamp: Date.now()
-    });
+    this.eventHandler.onWindowBlur?.({});
   };
 }
