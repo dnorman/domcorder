@@ -24,7 +24,7 @@ import type { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
 import { StyleSheetWatcher, type StyleSheetWatcherEvent } from "../recorder/StyleSheetWatcher";
 import { AdoptedStyleSheetMutator } from "./AdoptedStyleSheetMutator";
 import { MouseSimulator } from "./MouseSimulator";
-import { SelectionSimulator } from "./SelectionSimulator";
+import { SelectionOverlaySimulator } from "./SelectionOverlaySimulator";
 
 
 export type OpenFrame = {
@@ -57,7 +57,7 @@ export class PagePlayer {
   private readonly assetManager: AssetManager;
   private readonly overlayElement: HTMLElement;
   private readonly mouseSimulator: MouseSimulator;
-  private selectionSimulator: SelectionSimulator | null;
+  private selectionSimulator: SelectionOverlaySimulator | null;
   
   private readonly openFrameStack: OpenFrame[];
 
@@ -345,7 +345,7 @@ export class PagePlayer {
     this.mutator = new DomMutator(targetDocNodeIdMap);
     
     // Update the SelectionSimulator with the new NodeIdBiMap
-    this.selectionSimulator = new SelectionSimulator(targetDocNodeIdMap, this.targetDocument);
+    this.selectionSimulator = new SelectionOverlaySimulator(this.overlayElement, targetDocNodeIdMap);
   }
 
   /**
