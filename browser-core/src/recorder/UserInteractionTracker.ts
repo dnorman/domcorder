@@ -48,6 +48,13 @@ export class UserInteractionTracker {
   private isTracking: boolean = false;
   private rateLimiter: EventRateLimiter;
   private iframeTrackers: Map<HTMLIFrameElement, UserInteractionTracker> = new Map();
+  
+  // Mouse state tracking for click vs drag detection
+  private mouseDownPosition: { x: number; y: number } | null = null;
+  private mouseDownTime: number | null = null;
+  private isDragging: boolean = false;
+  private readonly DRAG_THRESHOLD = 5; // pixels
+  private readonly CLICK_TIMEOUT = 300; // milliseconds
 
   constructor(
     targetWindow: Window,
@@ -93,6 +100,8 @@ export class UserInteractionTracker {
     
     // Mouse events
     target.addEventListener('mousemove', this.handleMouseMove.bind(this), { passive: true });
+    target.addEventListener('mousedown', this.handleMouseDown.bind(this), { passive: true });
+    target.addEventListener('mouseup', this.handleMouseUp.bind(this), { passive: true });
     target.addEventListener('click', this.handleMouseClick.bind(this), { passive: true });
     
     // Keyboard events
@@ -122,6 +131,8 @@ export class UserInteractionTracker {
     const document = this.getTargetDocument();
     
     target.removeEventListener('mousemove', this.handleMouseMove.bind(this));
+    target.removeEventListener('mousedown', this.handleMouseDown.bind(this));
+    target.removeEventListener('mouseup', this.handleMouseUp.bind(this));
     target.removeEventListener('click', this.handleMouseClick.bind(this));
     target.removeEventListener('keydown', this.handleKeyPress.bind(this));
     target.removeEventListener('resize', this.handleWindowResize.bind(this));
@@ -217,6 +228,18 @@ export class UserInteractionTracker {
 
   // Event handlers
   private handleMouseMove = (event: MouseEvent): void => {
+    // Check if we're dragging
+    if (this.mouseDownPosition && this.mouseDownTime) {
+      const distance = Math.sqrt(
+        Math.pow(event.clientX - this.mouseDownPosition.x, 2) +
+        Math.pow(event.clientY - this.mouseDownPosition.y, 2)
+      );
+      
+      if (distance > this.DRAG_THRESHOLD) {
+        this.isDragging = true;
+      }
+    }
+
     this.rateLimiter.rateLimit('mousemove', this.config.mouseMoveRateLimitMs, {
       x: event.clientX,
       y: event.clientY,
@@ -226,12 +249,30 @@ export class UserInteractionTracker {
     });
   };
 
+  private handleMouseDown = (event: MouseEvent): void => {
+    this.mouseDownPosition = { x: event.clientX, y: event.clientY };
+    this.mouseDownTime = Date.now();
+    this.isDragging = false;
+  };
+
+  private handleMouseUp = (event: MouseEvent): void => {
+    // Reset drag state after a short delay to allow click event to fire first
+    setTimeout(() => {
+      this.mouseDownPosition = null;
+      this.mouseDownTime = null;
+      this.isDragging = false;
+    }, 50);
+  };
+
   private handleMouseClick = (event: MouseEvent): void => {
-    this.eventHandler.onMouseClick?.({
-      x: event.clientX,
-      y: event.clientY,
-      timestamp: Date.now()
-    });
+    // Only emit click event if we're not dragging
+    if (!this.isDragging) {
+      this.eventHandler.onMouseClick?.({
+        x: event.clientX,
+        y: event.clientY,
+        timestamp: Date.now()
+      });
+    }
   };
 
   private handleKeyPress = (event: KeyboardEvent): void => {

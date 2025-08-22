@@ -161,14 +161,76 @@ export class SelectionOverlaySimulator {
     // Get all the client rectangles for this range
     const rects = Array.from(range.getClientRects());
     
-    // Create overlay elements for each rectangle
-    rects.forEach(rect => {
+    // Merge overlapping rectangles to avoid duplicate overlays
+    const mergedRects = this.mergeOverlappingRectangles(rects);
+    
+    // Create overlay elements for each merged rectangle
+    mergedRects.forEach(rect => {
       if (rect.width > 0 && rect.height > 0) {
         const overlayElement = this.createOverlayElement(rect);
         this.overlayElement.appendChild(overlayElement);
         this.currentSelectionElements.push(overlayElement);
       }
     });
+  }
+
+  /**
+   * Merges overlapping rectangles to avoid duplicate overlays
+   */
+  private mergeOverlappingRectangles(rects: DOMRect[]): DOMRect[] {
+    if (rects.length <= 1) return rects;
+
+    const merged: DOMRect[] = [];
+    const processed = new Set<number>();
+
+    for (let i = 0; i < rects.length; i++) {
+      if (processed.has(i)) continue;
+
+      let currentRect = rects[i];
+      processed.add(i);
+
+      // Check for overlaps with other rectangles
+      for (let j = i + 1; j < rects.length; j++) {
+        if (processed.has(j)) continue;
+
+        const otherRect = rects[j];
+        
+        // Check if rectangles overlap (including touching edges)
+        if (this.rectanglesOverlap(currentRect, otherRect)) {
+          // Merge the rectangles
+          currentRect = this.mergeRectangles(currentRect, otherRect);
+          processed.add(j);
+        }
+      }
+
+      merged.push(currentRect);
+    }
+
+    return merged;
+  }
+
+  /**
+   * Checks if two rectangles overlap
+   */
+  private rectanglesOverlap(rect1: DOMRect, rect2: DOMRect): boolean {
+    return !(
+      rect1.right < rect2.left ||
+      rect1.left > rect2.right ||
+      rect1.bottom < rect2.top ||
+      rect1.top > rect2.bottom
+    );
+  }
+
+  /**
+   * Merges two overlapping rectangles into one
+   */
+  private mergeRectangles(rect1: DOMRect, rect2: DOMRect): DOMRect {
+    const left = Math.min(rect1.left, rect2.left);
+    const top = Math.min(rect1.top, rect2.top);
+    const right = Math.max(rect1.right, rect2.right);
+    const bottom = Math.max(rect1.bottom, rect2.bottom);
+
+    return new DOMRect(left, top, right - left, bottom - top);
   }
 
 
