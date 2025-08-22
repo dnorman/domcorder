@@ -1,5 +1,5 @@
 import type { VStyleSheet } from "@domcorder/proto-ts";
-import { collectCssUrlsAssign, fetchAssets } from "./inline";
+import { collectCssUrlsAssign, fetchAssets, rewriteStyleSheetsToPendingIds } from "./inline";
 import { PendingAssets } from "./PendingAssets";
 import type { Asset } from "./Asset";
 
@@ -33,9 +33,10 @@ export async function inlineAdoptedStyleSheet(
     };
 
     collectCssUrlsAssign(text, baseURI, pendingAssets);
+    const updated = rewriteStyleSheetsToPendingIds(vStyleSheet, baseURI, pendingAssets);
 
     handler.onInlineStarted({
-      styleSheet: vStyleSheet,
+      styleSheet: updated,
       assetCount: pendingAssets.order.length
     });
 

@@ -346,7 +346,6 @@ export class PageRecorder {
         });
       },
       onTextSelection: (event) => {
-        console.log('onTextSelection', event);
         this.frameHandler({
           frameType: FrameType.TextSelectionChanged,
           data: {
@@ -424,6 +423,7 @@ export class PageRecorder {
         for (const sheet of event.added) {
           await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, {
             onInlineStarted: (ev: InlineAdoptedStyleSheetEvent) => {
+              console.log('onInlineStarted', ev);
               this.frameHandler({
                 frameType: FrameType.AdoptedStyleSheetAdded,
                 data: {

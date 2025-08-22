@@ -246,16 +246,21 @@ function snapShadow(sr: ShadowRoot, pending: PendingAssets, nodeIdMap: NodeIdBiM
   return out;
 }
 
+export function rewriteStyleSheetsToPendingIds(stylesheet: VStyleSheet, baseURI: string, pending: PendingAssets) {
+  if (!("text" in stylesheet) || !stylesheet.text) return stylesheet;
+  const text = stylesheet.text.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m: string, q: string, raw: string) => {
+    const id = idForUrl(raw, baseURI, pending);
+    return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
+  });
+  return { ...stylesheet, text } as VStyleSheet;
+  
+}
+
 // Rewrite using provisional ids (before fetch)
 export function rewriteAllRefsToPendingIds(snap: VDocument, baseURI: string, pending: PendingAssets) {
   // CSS - process adopted stylesheets
   snap.adoptedStyleSheets = snap.adoptedStyleSheets.map((s) => {
-    if (!("text" in s) || !s.text) return s;
-    const text = s.text.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m: string, q: string, raw: string) => {
-      const id = idForUrl(raw, baseURI, pending);
-      return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
-    });
-    return { ...s, text } as VStyleSheet;
+    return rewriteStyleSheetsToPendingIds(s, baseURI, pending);
   });
 
   // Process all document children to rewrite URLs in style elements
