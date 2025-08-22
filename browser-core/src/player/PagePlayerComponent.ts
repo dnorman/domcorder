@@ -15,8 +15,8 @@ export class PagePlayerComponent {
     this.iframe = container.ownerDocument.createElement("iframe");
     this.iframe.className = "iframe";
     
-    shadow.appendChild(this.overlayElement);
     shadow.appendChild(this.iframe);
+    shadow.appendChild(this.overlayElement);
 
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(`
@@ -30,8 +30,8 @@ export class PagePlayerComponent {
         position: absolute;
         top: 0;
         left: 0;
-        width: 100%;
-        height: 100%;
+        bottom: 0;
+        right: 0;
         z-index: 1000;
         overflow: hidden;
       }

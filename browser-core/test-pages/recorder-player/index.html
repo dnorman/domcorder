@@ -8,9 +8,11 @@
       position: absolute;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 100%;
+      bottom: 0;
+      right: 0;
+
       z-index: 10;
+      
       display: flex;
       flex-direction: row;
       align-items: center;
@@ -20,11 +22,9 @@
     }
 
     .iframe-container {
-      position: relative;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 10px;
       flex: 1;
       height: 100%;
       box-sizing: border-box;
@@ -41,18 +41,6 @@
     .target-container {
       position: relative;
       display: flex;
-    }
-
-    .target-container > iframe {
-      position: absolute;
-      flex: 1;
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
-
-    iframe {
-      border: none
     }
   </style>
 <body>
