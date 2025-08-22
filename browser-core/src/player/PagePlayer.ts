@@ -149,6 +149,7 @@ export class PagePlayer {
 
   private _handleWindowScrolledFrame(scrollFrame: WindowScrolledData) {
     this.targetDocument.defaultView!.scrollTo(scrollFrame.scrollXOffset, scrollFrame.scrollYOffset);
+    this.selectionSimulator!.updateScrollPosition(scrollFrame.scrollXOffset, scrollFrame.scrollYOffset);
   }
 
   private _handleAdoptedStyleSheetAddedFrame(frame: NewAdoptedStyleSheetData) {

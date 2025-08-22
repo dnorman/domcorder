@@ -48,14 +48,36 @@ const DEFAULT_CONFIG: Required<SelectionOverlayConfig> = {
 
 export class SelectionSimulator {
   private overlayElement: HTMLElement;
+  private selectionContainer: HTMLElement;
   private nodeIdBiMap: NodeIdBiMap;
   private config: Required<SelectionOverlayConfig>;
   private currentSelectionElements: HTMLElement[] = [];
+  
+  // Store current selection for scroll updates
+  private currentSelection: {
+    startNodeId: number;
+    startOffset: number;
+    endNodeId: number;
+    endOffset: number;
+  } | null = null;
 
   constructor(overlayElement: HTMLElement, nodeIdBiMap: NodeIdBiMap, config: SelectionOverlayConfig = {}) {
     this.overlayElement = overlayElement;
     this.nodeIdBiMap = nodeIdBiMap;
     this.config = { ...DEFAULT_CONFIG, ...config };
+    
+    // Create a container element for selections that will be translated on scroll
+    this.selectionContainer = document.createElement('div');
+    this.selectionContainer.style.position = 'absolute';
+    this.selectionContainer.style.top = '0';
+    this.selectionContainer.style.left = '0';
+    this.selectionContainer.style.width = '100%';
+    this.selectionContainer.style.height = '100%';
+    this.selectionContainer.style.pointerEvents = 'none';
+    this.selectionContainer.style.transform = 'translate(0px, 0px)';
+    this.selectionContainer.style.transformOrigin = '0 0';
+    
+    this.overlayElement.appendChild(this.selectionContainer);
   }
 
   /**
@@ -77,6 +99,14 @@ export class SelectionSimulator {
   ): void {
     // Clear any existing selection
     this.clearSelection();
+
+    // Store the current selection for scroll updates
+    this.currentSelection = {
+      startNodeId,
+      startOffset,
+      endNodeId,
+      endOffset
+    };
 
     // Get the nodes from the bi-directional map
     const startNode = this.nodeIdBiMap.getNodeById(startNodeId);
@@ -126,6 +156,18 @@ export class SelectionSimulator {
       }
     });
     this.currentSelectionElements = [];
+    this.currentSelection = null;
+  }
+
+  /**
+   * Updates the position of selection overlays when the page is scrolled
+   * 
+   * @param scrollX - The horizontal scroll offset
+   * @param scrollY - The vertical scroll offset
+   */
+  public updateScrollPosition(scrollX: number, scrollY: number): void {
+    // Simply translate the selection container to compensate for scroll
+    this.selectionContainer.style.transform = `translate(${-scrollX}px, ${-scrollY}px)`;
   }
 
   /**
@@ -179,7 +221,7 @@ export class SelectionSimulator {
       filteredRects.forEach(rect => {
         if (rect.width > 0 && rect.height > 0) {
           const overlayElement = this.createOverlayElement(rect);
-          this.overlayElement.appendChild(overlayElement);
+          this.selectionContainer.appendChild(overlayElement);
           this.currentSelectionElements.push(overlayElement);
         }
       });
