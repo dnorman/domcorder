@@ -1,4 +1,5 @@
 import { NodeIdBiMap } from '../common';
+import { getSelectionVisualRects, type LineRect } from './SelectionRangeGenerator';
 
 /**
  * SelectionOverlaySimulator - Simulates text selection using overlay elements
@@ -41,8 +42,8 @@ export interface SelectionOverlayConfig {
 }
 
 const DEFAULT_CONFIG: Required<SelectionOverlayConfig> = {
-  backgroundColor: '#0078d7',
-  opacity: 0.3,
+  backgroundColor: 'rgb(104 188 255)',
+  opacity: 0.4,
   zIndex: 1000
 };
 
@@ -53,14 +54,6 @@ export class SelectionSimulator {
   private config: Required<SelectionOverlayConfig>;
   private currentSelectionElements: HTMLElement[] = [];
   
-  // Store current selection for scroll updates
-  private currentSelection: {
-    startNodeId: number;
-    startOffset: number;
-    endNodeId: number;
-    endOffset: number;
-  } | null = null;
-
   // Track current scroll position
   private currentScrollX: number = 0;
   private currentScrollY: number = 0;
@@ -104,24 +97,18 @@ export class SelectionSimulator {
     // Clear any existing selection
     this.clearSelection();
 
-    // Store the current selection for scroll updates
-    this.currentSelection = {
-      startNodeId,
-      startOffset,
-      endNodeId,
-      endOffset
-    };
-
     // Get the nodes from the bi-directional map
     const startNode = this.nodeIdBiMap.getNodeById(startNodeId);
     const endNode = this.nodeIdBiMap.getNodeById(endNodeId);
 
     if (!startNode) {
-      throw new Error(`Start node with ID ${startNodeId} not found in NodeIdBiMap`);
+      return;
+      // throw new Error(`Start node with ID ${startNodeId} not found in NodeIdBiMap`);
     }
 
     if (!endNode) {
-      throw new Error(`End node with ID ${endNodeId} not found in NodeIdBiMap`);
+      return;
+      // throw new Error(`End node with ID ${endNodeId} not found in NodeIdBiMap`);
     }
 
     // Validate offsets
@@ -129,17 +116,19 @@ export class SelectionSimulator {
     const endTextContent = endNode.textContent || '';
 
     if (startOffset < 0 || startOffset > startTextContent.length) {
-      throw new Error(
-        `Start offset ${startOffset} is out of range for node ${startNodeId}. ` +
-        `Valid range: 0 to ${startTextContent.length}`
-      );
+      return;
+      // throw new Error(
+      //   `Start offset ${startOffset} is out of range for node ${startNodeId}. ` +
+      //   `Valid range: 0 to ${startTextContent.length}`
+      // );
     }
 
     if (endOffset < 0 || endOffset > endTextContent.length) {
-      throw new Error(
-        `End offset ${endOffset} is out of range for node ${endNodeId}. ` +
-        `Valid range: 0 to ${endTextContent.length}`
-      );
+      return;
+      //   throw new Error(
+      //     `End offset ${endOffset} is out of range for node ${endNodeId}. ` +
+      //     `Valid range: 0 to ${endTextContent.length}`
+      // );
     }
 
     // Determine the correct document order for the range
@@ -160,7 +149,6 @@ export class SelectionSimulator {
       }
     });
     this.currentSelectionElements = [];
-    this.currentSelection = null;
   }
 
   /**
@@ -218,14 +206,21 @@ export class SelectionSimulator {
         selection.addRange(range);
       }
 
-      // Get the client rectangles for the actual selection
-      const rects = Array.from(range.getClientRects());
+      // // Get the client rectangles for the actual selection
+      // let rects = Array.from(range.getClientRects());
+      // range.getBoundingClientRect();
+      // console.log('rects', rects);
+      // const textNodes = getTextNodesInRange(range);
+      // rects = textNodes.map(node => node.get());
+      // rects = uniqueRects(rects);
+
+      const rects = getSelectionVisualRects(range);
       
-      // Filter out rectangles that span the full width of their parent containers
-      const filteredRects = this.filterFullWidthRectangles(rects, range);
+    //   // Filter out rectangles that span the full width of their parent containers
+    //   const filteredRects = this.filterFullWidthRectangles(rects, range);
       
       // Create overlay elements for each filtered rectangle
-      filteredRects.forEach(rect => {
+      rects.forEach(rect => {
         if (rect.width > 0 && rect.height > 0) {
           const overlayElement = this.createOverlayElement(rect);
           this.selectionContainer.appendChild(overlayElement);
@@ -365,7 +360,7 @@ export class SelectionSimulator {
   /**
    * Creates a single overlay element with the given bounds
    */
-  private createOverlayElement(bounds: DOMRect): HTMLElement {
+  private createOverlayElement(bounds: LineRect): HTMLElement {
     const element = document.createElement('div');
     
     // Adjust position to account for current scroll offset
@@ -381,7 +376,6 @@ export class SelectionSimulator {
     element.style.opacity = this.config.opacity.toString();
     element.style.zIndex = this.config.zIndex.toString();
     element.style.pointerEvents = 'none';
-    element.style.borderRadius = '2px';
     
     return element;
   }
@@ -450,4 +444,50 @@ export class SelectionSimulator {
       };
     }
   }
+}
+
+
+function rectEquals(r1: DOMRect, r2: DOMRect) {
+  return (
+    r1.x === r2.x &&
+    r1.y === r2.y &&
+    r1.width === r2.width &&
+    r1.height === r2.height
+  );
+}
+
+function uniqueRects(rects: DOMRect[]) {
+  const result: DOMRect[] = [];
+  
+  for (const rect of rects) {
+    if (!result.some(r => rectEquals(r, rect))) {
+      result.push(rect);
+    }
+  }
+  
+  return result;
+}
+
+function getTextNodesInRange(range: Range): Text[] {
+  const textNodes: Text[] = [];
+  const treeWalker = document.createTreeWalker(
+    range.commonAncestorContainer,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: node => range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+    }
+  );
+
+  let current;
+  while ((current = treeWalker.nextNode())) {
+    textNodes.push(current as Text);
+  }
+
+  return textNodes;
+}
+
+function getTextNodeClientRects(textNode: Text) {
+  const range = document.createRange();
+  range.selectNodeContents(textNode);
+  return Array.from(range.getClientRects()); // list of DOMRect per line fragment
 }

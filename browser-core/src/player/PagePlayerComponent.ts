@@ -35,11 +35,6 @@ export class PagePlayerComponent {
         z-index: 1000;
         overflow: hidden;
       }
-
-      ::selection {
-        background: #3399ff;   /* highlight background */
-        color: white;          /* text color while selected */
-      }
     `);
 
     shadow.adoptedStyleSheets = [sheet];

@@ -371,8 +371,6 @@ export class PagePlayer {
       return;
     }
 
-    return;
-
     this.selectionSimulator.setSelection(
       textSelectionChangedData.selectionStartNodeId,
       textSelectionChangedData.selectionStartOffset,
