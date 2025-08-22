@@ -16,13 +16,15 @@ import {
   type NewAdoptedStyleSheetData,
   type WindowScrolledData,
   type MouseMovedData,
-  type MouseClickedData
+  type MouseClickedData,
+  type TextSelectionChangedData
 } from "../common/protocol";
 import type { StringMutationOperation } from "../common/StringMutationOperation";
 import type { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
 import { StyleSheetWatcher, type StyleSheetWatcherEvent } from "../recorder/StyleSheetWatcher";
 import { AdoptedStyleSheetMutator } from "./AdoptedStyleSheetMutator";
 import { MouseSimulator } from "./MouseSimulator";
+import { SelectionSimulator } from "./SelectionSimulator";
 
 
 export type OpenFrame = {
@@ -55,6 +57,7 @@ export class PagePlayer {
   private readonly assetManager: AssetManager;
   private readonly overlayElement: HTMLElement;
   private readonly mouseSimulator: MouseSimulator;
+  private selectionSimulator: SelectionSimulator | null;
   
   private readonly openFrameStack: OpenFrame[];
 
@@ -84,11 +87,11 @@ export class PagePlayer {
     this.styleSheetWatcher.start();
 
     this.adoptedStyleSheetMutator = new AdoptedStyleSheetMutator(this.targetDocument, this.assetManager);
+    this.selectionSimulator = null;
     this.mouseSimulator.start();
   }
 
   handleFrame(frame: Frame) {
-    // console.log("handleFrame", frame);
     switch (frame.frameType) {
       case FrameType.Keyframe:
         this._handleKeyFrame(frame.data as KeyframeData);
@@ -136,6 +139,10 @@ export class PagePlayer {
 
       case FrameType.MouseClicked:
         this._handleMouseClickedFrame(frame.data as MouseClickedData);
+        break;
+
+      case FrameType.TextSelectionChanged:
+        this._handleTextSelectionChangedFrame(frame.data as TextSelectionChangedData);
         break;
     }
   }
@@ -336,6 +343,9 @@ export class PagePlayer {
     targetDocNodeIdMap.adoptNodesFromSubTree(this.targetDocument);
 
     this.mutator = new DomMutator(targetDocNodeIdMap);
+    
+    // Update the SelectionSimulator with the new NodeIdBiMap
+    this.selectionSimulator = new SelectionSimulator(targetDocNodeIdMap, this.targetDocument);
   }
 
   /**
@@ -352,5 +362,21 @@ export class PagePlayer {
 
   private _handleMouseClickedFrame(mouseClickedData: MouseClickedData): void {
     this.mouseSimulator.click(mouseClickedData.x, mouseClickedData.y);
+  }
+
+  private _handleTextSelectionChangedFrame(textSelectionChangedData: TextSelectionChangedData): void {
+    if (!this.selectionSimulator) {
+      // SelectionSimulator is not available yet (no keyframe has been applied)
+      return;
+    }
+
+    console.log("textSelectionChangedFrame", textSelectionChangedData);
+
+    this.selectionSimulator.setSelection(
+      textSelectionChangedData.selectionStartNodeId,
+      textSelectionChangedData.selectionStartOffset,
+      textSelectionChangedData.selectionEndNodeId,
+      textSelectionChangedData.selectionEndOffset
+    );
   }
 }

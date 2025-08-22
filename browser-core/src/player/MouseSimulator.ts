@@ -75,8 +75,6 @@ export class MouseSimulator {
   private cursorSvg: SVGElement;
   private cursorGroup: SVGGElement;
   
-
-  
   // Animation state
   private currentX: number = 0;
   private currentY: number = 0;
@@ -94,8 +92,6 @@ export class MouseSimulator {
     this.cursorGroup = this.createCursorGroup();
     this.cursorSvg.appendChild(this.cursorGroup);
     this.overlayElement.appendChild(this.cursorSvg);
-    
-
     
     // Initialize cursor position
     this.updateCursorPosition(0, 0);
@@ -123,7 +119,6 @@ export class MouseSimulator {
    * Move cursor to a specific position with interpolation
    */
   public moveTo(x: number, y: number): void {
-    console.log("moveTo", x, y);
     if (!this.isActive) return;
     
     this.targetX = x;

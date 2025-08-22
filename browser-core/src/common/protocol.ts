@@ -18,6 +18,8 @@ export type Frame = {
       DomAttributeRemovedData |
       DomTextChangedData |
       DomNodeResizedData |
+
+      // FIXME all below here are new
       AdoptedStyleSheetsChangedData |
       NewAdoptedStyleSheetData |
       ElementScrolledData |
@@ -53,8 +55,12 @@ export enum FrameType {
     AdoptedStyleSheetsChanged = 16,
     AdoptedStyleSheetAdded = 17,
 
+    // FIXME this should be 9
     ElementScrolled = 18,
+    // FIXME This should be 10
     ElementBlurred = 19,
+
+    // fine here.
     WindowFocused = 20,
     WindowBlurred = 21,
 }
@@ -72,6 +78,7 @@ export type StyleSheetData = { id: string; media?: string; text?: string };
 // this allows us to not need an end frame.
 export type KeyframeData = {
     document: VDocument;
+    // FIXME missing asset count.
     assetCount: number;
 }
 
@@ -79,7 +86,7 @@ export type KeyframeData = {
 export type AssetData = {
     id: number;                    
     url: string;                 
-    assetType: "image" | "font" | "binary"; // Not sure we need this.
+    // FIXME remove assetType.
     mime?: string;
     buf: ArrayBuffer;
 }
@@ -89,11 +96,13 @@ export type ViewportResizedData = {
     height: number;
 }
 
+// FIXME this use to be called ScrollOffsetChangedData
 export type WindowScrolledData = {
     scrollXOffset: number;
     scrollYOffset: number;
 }
 
+// FIXME this is new
 export type ElementScrolledData = {
     id: number;
     scrollXOffset: number;
@@ -112,23 +121,28 @@ export type MouseClickedData = {
 
 export type KeyPressedData = {
     key: string;
+    // FIXME modifier keys.
 }
+
 
 export type ElementFocusedData = {
     id: string;
 }
 
+// FIXME this is new
 export type ElementBlurredData = {
     id: string;
 }
 
+// For some reason the node ids in here were strings. They are numbers now.
 export type TextSelectionChangedData = {
-    selectionStartNodeId: string;
+    selectionStartNodeId: number;
     selectionStartOffset: number;
-    selectionEndNodeId: string;
+    selectionEndNodeId: number;
     selectionEndOffset: number;
 }
 
+// FIXME this is different, we added assetCount
 export type DomNodeAddedData = {
     parentNodeId: number;
     index: number;
@@ -150,7 +164,7 @@ export type DomAttributeRemovedData = {
     nodeId: number;
     attributeName: string;
 }
-// The text changed frames are different now.
+
 export type TextInsertOperationData = {
     op: 'insert';
     index: number;
@@ -178,11 +192,19 @@ export type DomNodeResizedData = {
     height: number;
 }
 
+// How does this impact telemetry?
 export type WindowFocusedData = {
 }
 
 export type WindowBlurredData = {
 }
+
+export type UrlChangedData = {
+    url: string;
+}
+
+// FIXME all of these are new this use to be a blank
+// StyleSheetChangedData
 
 // Everything below here is not needed yet.
 export type AdoptedStyleSheetsChangedData = {

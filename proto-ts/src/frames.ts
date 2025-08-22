@@ -26,6 +26,7 @@ export class KeyframeDataEnc {
     static async encode(w: Writer, vdocument: VDocument): Promise<void> {
         w.u32(this.tag);
 
+        // FIXME this needs to be removed.
         // Extract doctype from document - use full DOCTYPE string to match Rust
         const docType = "<!DOCTYPE html>";
         w.strUtf8(docType);
@@ -39,6 +40,7 @@ export class KeyframeDataEnc {
     static async encodeStreaming(w: Writer, vdocument: VDocument): Promise<void> {
         w.u32(this.tag);
 
+        // FIXME this needs to be removed.
         // Extract doctype from document - use full DOCTYPE string to match Rust
         const docType = "<!DOCTYPE html>";
         w.strUtf8(docType);

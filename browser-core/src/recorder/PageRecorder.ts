@@ -134,7 +134,6 @@ export class PageRecorder {
               data: {
                 id: asset.id,
                 url: asset.url,
-                assetType: asset.assetType,
                 mime: asset.mime,
                 buf: asset.buf
               } as AssetData,
@@ -350,9 +349,9 @@ export class PageRecorder {
         this.frameHandler({
           frameType: FrameType.TextSelectionChanged,
           data: {
-            selectionStartNodeId: event.startNodeId.toString(),
+            selectionStartNodeId: event.startNodeId,
             selectionStartOffset: event.startOffset,
-            selectionEndNodeId: event.endNodeId.toString(),
+            selectionEndNodeId: event.endNodeId,
             selectionEndOffset: event.endOffset
           }
         });
@@ -396,7 +395,6 @@ export class PageRecorder {
           data: {
             id: asset.id,
             url: asset.url,
-            assetType: asset.assetType,
             mime: asset.mime,
             buf: asset.buf
           } as AssetData,
@@ -439,7 +437,6 @@ export class PageRecorder {
                 data: {
                   id: asset.id,
                   url: asset.url,
-                  assetType: asset.assetType,
                   mime: asset.mime,
                   buf: asset.buf
                 } as AssetData,
