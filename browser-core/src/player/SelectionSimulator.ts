@@ -206,18 +206,7 @@ export class SelectionSimulator {
         selection.addRange(range);
       }
 
-      // // Get the client rectangles for the actual selection
-      // let rects = Array.from(range.getClientRects());
-      // range.getBoundingClientRect();
-      // console.log('rects', rects);
-      // const textNodes = getTextNodesInRange(range);
-      // rects = textNodes.map(node => node.get());
-      // rects = uniqueRects(rects);
-
       const rects = getSelectionVisualRects(range);
-      
-    //   // Filter out rectangles that span the full width of their parent containers
-    //   const filteredRects = this.filterFullWidthRectangles(rects, range);
       
       // Create overlay elements for each filtered rectangle
       rects.forEach(rect => {
@@ -444,50 +433,4 @@ export class SelectionSimulator {
       };
     }
   }
-}
-
-
-function rectEquals(r1: DOMRect, r2: DOMRect) {
-  return (
-    r1.x === r2.x &&
-    r1.y === r2.y &&
-    r1.width === r2.width &&
-    r1.height === r2.height
-  );
-}
-
-function uniqueRects(rects: DOMRect[]) {
-  const result: DOMRect[] = [];
-  
-  for (const rect of rects) {
-    if (!result.some(r => rectEquals(r, rect))) {
-      result.push(rect);
-    }
-  }
-  
-  return result;
-}
-
-function getTextNodesInRange(range: Range): Text[] {
-  const textNodes: Text[] = [];
-  const treeWalker = document.createTreeWalker(
-    range.commonAncestorContainer,
-    NodeFilter.SHOW_TEXT,
-    {
-      acceptNode: node => range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
-    }
-  );
-
-  let current;
-  while ((current = treeWalker.nextNode())) {
-    textNodes.push(current as Text);
-  }
-
-  return textNodes;
-}
-
-function getTextNodeClientRects(textNode: Text) {
-  const range = document.createRange();
-  range.selectNodeContents(textNode);
-  return Array.from(range.getClientRects()); // list of DOMRect per line fragment
 }
