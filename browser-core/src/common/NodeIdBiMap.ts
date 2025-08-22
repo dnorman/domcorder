@@ -6,6 +6,10 @@ export class NodeIdBiMap {
   }
 
   public static getNodeId(node: Node): number | undefined {
+    if (!node) {
+      return undefined;
+    }
+    
     return (node as any)[NodeIdBiMap.NODE_ID_PROPERTY];
   }
 

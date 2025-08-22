@@ -1,31 +1,27 @@
-import { DomMutator } from "../player/DomMutator";
 import { NodeIdBiMap } from "../common/NodeIdBiMap";
 import type { DomOperation } from "../common/DomOperation";
 import { computeMinimalChanges } from "./StringChangeDetector";
 
 export class DomChangeDetector {
-  private liveDomRoot: Node;
-  private snapshotDomRoot: Node;
-  private liveNodeMap: NodeIdBiMap;
-  private snapshotNodeMap: NodeIdBiMap;
+  private readonly liveDomRoot: Node;
+  private readonly liveNodeMap: NodeIdBiMap;
+  
+  private readonly snapshotDomRoot: Node;
+  private readonly snapshotNodeMap: NodeIdBiMap;
 
-  private liveDomObserver: MutationObserver;
-  private dirtySubtrees = new Set<Node>();
+  private readonly liveDomObserver: MutationObserver;
+  private readonly dirtySubtrees = new Set<Node>();
 
-  private snapshotMutator: DomMutator;
-
-  private callback: (ops: DomOperation[]) => void;
+  private readonly callback: (ops: DomOperation[]) => void;
+  private readonly batchTimeoutMs: number;
   private batchTimeout: number | null = null;
-  private batchTimeoutMs: number;
 
-
-  constructor(root: Node, liveNodeMap: NodeIdBiMap, callback: (ops: DomOperation[]) => void, batchTimeoutMs: number = 1000) {
-    this.liveDomRoot = root;
-    this.snapshotDomRoot = root.cloneNode(true);
+  constructor(liveDomRoot: Node, liveNodeMap: NodeIdBiMap, callback: (ops: DomOperation[]) => void, batchTimeoutMs: number = 1000) {
+    this.liveDomRoot = liveDomRoot;
+    this.snapshotDomRoot = liveDomRoot.cloneNode(true);
     this.liveNodeMap = liveNodeMap;
     this.snapshotNodeMap = new NodeIdBiMap();
     this.snapshotNodeMap.assignNodeIdsToSubTree(this.snapshotDomRoot);
-    this.snapshotMutator = new DomMutator(this.snapshotNodeMap);
     this.callback = callback;
     this.batchTimeoutMs = batchTimeoutMs;
 
@@ -37,6 +33,10 @@ export class DomChangeDetector {
       childList: true,
       characterData: true,
     });
+  }
+
+  public getSnapshotDomRoot(): Node {
+    return this.snapshotDomRoot.cloneNode(true);
   }
 
   private handleMutations(mutations: MutationRecord[]): void {
@@ -83,13 +83,12 @@ export class DomChangeDetector {
       const snapshotNode = this.snapshotNodeMap.getNodeById(liveNodeId);
       if (snapshotNode === undefined) continue;
 
-      const ops = this.computeOperations(liveNode, snapshotNode);
+      const ops = this.computeAndApplyOperations(liveNode, snapshotNode);
       allOps.push(...ops);
     }
 
     // Apply changes to snapshot and notify
     if (allOps.length > 0) {
-      this.snapshotMutator.applyOps(allOps);
       try {
         this.callback(allOps);
       } catch (e) {
@@ -101,7 +100,7 @@ export class DomChangeDetector {
     this.dirtySubtrees.clear();
   }
 
-  private computeOperations(liveNode: Node, snapshotNode: Node): DomOperation[] {
+  private computeAndApplyOperations(liveNode: Node, snapshotNode: Node): DomOperation[] {
     const liveNodeId = this.liveNodeMap.getNodeId(liveNode)!;
 
     const ops: DomOperation[] = [];
@@ -116,6 +115,9 @@ export class DomChangeDetector {
           ops: changes
         });
       }
+      
+      snapshotNode.textContent = liveNode.textContent;
+
       return ops;
     }
 
@@ -137,6 +139,8 @@ export class DomChangeDetector {
             nodeId: liveNodeId,
             name: attrName
           });
+
+          snapshotEl.removeAttribute(attrName);
         } else if (newAttr !== oldAttrs[i].value) {
           ops.push({
             op: 'updateAttribute',
@@ -144,6 +148,8 @@ export class DomChangeDetector {
             name: attrName,
             value: newAttr
           });
+
+          snapshotEl.setAttribute(attrName, newAttr);
         }
       }
       
@@ -157,6 +163,8 @@ export class DomChangeDetector {
             name: attrName,
             value: newAttrs[i].value
           });
+
+          snapshotEl.setAttribute(attrName, newAttrs[i].value);
         }
       }
 
@@ -167,60 +175,91 @@ export class DomChangeDetector {
       // and issue a single replace operation instead of a remove and insert.
       // As of now we are not using the replace operation at all.
 
-      const oldChildren = Array.from(snapshotEl.childNodes);
-      const newChildren = Array.from(liveEl.childNodes);
+      const snapshotChildren = Array.from(snapshotEl.childNodes);
+      const snapshotChildrenIds = snapshotChildren.map(c => this.snapshotNodeMap.getNodeId(c));
+      const liveChildren = Array.from(liveEl.childNodes);
+      const liveChildrenIds = liveChildren.map(c => this.liveNodeMap.getNodeId(c));
 
-      let i = 0, j = 0;
-      while (i < oldChildren.length || j < newChildren.length) {
-        if (i < oldChildren.length && j < newChildren.length && 
-          this.liveNodeMap.getNodeId(oldChildren[i]) === this.snapshotNodeMap.getNodeId(newChildren[j])) {
+      const childIdsThatExistInLiveAndSnapshot = snapshotChildrenIds.filter(id => liveChildrenIds.includes(id));
+
+      let snapshotChildrenIndex = 0;
+      let liveChildrenIndex = 0;
+
+      while (snapshotChildrenIndex < snapshotChildren.length || liveChildrenIndex < liveChildren.length) {
+        const snapshotChildId = snapshotChildrenIndex < snapshotChildren.length ? this.snapshotNodeMap.getNodeId(snapshotChildren[snapshotChildrenIndex]) : undefined;
+        const liveChildId = liveChildrenIndex < liveChildren.length ? this.liveNodeMap.getNodeId(liveChildren[liveChildrenIndex]) : undefined;
+
+        if (snapshotChildrenIndex < snapshotChildren.length && liveChildrenIndex < liveChildren.length && snapshotChildId === liveChildId) {
           // elements match → no change
-          i++;
-          j++;
-        } else if (j < newChildren.length && (i >= oldChildren.length || !oldChildren.includes(newChildren[j]))) {
+          snapshotChildrenIndex++;
+          liveChildrenIndex++;
+        } else if (liveChildrenIndex < liveChildren.length && liveChildId && (snapshotChildrenIndex >= snapshotChildren.length || !snapshotChildrenIds.includes(liveChildId))) {
           // element in newChildren[j] is new → insert
-          const existingChild = newChildren[i];
-          const clonedChild = existingChild.cloneNode(true);
-          
-          this.liveNodeMap.assignNodeIdsToSubTree(existingChild);
-          this.snapshotNodeMap.mirrorNodeIdsToSubTree(existingChild, clonedChild);
+          const existingLiveChild = liveChildren[liveChildrenIndex];
+          const clonedChild = existingLiveChild.cloneNode(true);
+          this.snapshotNodeMap.mirrorNodeIdsToSubTree(existingLiveChild, clonedChild);
 
-          ops.push({ op: "insert", parentId: liveNodeId, index: j, node: clonedChild });
-          j++;
-        } else if (i < oldChildren.length && (j >= newChildren.length || !newChildren.includes(oldChildren[i]))) {
+          snapshotEl.insertBefore(clonedChild, snapshotChildren[snapshotChildrenIndex]);
+          snapshotChildren.splice(snapshotChildrenIndex, 0, clonedChild as ChildNode);
+          snapshotChildrenIds.splice(snapshotChildrenIndex, 0, liveChildId!);
+
+          ops.push({ op: "insert", parentId: liveNodeId, index: liveChildrenIndex, node: clonedChild });
+
+          liveChildrenIndex++;
+          snapshotChildrenIndex++;
+        } else if (snapshotChildrenIndex < snapshotChildren.length && snapshotChildId && (liveChildrenIndex >= liveChildren.length || !liveChildrenIds.includes(snapshotChildId))) {
           // element in oldChildren[i] is missing → remove
-          ops.push({ op: "remove", nodeId: this.liveNodeMap.getNodeId(oldChildren[i])! });
-          this.liveNodeMap.removeNodesInSubtree(oldChildren[i]);
-          i++;
+          ops.push({ op: "remove", nodeId: snapshotChildId });
+          
+          const priorLiveNode = this.liveNodeMap.getNodeById(snapshotChildId);
+          if (priorLiveNode) {
+            this.liveNodeMap.removeNodesInSubtree(priorLiveNode);
+          }
+
+          snapshotEl.removeChild(snapshotChildren[snapshotChildrenIndex]);
+          snapshotChildren.splice(snapshotChildrenIndex, 1);
+          snapshotChildrenIds.splice(snapshotChildrenIndex, 1);
         } else {
           // TODO is there where we want to use the replace operation?
           // fallback: if elements differ but both exist later, remove + insert
-          ops.push({ op: "remove", nodeId: this.liveNodeMap.getNodeId(oldChildren[i])! });
-          this.liveNodeMap.removeNodesInSubtree(oldChildren[i]);
+          ops.push({ op: "remove", nodeId: snapshotChildId! });
 
-          const existingChild = newChildren[j];
-          const clonedChild = existingChild.cloneNode(true);
+          const priorLiveNode = this.liveNodeMap.getNodeById(liveChildId!);
+          if (priorLiveNode) {
+            this.liveNodeMap.removeNodesInSubtree(priorLiveNode);
+          }
+
+          const existingLiveChild = liveChildren[liveChildrenIndex];
+          const clonedChild = existingLiveChild.cloneNode(true);
+          this.snapshotNodeMap.mirrorNodeIdsToSubTree(existingLiveChild, clonedChild);
+
+          ops.push({ op: "insert", parentId: liveNodeId, index: liveChildrenIndex, node: clonedChild });
+
+          const priorSnapshotNode = snapshotChildren[snapshotChildrenIndex]
+          this.snapshotNodeMap.removeNodesInSubtree(priorSnapshotNode);
           
-          this.liveNodeMap.assignNodeIdsToSubTree(existingChild);
-          this.snapshotNodeMap.mirrorNodeIdsToSubTree(existingChild, clonedChild);
+          snapshotEl.replaceChild(clonedChild, priorSnapshotNode);
 
-          ops.push({ op: "insert", parentId: liveNodeId, index: j, node: clonedChild });
+          snapshotChildren.splice(snapshotChildrenIndex, 1, clonedChild as ChildNode);
+          snapshotChildrenIds.splice(snapshotChildrenIndex, 1, liveChildId!);
 
-          i++;
-          j++;
+          snapshotChildrenIndex++;
+          liveChildrenIndex++;
         }
       }
         
       // Also handle updates for children that exist in both arrays
-      const commonChildren = oldChildren.filter(child => newChildren.includes(child));
-      for (const child of commonChildren) {
-        const newChildIndex = newChildren.indexOf(child);
-        const oldChildIndex = oldChildren.indexOf(child);
-        const newChild = newChildren[newChildIndex];
-        const oldChild = oldChildren[oldChildIndex];
+      const commonChildren = snapshotChildren.filter(child => {
+        const childId = this.snapshotNodeMap.getNodeId(child);
+        return childId && childIdsThatExistInLiveAndSnapshot.includes(childId);
+      });
+
+      for (const snapshotChild of commonChildren) {        
+        const childId = this.snapshotNodeMap.getNodeId(snapshotChild);
+        const liveChild = this.liveNodeMap.getNodeById(childId)!;
         
         // Recursively diff the child nodes
-        const recursiveOps = this.computeOperations(oldChild, newChild);
+        const recursiveOps = this.computeAndApplyOperations(liveChild, snapshotChild);
         ops.push(...recursiveOps);
       }
       

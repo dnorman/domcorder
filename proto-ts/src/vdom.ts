@@ -343,13 +343,13 @@ export class VStyleSheet {
   }
 }
 
-export class VDocument {
-  id: number;
+export class VDocument extends VNode {
+  nodeType: "document" = "document";
   adoptedStyleSheets: VStyleSheet[];
   children: VNode[];
 
   constructor(id: number, adoptedStyleSheets: VStyleSheet[] = [], children: VNode[] = []) {
-    this.id = id;
+    super(id);
     this.adoptedStyleSheets = adoptedStyleSheets;
     this.children = children;
   }

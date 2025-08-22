@@ -107,6 +107,7 @@ export class PageRecorder {
     nodeIdMap: NodeIdBiMap,
     frameHandler: FrameHandler
   ): Promise<void> {
+    console.log('processOperation', operation);
     switch (operation.op) {
       case "insert":
         inlineSubTree(operation.node, nodeIdMap, {

@@ -40,8 +40,8 @@ export function convertDOMElementToVElement(element: Element): VElement {
         0, // id - will be set by caller if needed
         element.tagName.toLowerCase(),
         element.namespaceURI || undefined,
-        Object.keys(attrs).length ? attrs : undefined,
-        children.length ? children : undefined
+        attrs,
+        children
     );
 }
 

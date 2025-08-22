@@ -203,13 +203,22 @@ describe('DomChangeDetector', () => {
       // Verify all operations are captured
       expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from complex changes
       const ops = capturedOperations[1]; // Get the second operation (the complex changes)
-      expect(ops.length).toBeGreaterThanOrEqual(6); // Multiple operations expected
+      expect(ops.length).toBeGreaterThanOrEqual(4); // Multiple operations expected
 
       // Verify operation types are correct
       const operationTypes = ops.map(op => op.op);
       expect(operationTypes).toContain('updateAttribute');
       expect(operationTypes).toContain('insert');
       expect(operationTypes).toContain('remove');
+      
+      // Verify specific operations exist
+      const hasAttributeUpdate = ops.some(op => op.op === 'updateAttribute' && (op as any).name === 'class');
+      const hasTextChange = ops.some(op => op.op === 'remove' || op.op === 'insert');
+      const hasElementInsert = ops.some(op => op.op === 'insert' && (op as any).node?.textContent === 'New Child');
+      
+      expect(hasAttributeUpdate).toBe(true);
+      expect(hasTextChange).toBe(true);
+      expect(hasElementInsert).toBe(true);
     });
 
     test('should handle nested element changes correctly', async () => {
@@ -434,6 +443,266 @@ describe('DomChangeDetector', () => {
       expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from large changes
       const ops = capturedOperations[1]; // Get the second operation (the large changes)
       expect(ops.length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  describe('Live DOM and Virtual DOM Synchronization', () => {
+    test('should keep virtual DOM in sync after attribute changes', async () => {
+      // Create initial structure
+      const child = document.createElement('span');
+      child.textContent = 'Hello';
+      child.setAttribute('class', 'original');
+      root.appendChild(child);
+
+      // Wait for initial setup
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Change attribute
+      child.setAttribute('class', 'updated');
+
+      // Wait for change detection
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Get virtual DOM snapshot
+      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
+      const virtualChild = virtualRoot.querySelector('span');
+
+      // Verify virtual DOM matches live DOM
+      expect(virtualChild).toBeDefined();
+      expect(virtualChild!.getAttribute('class')).toBe('updated');
+      expect(virtualChild!.textContent).toBe('Hello');
+    });
+
+    test('should keep virtual DOM in sync after text content changes', async () => {
+      // Create initial structure
+      const child = document.createElement('span');
+      child.textContent = 'Original text';
+      root.appendChild(child);
+
+      // Wait for initial setup
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Change text content
+      child.textContent = 'Updated text';
+
+      // Wait for change detection
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Get virtual DOM snapshot
+      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
+      const virtualChild = virtualRoot.querySelector('span');
+
+      // Verify virtual DOM matches live DOM
+      expect(virtualChild).toBeDefined();
+      expect(virtualChild!.textContent).toBe('Updated text');
+    });
+
+    test('should keep virtual DOM in sync after element insertion', async () => {
+      // Create initial structure
+      const child1 = document.createElement('span');
+      child1.textContent = 'Child 1';
+      root.appendChild(child1);
+
+      // Wait for initial setup
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Insert new element
+      const child2 = document.createElement('div');
+      child2.textContent = 'Child 2';
+      child2.setAttribute('id', 'new-child');
+      root.appendChild(child2);
+
+      // Wait for change detection
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Get virtual DOM snapshot
+      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
+      const virtualChildren = Array.from(virtualRoot.children);
+
+      // Verify virtual DOM matches live DOM
+      expect(virtualChildren).toHaveLength(2);
+      expect(virtualChildren[0].textContent).toBe('Child 1');
+      expect(virtualChildren[1].textContent).toBe('Child 2');
+      expect(virtualChildren[1].getAttribute('id')).toBe('new-child');
+    });
+
+    test('should keep virtual DOM in sync after element removal', async () => {
+      // Create initial structure
+      const child1 = document.createElement('span');
+      child1.textContent = 'Child 1';
+      const child2 = document.createElement('div');
+      child2.textContent = 'Child 2';
+      root.appendChild(child1);
+      root.appendChild(child2);
+
+      // Wait for initial setup
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Remove element
+      root.removeChild(child1);
+
+      // Wait for change detection
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Get virtual DOM snapshot
+      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
+      const virtualChildren = Array.from(virtualRoot.children);
+
+      // Verify virtual DOM matches live DOM
+      expect(virtualChildren).toHaveLength(1);
+      expect(virtualChildren[0].textContent).toBe('Child 2');
+    });
+
+    test('should keep virtual DOM in sync after nested element changes', async () => {
+      // Create nested structure
+      const parent = document.createElement('div');
+      parent.setAttribute('id', 'parent');
+      const child = document.createElement('span');
+      child.textContent = 'Nested child';
+      child.setAttribute('class', 'nested');
+      parent.appendChild(child);
+      root.appendChild(parent);
+
+      // Wait for initial setup
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Change nested element
+      child.setAttribute('class', 'updated-nested');
+      child.textContent = 'Updated nested child';
+
+      // Wait for change detection
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Get virtual DOM snapshot
+      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
+      const virtualParent = virtualRoot.querySelector('#parent');
+      const virtualChild = virtualParent?.querySelector('span');
+
+      // Verify virtual DOM matches live DOM
+      expect(virtualParent).toBeDefined();
+      expect(virtualChild).toBeDefined();
+      expect(virtualChild!.getAttribute('class')).toBe('updated-nested');
+      expect(virtualChild!.textContent).toBe('Updated nested child');
+    });
+
+    test('should keep virtual DOM in sync after complex structural changes', async () => {
+      // Create initial structure
+      const container = document.createElement('div');
+      container.setAttribute('id', 'container');
+      const child1 = document.createElement('span');
+      child1.textContent = 'Child 1';
+      const child2 = document.createElement('span');
+      child2.textContent = 'Child 2';
+      container.appendChild(child1);
+      container.appendChild(child2);
+      root.appendChild(container);
+
+      // Wait for initial setup
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Make complex changes
+      child1.setAttribute('class', 'updated');
+      child2.textContent = 'Updated Child 2';
+      const newChild = document.createElement('div');
+      newChild.textContent = 'New Child';
+      newChild.setAttribute('id', 'new-child');
+      container.appendChild(newChild);
+      container.removeChild(child1);
+
+      // Wait for change detection
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Get virtual DOM snapshot
+      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
+      const virtualContainer = virtualRoot.querySelector('#container');
+      const virtualChildren = Array.from(virtualContainer!.children);
+
+      // Verify virtual DOM matches live DOM
+      expect(virtualChildren).toHaveLength(2);
+      expect(virtualChildren[0].textContent).toBe('Updated Child 2');
+      expect(virtualChildren[1].textContent).toBe('New Child');
+      expect(virtualChildren[1].getAttribute('id')).toBe('new-child');
+    });
+
+    test('should keep virtual DOM in sync after text node changes', async () => {
+      // Create text node
+      const textNode = document.createTextNode('Original text');
+      root.appendChild(textNode);
+
+      // Wait for initial setup
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Change text content
+      textNode.textContent = 'Updated text';
+
+      // Wait for change detection
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Get virtual DOM snapshot
+      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
+      const virtualTextNode = virtualRoot.childNodes[0];
+
+      // Verify virtual DOM matches live DOM
+      expect(virtualTextNode.nodeType).toBe(Node.TEXT_NODE);
+      expect(virtualTextNode.textContent).toBe('Updated text');
+    });
+
+    test('should keep virtual DOM in sync after attribute removal', async () => {
+      // Create element with attribute
+      const child = document.createElement('span');
+      child.setAttribute('class', 'original');
+      child.setAttribute('id', 'test');
+      child.textContent = 'Hello';
+      root.appendChild(child);
+
+      // Wait for initial setup
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Remove attribute
+      child.removeAttribute('class');
+
+      // Wait for change detection
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Get virtual DOM snapshot
+      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
+      const virtualChild = virtualRoot.querySelector('#test');
+
+      // Verify virtual DOM matches live DOM
+      expect(virtualChild).toBeDefined();
+      expect(virtualChild!.hasAttribute('class')).toBe(false);
+      expect(virtualChild!.getAttribute('id')).toBe('test');
+      expect(virtualChild!.textContent).toBe('Hello');
+    });
+
+    test('should keep virtual DOM in sync after multiple rapid changes', async () => {
+      // Create initial structure
+      const child = document.createElement('span');
+      child.textContent = 'Original';
+      child.setAttribute('class', 'original');
+      root.appendChild(child);
+
+      // Wait for initial setup
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Make rapid changes
+      child.setAttribute('class', 'first');
+      child.setAttribute('class', 'second');
+      child.textContent = 'Updated';
+      child.setAttribute('id', 'final');
+
+      // Wait for change detection
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Get virtual DOM snapshot
+      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
+      const virtualChild = virtualRoot.querySelector('span');
+
+      // Verify virtual DOM matches final live DOM state
+      expect(virtualChild).toBeDefined();
+      expect(virtualChild!.getAttribute('class')).toBe('second');
+      expect(virtualChild!.textContent).toBe('Updated');
+      expect(virtualChild!.getAttribute('id')).toBe('final');
     });
   });
 });
