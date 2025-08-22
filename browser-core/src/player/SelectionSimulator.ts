@@ -61,6 +61,10 @@ export class SelectionSimulator {
     endOffset: number;
   } | null = null;
 
+  // Track current scroll position
+  private currentScrollX: number = 0;
+  private currentScrollY: number = 0;
+
   constructor(overlayElement: HTMLElement, nodeIdBiMap: NodeIdBiMap, config: SelectionOverlayConfig = {}) {
     this.overlayElement = overlayElement;
     this.nodeIdBiMap = nodeIdBiMap;
@@ -166,6 +170,9 @@ export class SelectionSimulator {
    * @param scrollY - The vertical scroll offset
    */
   public updateScrollPosition(scrollX: number, scrollY: number): void {
+    this.currentScrollX = scrollX;
+    this.currentScrollY = scrollY;
+    
     // Simply translate the selection container to compensate for scroll
     this.selectionContainer.style.transform = `translate(${-scrollX}px, ${-scrollY}px)`;
   }
@@ -361,9 +368,13 @@ export class SelectionSimulator {
   private createOverlayElement(bounds: DOMRect): HTMLElement {
     const element = document.createElement('div');
     
+    // Adjust position to account for current scroll offset
+    const adjustedLeft = bounds.left + this.currentScrollX;
+    const adjustedTop = bounds.top + this.currentScrollY;
+    
     element.style.position = 'absolute';
-    element.style.left = `${bounds.left}px`;
-    element.style.top = `${bounds.top}px`;
+    element.style.left = `${adjustedLeft}px`;
+    element.style.top = `${adjustedTop}px`;
     element.style.width = `${bounds.width}px`;
     element.style.height = `${bounds.height}px`;
     element.style.backgroundColor = this.config.backgroundColor;
