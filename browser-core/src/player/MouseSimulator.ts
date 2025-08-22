@@ -206,7 +206,7 @@ export class MouseSimulator {
     
     // Position the cursor directly at the coordinates with fixed size
     // The cursor SVG is already sized at 140x140, so just position it
-    this.cursorGroup.setAttribute('transform', `translate(${x}, ${y})`);
+    this.cursorGroup.setAttribute('transform', `translate(${x-3}, ${y-4})`);
   }
 
   private startInterpolation(): void {
