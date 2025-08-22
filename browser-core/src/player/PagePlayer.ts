@@ -347,7 +347,6 @@ export class PagePlayer {
   }
 
   private _handleMouseMovedFrame(mouseMovedData: MouseMovedData): void {
-    console.log("handleMouseMovedFrame", mouseMovedData);
     this.mouseSimulator.moveTo(mouseMovedData.x, mouseMovedData.y);
   }
 

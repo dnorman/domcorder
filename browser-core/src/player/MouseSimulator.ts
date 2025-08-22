@@ -59,11 +59,11 @@ export interface MouseSimulatorConfig {
 }
 
 const DEFAULT_CONFIG: Required<MouseSimulatorConfig> = {
-  cursorSize: 20,
+  cursorSize: 24,
   interpolationIntervalMs: 16, // ~60fps
   minInterpolationDistance: 2,
   clickDotSize: 6,
-  rippleDurationMs: 2000
+  rippleDurationMs: 600 // Even faster expansion
 };
 
 export class MouseSimulator {
@@ -119,6 +119,7 @@ export class MouseSimulator {
    * Move cursor to a specific position with interpolation
    */
   public moveTo(x: number, y: number): void {
+    console.log("moveTo", x, y);
     if (!this.isActive) return;
     
     this.targetX = x;
@@ -163,28 +164,49 @@ export class MouseSimulator {
   }
 
   private createCursorGroup(): SVGGElement {
-    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    
-    // Create arrow cursor path
-    const cursorPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    cursorPath.setAttribute('d', 'M 0 0 L 12 8 L 6 8 L 6 20 L 0 20 Z');
-    cursorPath.setAttribute('fill', 'black');
-    cursorPath.setAttribute('stroke', 'white');
-    cursorPath.setAttribute('stroke-width', '1');
-    
-    group.appendChild(cursorPath);
-    return group;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute("viewBox", "-12 -12 140 140" );
+    svg.setAttribute("width", "30");
+    svg.setAttribute("height", "30");
+
+    svg.innerHTML = ` 
+  <!-- soft drop shadow for the white outline -->
+  <defs>
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="4" dy="4" stdDeviation="3" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Cursor outline (white stroke), tip at (0,0) -->
+  <!-- Path points form a typical mouse pointer with a notch for the tail -->
+  <path id="cursor-shape"
+        d="M 0 0
+           L 0 95
+           L 28 70
+           L 42 108
+           L 64 96
+           L 48 64
+           L 95 64
+           Z"
+        fill="black"
+        stroke="white"
+        stroke-width="7"
+        stroke-linejoin="round"
+        filter="url(#shadow)"/>
+
+  <!-- Cursor fill (black) using the same geometry -->
+  <use href="#cursor-shape" fill="black" stroke="none"/>`;
+
+    return svg;
   }
 
   private updateCursorPosition(x: number, y: number): void {
     this.currentX = x;
     this.currentY = y;
     
-    // Apply hotspot offset (tip of cursor points to coordinates)
-    const offsetX = x - 2; // Small offset for the tip
-    const offsetY = y - 2;
-    
-    this.cursorGroup.setAttribute('transform', `translate(${offsetX}, ${offsetY}) scale(${this.config.cursorSize / 20})`);
+    // Position the cursor directly at the coordinates with fixed size
+    // The cursor SVG is already sized at 140x140, so just position it
+    this.cursorGroup.setAttribute('transform', `translate(${x}, ${y})`);
   }
 
   private startInterpolation(): void {
@@ -242,24 +264,32 @@ export class MouseSimulator {
     
     // Animate ripple
     const startTime = Date.now();
+    const totalDuration = this.config.rippleDurationMs + 200; // Expansion + fade time (shorter fade)
     const animateRipple = () => {
       const elapsed = Date.now() - startTime;
-      const progress = elapsed / this.config.rippleDurationMs;
+      const progress = elapsed / totalDuration;
       
       if (progress >= 1) {
-        // Fade out
-        const fadeOut = (elapsed - this.config.rippleDurationMs) / 500; // 500ms fade
-        if (fadeOut >= 1) {
-          this.removeRipple(dot, ripple);
-          return;
-        }
-        dot.setAttribute('opacity', (0.8 * (1 - fadeOut)).toString());
-        ripple.setAttribute('opacity', (0.6 * (1 - fadeOut)).toString());
-      } else {
-        // Expand ripple
-        const maxRadius = Math.max(50, this.config.cursorSize * 2);
-        const currentRadius = maxRadius * progress;
-        ripple.setAttribute('r', currentRadius.toString());
+        // Animation complete
+        this.removeRipple(dot, ripple);
+        return;
+      }
+      
+      // Calculate expansion and fade phases
+      const expansionProgress = Math.min(1, elapsed / this.config.rippleDurationMs);
+      const fadeStartTime = this.config.rippleDurationMs * 0.7; // Start fade at 70% of expansion
+      const fadeProgress = Math.max(0, (elapsed - fadeStartTime) / 200);
+      
+      // Always expand the ripple (even during fade)
+      const maxRadius = 25; // Smaller fixed size for ripple
+      const currentRadius = maxRadius * expansionProgress;
+      ripple.setAttribute('r', currentRadius.toString());
+      
+      // Handle opacity (fade out as expansion finishes)
+      if (fadeProgress > 0) {
+        const opacity = 1 - fadeProgress;
+        dot.setAttribute('opacity', (0.8 * opacity).toString());
+        ripple.setAttribute('opacity', (0.6 * opacity).toString());
       }
       
       requestAnimationFrame(animateRipple);
