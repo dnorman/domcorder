@@ -75,6 +75,8 @@ export class MouseSimulator {
   private cursorSvg: SVGElement;
   private cursorGroup: SVGGElement;
   
+
+  
   // Animation state
   private currentX: number = 0;
   private currentY: number = 0;
@@ -92,6 +94,8 @@ export class MouseSimulator {
     this.cursorGroup = this.createCursorGroup();
     this.cursorSvg.appendChild(this.cursorGroup);
     this.overlayElement.appendChild(this.cursorSvg);
+    
+
     
     // Initialize cursor position
     this.updateCursorPosition(0, 0);
@@ -136,6 +140,8 @@ export class MouseSimulator {
     this.startInterpolation();
   }
 
+
+
   /**
    * Simulate a click at the current cursor position
    */
@@ -146,6 +152,47 @@ export class MouseSimulator {
     const clickY = y ?? this.currentY;
     
     this.createClickAnimation(clickX, clickY);
+    this.playClickSound();
+  }
+
+  /**
+   * Play click sound
+   */
+  private playClickSound(): void {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Create a more realistic click sound using noise and impulse
+      const bufferSize = audioContext.sampleRate * 0.05; // 50ms buffer
+      const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+      const output = buffer.getChannelData(0);
+      
+      // Generate click-like sound with noise and sharp attack
+      for (let i = 0; i < bufferSize; i++) {
+        // Sharp attack with noise
+        if (i < bufferSize * 0.1) { // First 10% - sharp attack
+          output[i] = (Math.random() - 0.5) * 1.2 * Math.exp(-i / (bufferSize * 0.02));
+        } else { // Rest - noise decay
+          output[i] = (Math.random() - 0.5) * 0.5 * Math.exp(-i / (bufferSize * 0.3));
+        }
+      }
+      
+      // Create audio source and play
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      
+      const gainNode = audioContext.createGain();
+      gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.05);
+      
+      source.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      source.start(audioContext.currentTime);
+      source.stop(audioContext.currentTime + 0.05);
+    } catch (error) {
+      console.warn('Could not play click sound:', error);
+    }
   }
 
   private createSvgContainer(): SVGElement {
@@ -166,8 +213,8 @@ export class MouseSimulator {
   private createCursorGroup(): SVGGElement {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute("viewBox", "-12 -12 140 140" );
-    svg.setAttribute("width", "30");
-    svg.setAttribute("height", "30");
+    svg.setAttribute("width", "" + this.config.cursorSize);
+    svg.setAttribute("height", "" + this.config.cursorSize);
 
     svg.innerHTML = ` 
   <!-- soft drop shadow for the white outline -->

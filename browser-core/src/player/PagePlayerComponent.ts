@@ -44,18 +44,4 @@ export class PagePlayerComponent {
   handleFrame(frame: Frame) {
     this.player.handleFrame(frame);
   }
-
-  /**
-   * Start mouse simulation
-   */
-  startMouseSimulation(): void {
-    this.player.startMouseSimulation();
-  }
-
-  /**
-   * Stop mouse simulation
-   */
-  stopMouseSimulation(): void {
-    this.player.stopMouseSimulation();
-  }
 }
