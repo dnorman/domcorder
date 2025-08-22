@@ -107,7 +107,6 @@ export class PageRecorder {
     nodeIdMap: NodeIdBiMap,
     frameHandler: FrameHandler
   ): Promise<void> {
-    console.log('processOperation', operation);
     switch (operation.op) {
       case "insert":
         inlineSubTree(operation.node, nodeIdMap, {
@@ -424,7 +423,6 @@ export class PageRecorder {
         for (const sheet of event.added) {
           await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, {
             onInlineStarted: (ev: InlineAdoptedStyleSheetEvent) => {
-              console.log('onInlineStarted', ev);
               this.frameHandler({
                 frameType: FrameType.AdoptedStyleSheetAdded,
                 data: {
