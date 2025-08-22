@@ -144,87 +144,174 @@ export class SelectionSimulator {
     endNode: Node,
     endOffset: number
   ): void {
-    // Create a range for the entire selection
-    const range = startNode.ownerDocument!.createRange();
-    range.setStart(startNode, startOffset);
-    range.setEnd(endNode, endOffset);
+    const document = startNode.ownerDocument!;
+    const selection = document.defaultView!.getSelection();
+    
+    // Store the current selection to restore it later
+    const originalSelection = selection ? {
+      rangeCount: selection.rangeCount,
+      ranges: Array.from({ length: selection.rangeCount }, (_, i) => selection.getRangeAt(i).cloneRange())
+    } : null;
 
-    // Get all the client rectangles for this range
-    const rects = Array.from(range.getClientRects());
-    
-    // Merge overlapping rectangles to avoid duplicate overlays
-    const mergedRects = this.mergeOverlappingRectangles(rects);
-    
-    // Create overlay elements for each merged rectangle
-    mergedRects.forEach(rect => {
-      if (rect.width > 0 && rect.height > 0) {
-        const overlayElement = this.createOverlayElement(rect);
-        this.overlayElement.appendChild(overlayElement);
-        this.currentSelectionElements.push(overlayElement);
+    try {
+      // Clear any existing selection
+      if (selection) {
+        selection.removeAllRanges();
       }
-    });
+
+      // Create a new range for our selection
+      const range = document.createRange();
+      range.setStart(startNode, startOffset);
+      range.setEnd(endNode, endOffset);
+
+      // Add the range to the selection to get accurate client rects
+      if (selection) {
+        selection.addRange(range);
+      }
+
+      // Get the client rectangles for the actual selection
+      const rects = Array.from(range.getClientRects());
+      
+      // Filter out rectangles that span the full width of their parent containers
+      const filteredRects = this.filterFullWidthRectangles(rects, range);
+      
+      // Create overlay elements for each filtered rectangle
+      filteredRects.forEach(rect => {
+        if (rect.width > 0 && rect.height > 0) {
+          const overlayElement = this.createOverlayElement(rect);
+          this.overlayElement.appendChild(overlayElement);
+          this.currentSelectionElements.push(overlayElement);
+        }
+      });
+
+    } finally {
+      // Restore the original selection
+      if (selection && originalSelection) {
+        selection.removeAllRanges();
+        originalSelection.ranges.forEach(range => {
+          selection.addRange(range);
+        });
+      }
+    }
   }
 
   /**
-   * Merges overlapping rectangles to avoid duplicate overlays
+   * Filters out rectangles that span the full width of their parent containers
+   * This helps eliminate duplicate overlays where one covers just the text and another spans the full width
    */
-  private mergeOverlappingRectangles(rects: DOMRect[]): DOMRect[] {
-    if (rects.length <= 1) return rects;
-
-    const merged: DOMRect[] = [];
-    const processed = new Set<number>();
-
-    for (let i = 0; i < rects.length; i++) {
-      if (processed.has(i)) continue;
-
-      let currentRect = rects[i];
-      processed.add(i);
-
-      // Check for overlaps with other rectangles
-      for (let j = i + 1; j < rects.length; j++) {
-        if (processed.has(j)) continue;
-
-        const otherRect = rects[j];
-        
-        // Check if rectangles overlap (including touching edges)
-        if (this.rectanglesOverlap(currentRect, otherRect)) {
-          // Merge the rectangles
-          currentRect = this.mergeRectangles(currentRect, otherRect);
-          processed.add(j);
-        }
-      }
-
-      merged.push(currentRect);
+  private filterFullWidthRectangles(rects: DOMRect[], range: Range): DOMRect[] {
+    // If we only have one rectangle, keep it (no duplicates to filter)
+    if (rects.length <= 1) {
+      return rects;
     }
 
-    return merged;
+    // Group rectangles by their vertical position (y-coordinate)
+    const rectGroups = this.groupRectanglesByVerticalPosition(rects);
+    
+    const filteredRects: DOMRect[] = [];
+    
+    rectGroups.forEach(group => {
+      if (group.length === 1) {
+        // Single rectangle on this line, keep it
+        filteredRects.push(group[0]);
+      } else {
+        // Multiple rectangles on the same line - filter out the full-width ones
+        const filteredGroup = this.filterFullWidthRectanglesInGroup(group, range);
+        filteredRects.push(...filteredGroup);
+      }
+    });
+    
+    return filteredRects;
   }
 
   /**
-   * Checks if two rectangles overlap
+   * Groups rectangles by their vertical position (y-coordinate) to handle multi-line selections
    */
-  private rectanglesOverlap(rect1: DOMRect, rect2: DOMRect): boolean {
-    return !(
-      rect1.right < rect2.left ||
-      rect1.left > rect2.right ||
-      rect1.bottom < rect2.top ||
-      rect1.top > rect2.bottom
+  private groupRectanglesByVerticalPosition(rects: DOMRect[]): DOMRect[][] {
+    const groups: DOMRect[][] = [];
+    const tolerance = 2; // 2px tolerance for grouping rectangles on the same line
+    
+    rects.forEach(rect => {
+      let addedToGroup = false;
+      
+      for (const group of groups) {
+        if (group.length > 0) {
+          const groupY = group[0].top;
+          if (Math.abs(rect.top - groupY) <= tolerance) {
+            group.push(rect);
+            addedToGroup = true;
+            break;
+          }
+        }
+      }
+      
+      if (!addedToGroup) {
+        groups.push([rect]);
+      }
+    });
+    
+    return groups;
+  }
+
+  /**
+   * Filters full-width rectangles within a group of rectangles on the same line
+   */
+  private filterFullWidthRectanglesInGroup(rects: DOMRect[], range: Range): DOMRect[] {
+    // Get the parent container
+    const container = range.commonAncestorContainer;
+    let parentElement: Element | null = null;
+    
+    if (container.nodeType === Node.TEXT_NODE) {
+      parentElement = container.parentElement;
+    } else if (container.nodeType === Node.ELEMENT_NODE) {
+      parentElement = container as Element;
+    }
+    
+    if (!parentElement) {
+      return rects; // Can't determine parent, keep all rectangles
+    }
+    
+    const parentRect = parentElement.getBoundingClientRect();
+    const tolerance = 1;
+    
+    // Check if any rectangle spans the full width
+    const hasFullWidthRect = rects.some(rect => 
+      Math.abs(rect.left - parentRect.left) <= tolerance && 
+      Math.abs(rect.right - parentRect.right) <= tolerance
     );
+    
+    if (!hasFullWidthRect) {
+      return rects; // No full-width rectangle, keep all
+    }
+    
+    // Find the narrowest rectangle (likely the actual text bounds)
+    const narrowestRect = rects.reduce((narrowest, current) => 
+      current.width < narrowest.width ? current : narrowest
+    );
+    
+    // Find the widest rectangle (likely the full-width container rectangle)
+    const widestRect = rects.reduce((widest, current) => 
+      current.width > widest.width ? current : widest
+    );
+    
+    // If the widest rectangle is significantly wider than the narrowest (more than 10px difference),
+    // and the widest spans the full width, then filter out the widest
+    const significantWidthDifference = widestRect.width - narrowestRect.width > 10;
+    const widestSpansFullWidth = Math.abs(widestRect.left - parentRect.left) <= tolerance && 
+                                Math.abs(widestRect.right - parentRect.right) <= tolerance;
+    
+    if (significantWidthDifference && widestSpansFullWidth) {
+      // Filter out the full-width rectangle, keep the narrower ones
+      return rects.filter(rect => 
+        !(Math.abs(rect.left - parentRect.left) <= tolerance && 
+          Math.abs(rect.right - parentRect.right) <= tolerance)
+      );
+    } else {
+      // Keep all rectangles if there's no significant width difference
+      // This handles cases where text actually spans the full width
+      return rects;
+    }
   }
-
-  /**
-   * Merges two overlapping rectangles into one
-   */
-  private mergeRectangles(rect1: DOMRect, rect2: DOMRect): DOMRect {
-    const left = Math.min(rect1.left, rect2.left);
-    const top = Math.min(rect1.top, rect2.top);
-    const right = Math.max(rect1.right, rect2.right);
-    const bottom = Math.max(rect1.bottom, rect2.bottom);
-
-    return new DOMRect(left, top, right - left, bottom - top);
-  }
-
-
 
   /**
    * Creates a single overlay element with the given bounds
