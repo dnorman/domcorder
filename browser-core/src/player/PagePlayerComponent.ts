@@ -22,6 +22,9 @@ export class PagePlayerComponent {
     this.iframe = container.ownerDocument.createElement("iframe");
     this.iframe.className = "iframe";
     
+    // Initialize iframe with proper DOCTYPE to ensure Standards Mode
+    this.iframe.srcdoc = '<!DOCTYPE html><html><head></head><body></body></html>';
+    
     shadow.appendChild(this.iframe);
     shadow.appendChild(this.overlayElement);
 
