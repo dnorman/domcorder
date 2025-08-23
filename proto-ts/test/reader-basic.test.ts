@@ -10,7 +10,7 @@ describe("Reader Basic Functionality", () => {
     test("should read simple timestamp frame", async () => {
         // Create a timestamp frame with Writer
         const [writer, writerStream] = Writer.create();
-        await TimestampDataEnc.encode(writer, 1234567890n);
+        await new TimestampDataEnc(1234567890n).encode(writer);
         writer.close();
 
         // Consume writer output
@@ -49,9 +49,9 @@ describe("Reader Basic Functionality", () => {
     test("should read multiple simple frames", async () => {
         // Create multiple frames with Writer
         const [writer, writerStream] = Writer.create();
-        await TimestampDataEnc.encode(writer, 1000n);
-        await ViewportResizedDataEnc.encode(writer, 1920, 1080);
-        await KeyPressedDataEnc.encode(writer, "Enter");
+        await new TimestampDataEnc(1000n).encode(writer);
+        await new ViewportResizedDataEnc(1920, 1080).encode(writer);
+        await new KeyPressedDataEnc("Enter").encode(writer);
         writer.close();
 
         // Get writer output
@@ -100,7 +100,7 @@ describe("Reader Basic Functionality", () => {
         const testTimestamp = BigInt(1691234567890);
 
         writer.writeHeader(testTimestamp);
-        await TimestampDataEnc.encode(writer, 5000n);
+        await new TimestampDataEnc(5000n).encode(writer);
         writer.close();
 
         // Get writer output

@@ -77,7 +77,7 @@ describe("Stream Observer Utility", () => {
         const check = streamObserve(stream);
 
         // Encode a timestamp frame
-        await TimestampDataEnc.encode(writer, 1234567890n);
+        await new TimestampDataEnc(1234567890n).encode(writer);
 
         let analysis = await check();
         expect(analysis.chunkCount).toBe(1);
@@ -90,7 +90,7 @@ describe("Stream Observer Utility", () => {
         `);
 
         const vdocument = convertDOMDocumentToVDocument(dom.window.document);
-        await KeyframeDataEnc.encode(writer, vdocument);
+        await new KeyframeDataEnc(vdocument).encode(writer);
 
         analysis = await check();
         expect(analysis.chunkCount).toBeGreaterThan(0);
@@ -119,7 +119,7 @@ describe("Stream Observer Utility", () => {
 
         // Use streaming encoding
         const vdocument = convertDOMDocumentToVDocument(dom.window.document);
-        await KeyframeDataEnc.encodeStreaming(writer, vdocument);
+        await new KeyframeDataEnc(vdocument).encodeStreaming(writer);
 
         const analysis = await check();
 

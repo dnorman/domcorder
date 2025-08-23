@@ -16,7 +16,7 @@ describe("Async Frame Encoders", () => {
         const check = streamObserve(stream);
 
         // Encode a timestamp frame
-        await TimestampDataEnc.encode(writer, 1234567890n);
+        await new TimestampDataEnc(1234567890n).encode(writer);
 
         writer.close();
 
@@ -40,7 +40,7 @@ describe("Async Frame Encoders", () => {
 
         // Encode keyframe (regular version)
         const vdocument = convertDOMDocumentToVDocument(dom.window.document);
-        await KeyframeDataEnc.encode(writer, vdocument);
+        await new KeyframeDataEnc(vdocument).encode(writer);
 
         writer.close();
 
@@ -68,7 +68,7 @@ describe("Async Frame Encoders", () => {
 
         // Encode keyframe (streaming version)
         const vdocument = convertDOMDocumentToVDocument(dom.window.document);
-        await KeyframeDataEnc.encodeStreaming(writer, vdocument);
+        await new KeyframeDataEnc(vdocument).encodeStreaming(writer);
 
         writer.close();
 
@@ -90,7 +90,7 @@ describe("Async Frame Encoders", () => {
         const check = streamObserve(stream);
 
         // Encode viewport resized frame
-        await ViewportResizedDataEnc.encode(writer, 1920, 1080);
+        await new ViewportResizedDataEnc(1920, 1080).encode(writer);
 
         writer.close();
 

@@ -10,13 +10,13 @@ describe("Writer → Reader Round-trip Tests", () => {
 
     async function generateTestFrames(writer: Writer): Promise<void> {
         // Generate a variety of frame types
-        await TimestampDataEnc.encode(writer, 1000n);
-        await ViewportResizedDataEnc.encode(writer, 1920, 1080);
-        await MouseMovedDataEnc.encode(writer, 100, 200);
-        await KeyPressedDataEnc.encode(writer, "a");
-        await KeyPressedDataEnc.encode(writer, "Enter");
-        await TimestampDataEnc.encode(writer, 2000n);
-        await KeyPressedDataEnc.encode(writer, "This is a longer string to test string handling");
+        await new TimestampDataEnc(1000n).encode(writer);
+        await new ViewportResizedDataEnc(1920, 1080).encode(writer);
+        await new MouseMovedDataEnc(100, 200).encode(writer);
+        await new KeyPressedDataEnc("a").encode(writer);
+        await new KeyPressedDataEnc("Enter").encode(writer);
+        await new TimestampDataEnc(2000n).encode(writer);
+        await new KeyPressedDataEnc("This is a longer string to test string handling").encode(writer);
     }
 
     async function createByteStreamWithChunks(data: Uint8Array, chunkSize: number): Promise<ReadableStream<Uint8Array>> {
@@ -84,8 +84,8 @@ describe("Writer → Reader Round-trip Tests", () => {
     test("should handle 1-byte chunks (extreme fragmentation)", async () => {
         // Generate frames
         const [writer, writerStream] = Writer.create();
-        await TimestampDataEnc.encode(writer, 12345n);
-        await KeyPressedDataEnc.encode(writer, "test");
+        await new TimestampDataEnc(12345n).encode(writer);
+        await new KeyPressedDataEnc("test").encode(writer);
         writer.close();
 
         // Get writer output
@@ -120,8 +120,8 @@ describe("Writer → Reader Round-trip Tests", () => {
         for (const chunkSize of chunkSizes) {
             // Generate frames
             const [writer, writerStream] = Writer.create();
-            await ViewportResizedDataEnc.encode(writer, 800, 600);
-            await KeyPressedDataEnc.encode(writer, `chunk-size-${chunkSize}`);
+            await new ViewportResizedDataEnc(800, 600).encode(writer);
+            await new KeyPressedDataEnc(`chunk-size-${chunkSize}`).encode(writer);
             writer.close();
 
             // Get writer output
@@ -158,8 +158,8 @@ describe("Writer → Reader Round-trip Tests", () => {
         const testTimestamp = BigInt(1691234567890);
 
         writer.writeHeader(testTimestamp);
-        await TimestampDataEnc.encode(writer, 9999n);
-        await ViewportResizedDataEnc.encode(writer, 1024, 768);
+        await new TimestampDataEnc(9999n).encode(writer);
+        await new ViewportResizedDataEnc(1024, 768).encode(writer);
         writer.close();
 
         // Get writer output
