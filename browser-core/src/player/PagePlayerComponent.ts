@@ -42,7 +42,6 @@ export class PagePlayerComponent {
         right: 0;
         z-index: 1000;
         overflow: hidden;
-        display: none;
       }
     `);
 

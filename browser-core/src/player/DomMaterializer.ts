@@ -81,9 +81,7 @@ export class DomMaterializer {
       for (const [key, value] of Object.entries(vElement.attrs)) {
         // Handle "asset:" URLs in attributes
         const processedValue = this.processAttributeValue(key, value, element);
-        if (key !== "contenteditable") {
-          element.setAttribute(key, processedValue);
-        }
+        element.setAttribute(key, processedValue);
       }
     }
 
