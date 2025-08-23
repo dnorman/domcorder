@@ -29,8 +29,9 @@ export class PagePlayerComponent {
     sheet.replaceSync(`
       iframe {
         width: 100%;
-        height: 100%;
+        flex: 1;
         border: none;
+        box-sizing: border-box;
       }
 
       .iframe-overlay {
@@ -41,6 +42,7 @@ export class PagePlayerComponent {
         right: 0;
         z-index: 1000;
         overflow: hidden;
+        display: none;
       }
     `);
 
