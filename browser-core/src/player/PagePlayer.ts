@@ -93,7 +93,7 @@ export class PagePlayer {
 
     this.targetDocument.defaultView!.addEventListener('scroll', () => {
       if (this.selectionSimulator) {
-        this.selectionSimulator!.updateWindowScrollPosition(this.targetDocument.defaultView!.scrollX, this.targetDocument.defaultView!.scrollY);
+        this.selectionSimulator!.updateScrollPosition(this.targetDocument.defaultView!.scrollX, this.targetDocument.defaultView!.scrollY);
       }
     });
   }
@@ -160,11 +160,17 @@ export class PagePlayer {
 
   private _handleElementScrolledFrame(frame: ElementScrolledData) {
     this.mutator!.updateElementScrollPosition(frame.id, frame.scrollXOffset, frame.scrollYOffset);
+    
+    if (this.selectionSimulator) {
+      this.selectionSimulator.updateElementScrollPosition(frame.id, frame.scrollXOffset, frame.scrollYOffset);
+    }
   }
 
   private _handleWindowScrolledFrame(scrollFrame: WindowScrolledData) {
     this.targetDocument.defaultView!.scrollTo(scrollFrame.scrollXOffset, scrollFrame.scrollYOffset);
-    this.selectionSimulator!.updateWindowScrollPosition(scrollFrame.scrollXOffset, scrollFrame.scrollYOffset);
+    if (this.selectionSimulator) {
+      this.selectionSimulator.updateScrollPosition(scrollFrame.scrollXOffset, scrollFrame.scrollYOffset);
+    }
   }
 
   private _handleAdoptedStyleSheetAddedFrame(frame: NewAdoptedStyleSheetData) {
@@ -361,7 +367,7 @@ export class PagePlayer {
     this.mutator = new DomMutator(targetDocNodeIdMap);
     
     // Update the SelectionSimulator with the new NodeIdBiMap
-    this.selectionSimulator = new SelectionSimulator(this.overlayElement, targetDocNodeIdMap);
+    this.selectionSimulator = new SelectionSimulator(this.overlayElement, targetDocNodeIdMap, this.targetDocument);
   }
 
   /**

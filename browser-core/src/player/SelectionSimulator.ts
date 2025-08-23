@@ -1,5 +1,7 @@
 import { NodeIdBiMap } from '../common';
 import { getSelectionVisualRects, type LineRect } from './SelectionRangeGenerator';
+import { ScrollableElementRegistry } from './ScrollableElementRegistry';
+import { ScrollableElementTracker } from './ScrollableElementTracker';
 
 /**
  * SelectionOverlaySimulator - Simulates text selection using overlay elements
@@ -57,10 +59,18 @@ export class SelectionSimulator {
   // Track current scroll position
   private currentScrollX: number = 0;
   private currentScrollY: number = 0;
+  
+  // Target document (iframe document)
+  private targetDocument: Document;
 
-  constructor(overlayElement: HTMLElement, nodeIdBiMap: NodeIdBiMap, config: SelectionOverlayConfig = {}) {
+  // Scrollable element management
+  private scrollableRegistry: ScrollableElementRegistry;
+  private scrollableTracker: ScrollableElementTracker;
+
+  constructor(overlayElement: HTMLElement, nodeIdBiMap: NodeIdBiMap, targetDocument: Document, config: SelectionOverlayConfig = {}) {
     this.overlayElement = overlayElement;
     this.nodeIdBiMap = nodeIdBiMap;
+    this.targetDocument = targetDocument;
     this.config = { ...DEFAULT_CONFIG, ...config };
     
     // Create a container element for selections that will be translated on scroll
@@ -68,6 +78,8 @@ export class SelectionSimulator {
     this.selectionContainer.style.position = 'absolute';
     this.selectionContainer.style.top = '0';
     this.selectionContainer.style.left = '0';
+    // Size to match the full document, not just the viewport
+    // Will be updated properly in updateContainerSize()
     this.selectionContainer.style.width = '100%';
     this.selectionContainer.style.height = '100%';
     this.selectionContainer.style.pointerEvents = 'none';
@@ -75,6 +87,11 @@ export class SelectionSimulator {
     this.selectionContainer.style.transformOrigin = '0 0';
     
     this.overlayElement.appendChild(this.selectionContainer);
+
+    // Initialize scrollable element management
+    this.scrollableRegistry = new ScrollableElementRegistry(this.selectionContainer);
+    this.scrollableTracker = new ScrollableElementTracker(this.scrollableRegistry);
+    this.scrollableTracker.start();
   }
 
   /**
@@ -135,6 +152,9 @@ export class SelectionSimulator {
     const { documentStartNode, documentStartOffset, documentEndNode, documentEndOffset } = 
       this.getDocumentOrderedPositions(startNode, startOffset, endNode, endOffset);
 
+    // Update container size to ensure it matches current document dimensions
+    this.updateContainerSize();
+    
     // Create overlay elements for the selection
     this.createSelectionOverlays(documentStartNode, documentStartOffset, documentEndNode, documentEndOffset);
   }
@@ -149,6 +169,9 @@ export class SelectionSimulator {
       }
     });
     this.currentSelectionElements = [];
+    
+    // Clean up any empty scrollable containers
+    this.scrollableRegistry.cleanupEmptyContainer(document.body);
   }
 
   /**
@@ -157,12 +180,67 @@ export class SelectionSimulator {
    * @param scrollX - The horizontal scroll offset
    * @param scrollY - The vertical scroll offset
    */
-  public updateWindowScrollPosition(scrollX: number, scrollY: number): void {
+  public updateScrollPosition(scrollX: number, scrollY: number): void {
     this.currentScrollX = scrollX;
     this.currentScrollY = scrollY;
     
     // Simply translate the selection container to compensate for scroll
     this.selectionContainer.style.transform = `translate(${-scrollX}px, ${-scrollY}px)`;
+  }
+
+  /**
+   * Updates the size of the selection container to match the document dimensions
+   * Should be called when document content changes
+   */
+  public updateContainerSize(): void {
+    // Get the maximum of all possible document dimension measurements
+    const htmlElement = this.targetDocument.querySelector('html');
+    
+    const docWidth = Math.max(
+      this.targetDocument.documentElement.scrollWidth,
+      this.targetDocument.documentElement.clientWidth,
+      this.targetDocument.documentElement.offsetWidth,
+      htmlElement?.scrollWidth || 0,
+      htmlElement?.clientWidth || 0,
+      htmlElement?.offsetWidth || 0,
+      this.targetDocument.body?.scrollWidth || 0,
+      this.targetDocument.body?.clientWidth || 0,
+      this.targetDocument.body?.offsetWidth || 0
+    );
+    
+    const docHeight = Math.max(
+      this.targetDocument.documentElement.scrollHeight,
+      this.targetDocument.documentElement.clientHeight,
+      this.targetDocument.documentElement.offsetHeight,
+      htmlElement?.scrollHeight || 0,
+      htmlElement?.clientHeight || 0,
+      htmlElement?.offsetHeight || 0,
+      this.targetDocument.body?.scrollHeight || 0,
+      this.targetDocument.body?.clientHeight || 0,
+      this.targetDocument.body?.offsetHeight || 0
+    );
+    
+    this.selectionContainer.style.width = `${docWidth}px`;
+    this.selectionContainer.style.height = `${docHeight}px`;
+  }
+
+  /**
+   * Updates the position of selection overlays for a specific element
+   * 
+   * @param nodeId - The ID of the element to update
+   * @param scrollX - The horizontal scroll offset
+   * @param scrollY - The vertical scroll offset
+   */
+  public updateElementScrollPosition(nodeId: number, scrollX: number, scrollY: number): void {
+    const element = this.nodeIdBiMap.getNodeById(nodeId);
+    if (!element) return;
+    
+    const scrollableInfo = this.scrollableRegistry.getScrollableInfo(element as Element);
+    if (scrollableInfo) {
+      // The ElementScrollHandler will automatically update the container position
+      // when it receives the scroll event, so we don't need to do anything here
+      // This method exists for compatibility with the PagePlayer interface
+    }
   }
 
   /**
@@ -201,20 +279,12 @@ export class SelectionSimulator {
       range.setStart(startNode, startOffset);
       range.setEnd(endNode, endOffset);
 
-      // Add the range to the selection to get accurate client rects
-      if (selection) {
-        selection.addRange(range);
-      }
-
-      const rects = getSelectionVisualRects(range);
+      // Split the range by scrollable element boundaries
+      const rangeSegments = this.splitRangeByScrollableElements(range);
       
-      // Create overlay elements for each filtered rectangle
-      rects.forEach(rect => {
-        if (rect.width > 0 && rect.height > 0) {
-          const overlayElement = this.createOverlayElement(rect);
-          this.selectionContainer.appendChild(overlayElement);
-          this.currentSelectionElements.push(overlayElement);
-        }
+      // Create overlays for each segment
+      rangeSegments.forEach(segment => {
+        this.createOverlaysForRangeSegment(segment.range, segment.targetContainer, selection);
       });
 
     } finally {
@@ -229,14 +299,342 @@ export class SelectionSimulator {
   }
 
   /**
+   * Split a range by scrollable element boundaries
+   */
+  private splitRangeByScrollableElements(range: Range): Array<{
+    range: Range;
+    targetContainer: HTMLElement;
+  }> {
+    const segments: Array<{ range: Range; targetContainer: HTMLElement }> = [];
+    
+    // Find scrollable ancestors of start and end nodes
+    const startScrollable = this.findClosestScrollableAncestor(range.startContainer);
+    const endScrollable = this.findClosestScrollableAncestor(range.endContainer);
+    
+    // Also check if there are any scrollable elements within the range
+    const scrollableElementsInRange = this.findScrollableElementsInRange(range);
+    const hasScrollableElementsInRange = scrollableElementsInRange.length > 0;
+    
+
+    
+    // If both start and end are in the same scrollable context AND no scrollable elements in range, no splitting needed
+    if (startScrollable === endScrollable && !hasScrollableElementsInRange) {
+
+      const elementToUse = startScrollable || (range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE 
+        ? range.commonAncestorContainer as Element 
+        : range.commonAncestorContainer.parentElement!);
+      const targetContainer = this.scrollableRegistry.findOrCreateScrollableContainer(elementToUse);
+      segments.push({ range: range.cloneRange(), targetContainer });
+      return segments;
+    }
+    
+
+    // Implement proper range splitting for ranges that cross scrollable boundaries
+    return this.splitRangeAcrossScrollableBoundaries(range);
+  }
+
+  /**
+   * Split a range that crosses scrollable element boundaries
+   */
+  private splitRangeAcrossScrollableBoundaries(range: Range): Array<{
+    range: Range;
+    targetContainer: HTMLElement;
+  }> {
+    const segments: Array<{ range: Range; targetContainer: HTMLElement }> = [];
+    
+
+    
+    // Simple approach: check if start and end are in different scrollable contexts
+    const startScrollable = this.findClosestScrollableAncestor(range.startContainer);
+    const endScrollable = this.findClosestScrollableAncestor(range.endContainer);
+    
+
+    
+    // If range crosses a scrollable boundary, we need to find the scrollable elements in between
+    const scrollableElements = this.findScrollableElementsInRange(range);
+    
+    if (scrollableElements.length === 0) {
+      // No scrollable elements in range, use simple approach
+      const targetContainer = this.scrollableRegistry.findOrCreateScrollableContainer(
+        startScrollable || (range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE 
+          ? range.commonAncestorContainer as Element 
+          : range.commonAncestorContainer.parentElement!)
+      );
+      segments.push({ range: range.cloneRange(), targetContainer });
+    } else {
+      // Split the range at each scrollable element boundary
+      let currentRange = range.cloneRange();
+      
+      for (const scrollableElement of scrollableElements) {
+        // Create a range for content before this scrollable element
+        const beforeRange = range.cloneRange();
+        try {
+          beforeRange.setEndBefore(scrollableElement);
+          
+          if (!beforeRange.collapsed && beforeRange.toString().trim()) {
+            const beforeContainer = this.scrollableRegistry.findOrCreateScrollableContainer(
+              this.findClosestScrollableAncestor(beforeRange.startContainer) || 
+              (range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE 
+                ? range.commonAncestorContainer as Element 
+                : range.commonAncestorContainer.parentElement!)
+            );
+
+            segments.push({ range: beforeRange, targetContainer: beforeContainer });
+          }
+        } catch (e) {
+
+        }
+        
+        // Create a range for content inside this scrollable element
+        const insideRange = range.cloneRange();
+        
+        // Check if the original range intersects with the scrollable element's content
+        const elementRange = document.createRange();
+        elementRange.selectNodeContents(scrollableElement);
+        
+
+        
+        // Find the intersection of the original range with the scrollable element
+        const compareStart = range.compareBoundaryPoints(Range.START_TO_START, elementRange);
+        const compareEnd = range.compareBoundaryPoints(Range.END_TO_END, elementRange);
+        
+
+        
+        // Check if the range actually intersects the element's content, not just touches its boundary
+        const rangeIntersectsContent = range.intersectsNode(scrollableElement) && 
+          (compareEnd > 0 || (compareEnd === 0 && range.endOffset > 0));
+        
+
+        
+        if (rangeIntersectsContent) {
+          if (compareStart <= 0) {
+            // Original range starts before or at the element start
+            insideRange.setStart(elementRange.startContainer, elementRange.startOffset);
+          } else {
+            // Original range starts after the element start
+            insideRange.setStart(range.startContainer, range.startOffset);
+          }
+          
+          if (compareEnd >= 0) {
+            // Original range ends after or at the element end
+            insideRange.setEnd(elementRange.endContainer, elementRange.endOffset);
+          } else {
+            // Original range ends before the element end
+            insideRange.setEnd(range.endContainer, range.endOffset);
+          }
+        } else {
+          // Range doesn't actually go into the element content
+          insideRange.collapse(true); // Make it collapsed so it gets skipped
+        }
+        
+
+        
+        if (!insideRange.collapsed && insideRange.toString().trim()) {
+          const insideContainer = this.scrollableRegistry.findOrCreateScrollableContainer(scrollableElement);
+
+          segments.push({ range: insideRange, targetContainer: insideContainer });
+        } else {
+
+        }
+        
+        // Create a range for content after this scrollable element
+        const afterRange = range.cloneRange();
+        try {
+          afterRange.setStartAfter(scrollableElement);
+          
+          if (!afterRange.collapsed && afterRange.toString().trim()) {
+            const afterContainer = this.scrollableRegistry.findOrCreateScrollableContainer(
+              this.findClosestScrollableAncestor(afterRange.startContainer) || 
+              (range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE 
+                ? range.commonAncestorContainer as Element 
+                : range.commonAncestorContainer.parentElement!)
+            );
+
+            segments.push({ range: afterRange, targetContainer: afterContainer });
+          }
+        } catch (e) {
+
+        }
+      }
+    }
+    
+
+    
+    return segments.length > 0 ? segments : [{ 
+      range: range.cloneRange(), 
+      targetContainer: this.scrollableRegistry.findOrCreateScrollableContainer(
+        range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE 
+          ? range.commonAncestorContainer as Element 
+          : range.commonAncestorContainer.parentElement!
+      )
+    }];
+  }
+
+  /**
+   * Find all scrollable elements that intersect with the range
+   */
+  private findScrollableElementsInRange(range: Range): Element[] {
+    const scrollableElements: Element[] = [];
+    const walker = range.commonAncestorContainer.ownerDocument!.createTreeWalker(
+      range.commonAncestorContainer,
+      NodeFilter.SHOW_ELEMENT,
+      {
+        acceptNode: (node) => {
+          const element = node as Element;
+          return this.isScrollable(element) && range.intersectsNode(element) ? 
+            NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+        }
+      }
+    );
+    
+    let element = walker.nextNode();
+    while (element) {
+      scrollableElements.push(element as Element);
+
+      element = walker.nextNode();
+    }
+    
+    return scrollableElements;
+  }
+
+  /**
+   * Get the previous text node within the range
+   */
+  private getPreviousTextNode(currentNode: Node, range: Range): Node | null {
+    const walker = range.commonAncestorContainer.ownerDocument!.createTreeWalker(
+      range.commonAncestorContainer,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: (node) => {
+          return range.intersectsNode(node) && node !== currentNode ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+        }
+      }
+    );
+    
+    let previousNode: Node | null = null;
+    let node = walker.nextNode();
+    
+    while (node && node !== currentNode) {
+      previousNode = node;
+      node = walker.nextNode();
+    }
+    
+    return previousNode;
+  }
+
+  /**
+   * Find the closest scrollable ancestor of a node (including the node itself if it's an element)
+   */
+  private findClosestScrollableAncestor(node: Node): Element | null {
+    let current = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
+    
+    while (current && current !== document.body) {
+      if (this.isScrollable(current)) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+    
+    return null;
+  }
+
+  /**
+   * Check if an element is scrollable
+   */
+  private isScrollable(element: Element | null): boolean {
+    if (!element) return false;
+    const computed = getComputedStyle(element);
+    const hasScrollableContent = element.scrollHeight > element.clientHeight || 
+                                element.scrollWidth > element.clientWidth;
+    
+    const canScroll = ['auto', 'scroll', 'hidden'].includes(computed.overflowY) || 
+                     ['auto', 'scroll', 'hidden'].includes(computed.overflowX);
+    
+    return hasScrollableContent && canScroll;
+  }
+
+  /**
+   * Create overlay elements for a specific range segment
+   */
+  private createOverlaysForRangeSegment(
+    range: Range, 
+    targetContainer: HTMLElement, 
+    selection: Selection | null
+  ): void {
+    // Add the range to the selection to get accurate client rects
+    if (selection) {
+      selection.addRange(range);
+    }
+
+    const rects = getSelectionVisualRects(range);
+    
+    // Get the scrollable element for this container to calculate relative positioning
+    const scrollableElement = this.getScrollableElementForContainer(targetContainer);
+    
+    // Create overlay elements for each filtered rectangle
+    rects.forEach(rect => {
+      if (rect.width > 0 && rect.height > 0) {
+        const overlayElement = this.createOverlayElement(rect, targetContainer, scrollableElement);
+        targetContainer.appendChild(overlayElement);
+        this.currentSelectionElements.push(overlayElement);
+      }
+    });
+
+    // Remove the range from selection
+    if (selection) {
+      selection.removeRange(range);
+    }
+  }
+
+  /**
+   * Get the scrollable element associated with a container
+   */
+  private getScrollableElementForContainer(container: HTMLElement): Element | null {
+    if (container === this.selectionContainer) {
+      return null; // Main container, no specific scrollable element
+    }
+    
+    // Find the scrollable element by checking the registry
+    const registryInfo = Array.from(this.scrollableRegistry['registry'].entries())
+      .find(([element, info]) => info.overlayContainer === container);
+    
+    return registryInfo ? registryInfo[0] : null;
+  }
+
+  /**
    * Creates a single overlay element with the given bounds
    */
-  private createOverlayElement(bounds: LineRect): HTMLElement {
+  private createOverlayElement(bounds: LineRect, targetContainer?: HTMLElement, scrollableElement?: Element | null): HTMLElement {
     const element = document.createElement('div');
     
-    // Adjust position to account for current scroll offset
-    const adjustedLeft = bounds.left + this.currentScrollX;
-    const adjustedTop = bounds.top + this.currentScrollY;
+    let adjustedLeft = bounds.left;
+    let adjustedTop = bounds.top;
+    
+    // If using the main selection container (window scrolling), adjust for scroll offset
+    if (!targetContainer || targetContainer === this.selectionContainer) {
+      adjustedLeft = bounds.left + this.currentScrollX;
+      adjustedTop = bounds.top + this.currentScrollY;
+    } else if (scrollableElement) {
+      // For scrollable element containers, position relative to the scrollable element's content area
+      // Account for borders and current scroll position since the container is positioned at the content area
+      const elementRect = scrollableElement.getBoundingClientRect();
+      const computed = getComputedStyle(scrollableElement);
+      const borderLeft = parseFloat(computed.borderLeftWidth) || 0;
+      const borderTop = parseFloat(computed.borderTopWidth) || 0;
+      
+      // Account for current scroll position - the container has been translated by -scroll amounts
+      const currentScrollX = scrollableElement.scrollLeft;
+      const currentScrollY = scrollableElement.scrollTop;
+      
+      adjustedLeft = bounds.left - (elementRect.left + borderLeft) + currentScrollX;
+      adjustedTop = bounds.top - (elementRect.top + borderTop) + currentScrollY;
+    } else {
+      // Fallback: use bounds directly
+      adjustedLeft = bounds.left;
+      adjustedTop = bounds.top;
+    }
+    
+
     
     element.style.position = 'absolute';
     element.style.left = `${adjustedLeft}px`;
@@ -314,5 +712,14 @@ export class SelectionSimulator {
         documentEndOffset: offset1
       };
     }
+  }
+
+  /**
+   * Dispose of all resources including scrollable element tracking
+   */
+  public dispose(): void {
+    this.clearSelection();
+    this.scrollableTracker.dispose();
+    this.scrollableRegistry.dispose();
   }
 }
