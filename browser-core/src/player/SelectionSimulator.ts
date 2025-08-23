@@ -157,7 +157,7 @@ export class SelectionSimulator {
    * @param scrollX - The horizontal scroll offset
    * @param scrollY - The vertical scroll offset
    */
-  public updateScrollPosition(scrollX: number, scrollY: number): void {
+  public updateWindowScrollPosition(scrollX: number, scrollY: number): void {
     this.currentScrollX = scrollX;
     this.currentScrollY = scrollY;
     

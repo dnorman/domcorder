@@ -17,7 +17,8 @@ import {
   type WindowScrolledData,
   type MouseMovedData,
   type MouseClickedData,
-  type TextSelectionChangedData
+  type TextSelectionChangedData,
+  type ElementScrolledData
 } from "../common/protocol";
 import type { StringMutationOperation } from "../common/StringMutationOperation";
 import type { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
@@ -89,6 +90,12 @@ export class PagePlayer {
     this.adoptedStyleSheetMutator = new AdoptedStyleSheetMutator(this.targetDocument, this.assetManager);
     this.selectionSimulator = null;
     this.mouseSimulator.start();
+
+    this.targetDocument.defaultView!.addEventListener('scroll', () => {
+      if (this.selectionSimulator) {
+        this.selectionSimulator!.updateWindowScrollPosition(this.targetDocument.defaultView!.scrollX, this.targetDocument.defaultView!.scrollY);
+      }
+    });
   }
 
   handleFrame(frame: Frame) {
@@ -133,6 +140,10 @@ export class PagePlayer {
         this._handleWindowScrolledFrame(frame.data as WindowScrolledData);
         break;
 
+      case FrameType.ElementScrolled:
+        this._handleElementScrolledFrame(frame.data as ElementScrolledData);
+        break;
+
       case FrameType.MouseMoved:
         this._handleMouseMovedFrame(frame.data as MouseMovedData);
         break;
@@ -147,9 +158,13 @@ export class PagePlayer {
     }
   }
 
+  private _handleElementScrolledFrame(frame: ElementScrolledData) {
+    this.mutator!.updateElementScrollPosition(frame.id, frame.scrollXOffset, frame.scrollYOffset);
+  }
+
   private _handleWindowScrolledFrame(scrollFrame: WindowScrolledData) {
     this.targetDocument.defaultView!.scrollTo(scrollFrame.scrollXOffset, scrollFrame.scrollYOffset);
-    this.selectionSimulator!.updateScrollPosition(scrollFrame.scrollXOffset, scrollFrame.scrollYOffset);
+    this.selectionSimulator!.updateWindowScrollPosition(scrollFrame.scrollXOffset, scrollFrame.scrollYOffset);
   }
 
   private _handleAdoptedStyleSheetAddedFrame(frame: NewAdoptedStyleSheetData) {

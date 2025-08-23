@@ -44,6 +44,8 @@ span.unicode:after {
   margin-top: 5px;
   resize: both;
   overflow: auto;
+  height: 150px;
+  width: 400px;
 }
 
 @media screen and (min-width: 20px) {

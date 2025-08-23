@@ -9,6 +9,13 @@ export class DomMutator {
       this.nodeMap = nodeMap;
   }
 
+  updateElementScrollPosition(nodeId: number, scrollXOffset: number, scrollYOffset: number) {
+    const element = this.nodeMap.getNodeById(nodeId)! as Element;
+    if (element && element.nodeType === Node.ELEMENT_NODE) {
+      element.scrollTo(scrollXOffset, scrollYOffset);
+    }
+  }
+
   applyOps(ops: DomOperation[]): void {
     for (const op of ops) {
       switch (op.op) {
