@@ -10,5 +10,8 @@ const frameHandler = (frame) => {
 
 window.frameHandler = frameHandler;
 
-const sourceIframe = document.getElementById('source');
-sourceIframe.src = "source-page/index.html";
+player.ready().then(() => {
+  console.log('player ready');
+  const sourceIframe = document.getElementById('source');
+  sourceIframe.src = "source-page/index.html";
+});

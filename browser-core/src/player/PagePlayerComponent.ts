@@ -1,13 +1,20 @@
 import type { Frame } from "../common";
+import { Deferred } from "../common/Deferred";
 import { PagePlayer } from "./PagePlayer";
 
 export class PagePlayerComponent {
-  private player: PagePlayer;
-  overlayElement: HTMLDivElement;
-  iframe: HTMLIFrameElement;
+
+  private player: PagePlayer | null;
+  private readonly overlayElement: HTMLDivElement;
+  private readonly iframe: HTMLIFrameElement;
+
+  private readonly frameQueue: Frame[] = [];
+
+  private readonly readyPromise: Deferred<void>;
 
   constructor(container: HTMLElement) {
-
+    this.readyPromise = new Deferred<void>();
+    
     const shadow = container.attachShadow({ mode: 'closed' });
     
     this.overlayElement = container.ownerDocument.createElement("div");
@@ -39,10 +46,33 @@ export class PagePlayerComponent {
 
     shadow.adoptedStyleSheets = [sheet];
     
-    this.player = new PagePlayer(this.iframe, this.overlayElement);
+    this.player = null;
+
+    // We have to wait for the iframe to load before we can create the player
+    // because the player needs the iframe's contentDocument to be available
+    // and the iframe's contentDocument is not available until the iframe has loaded.
+    new Promise(res => this.iframe.addEventListener('load', res, { once: true })).then(() => {
+      this.player = new PagePlayer(this.iframe, this.overlayElement);
+
+      for (const frame of this.frameQueue) {
+        this.player.handleFrame(frame);
+      }
+
+      this.frameQueue.length = 0;
+
+      this.readyPromise.resolve();
+    });
   }
 
-  handleFrame(frame: Frame) {
-    this.player.handleFrame(frame);
+  public handleFrame(frame: Frame): void {
+    if (this.player) {
+      this.player.handleFrame(frame);
+    } else {
+      this.frameQueue.push(frame);
+    }
+  }
+
+  public ready(): Promise<void> {
+    return this.readyPromise.promise();
   }
 }
