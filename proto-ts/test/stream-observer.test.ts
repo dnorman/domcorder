@@ -2,7 +2,7 @@
 import { describe, test, expect } from "bun:test";
 import { Writer } from "../src/writer.ts";
 import { streamObserve, StreamObserver } from "./stream-observer.ts";
-import { TimestampDataEnc, KeyframeDataEnc } from "../src/frames.ts";
+import { Timestamp, Keyframe } from "../src/frames.ts";
 import { setupDOMGlobals } from "./sample-frames.ts";
 import { JSDOM } from "jsdom";
 import { convertDOMDocumentToVDocument } from "../src/dom-converter.ts";
@@ -77,7 +77,7 @@ describe("Stream Observer Utility", () => {
         const check = streamObserve(stream);
 
         // Encode a timestamp frame
-        await new TimestampDataEnc(1234567890n).encode(writer);
+        await new Timestamp(1234567890n).encode(writer);
 
         let analysis = await check();
         expect(analysis.chunkCount).toBe(1);
@@ -90,7 +90,7 @@ describe("Stream Observer Utility", () => {
         `);
 
         const vdocument = convertDOMDocumentToVDocument(dom.window.document);
-        await new KeyframeDataEnc(vdocument).encode(writer);
+        await new Keyframe(vdocument).encode(writer);
 
         analysis = await check();
         expect(analysis.chunkCount).toBeGreaterThan(0);
@@ -119,7 +119,7 @@ describe("Stream Observer Utility", () => {
 
         // Use streaming encoding
         const vdocument = convertDOMDocumentToVDocument(dom.window.document);
-        await new KeyframeDataEnc(vdocument).encodeStreaming(writer);
+        await new Keyframe(vdocument).encodeStreaming(writer);
 
         const analysis = await check();
 

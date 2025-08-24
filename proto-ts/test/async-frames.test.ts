@@ -1,7 +1,7 @@
 // Test for async frame encoders
 import { describe, test, expect } from "bun:test";
 import { Writer } from "../src/writer.ts";
-import { TimestampDataEnc, KeyframeDataEnc, ViewportResizedDataEnc } from "../src/frames.ts";
+import { Timestamp, Keyframe, ViewportResized } from "../src/frames.ts";
 import { setupDOMGlobals } from "./sample-frames.ts";
 import { streamObserve } from "./stream-observer.ts";
 import { JSDOM } from "jsdom";
@@ -16,7 +16,7 @@ describe("Async Frame Encoders", () => {
         const check = streamObserve(stream);
 
         // Encode a timestamp frame
-        await new TimestampDataEnc(1234567890n).encode(writer);
+        await new Timestamp(1234567890n).encode(writer);
 
         writer.close();
 
@@ -40,7 +40,7 @@ describe("Async Frame Encoders", () => {
 
         // Encode keyframe (regular version)
         const vdocument = convertDOMDocumentToVDocument(dom.window.document);
-        await new KeyframeDataEnc(vdocument).encode(writer);
+        await new Keyframe(vdocument).encode(writer);
 
         writer.close();
 
@@ -68,7 +68,7 @@ describe("Async Frame Encoders", () => {
 
         // Encode keyframe (streaming version)
         const vdocument = convertDOMDocumentToVDocument(dom.window.document);
-        await new KeyframeDataEnc(vdocument).encodeStreaming(writer);
+        await new Keyframe(vdocument).encodeStreaming(writer);
 
         writer.close();
 
@@ -90,7 +90,7 @@ describe("Async Frame Encoders", () => {
         const check = streamObserve(stream);
 
         // Encode viewport resized frame
-        await new ViewportResizedDataEnc(1920, 1080).encode(writer);
+        await new ViewportResized(1920, 1080).encode(writer);
 
         writer.close();
 

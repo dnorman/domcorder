@@ -7,6 +7,7 @@ interface BufferReader {
     readU64(): bigint;
     readString(): string;
     readBytes(length: number): Uint8Array;
+    readByte(): number; // Read a single byte
 }
 
 // Header structure for .dcrr files
@@ -193,6 +194,16 @@ export class Reader implements BufferReader {
     // Buffer reading utilities
     private availableBytes(): number {
         return this.buffer.length - this.bufferOffset;
+    }
+
+    readByte(): number {
+        if (this.availableBytes() < 1) {
+            throw new Error("Not enough data for byte");
+        }
+
+        const value = this.buffer[this.bufferOffset];
+        this.bufferOffset += 1;
+        return value;
     }
 
     readU32(): number {

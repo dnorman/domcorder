@@ -2,19 +2,19 @@
 import { JSDOM } from "jsdom";
 import { Writer } from "../src/writer.ts";
 import {
-    TimestampDataEnc,
-    KeyframeDataEnc,
-    AssetDataEnc,
-    ViewportResizedDataEnc,
-    ScrollOffsetChangedDataEnc,
-    MouseMovedDataEnc,
-    MouseClickedDataEnc,
-    KeyPressedDataEnc,
-    ElementFocusedDataEnc,
-    DomTextChangedDataEnc,
-    DomNodeAddedDataEnc,
-    DomNodeRemovedDataEnc,
-    DomAttributeChangedDataEnc
+    Timestamp,
+    Keyframe,
+    Asset,
+    ViewportResized,
+    ScrollOffsetChanged,
+    MouseMoved,
+    MouseClicked,
+    KeyPressed,
+    ElementFocused,
+    DomTextChanged,
+    DomNodeAdded,
+    DomNodeRemoved,
+    DomAttributeChanged
 } from "../src/frames.ts";
 import { convertDOMDocumentToVDocument, convertDOMElementToVElement } from "../src/dom-converter.ts";
 
@@ -62,48 +62,48 @@ export async function generateTestFrames(writer: Writer): Promise<void> {
     const timestamp = 1722550000000n; // Fixed timestamp to match frames-basic.bin
 
     // Frame 0: Timestamp
-    await new TimestampDataEnc(timestamp).encode(writer);
+    await new Timestamp(timestamp).encode(writer);
 
     // Frame 1: Keyframe with DOM
     const vdocument = convertDOMDocumentToVDocument(dom.window.document);
-    await new KeyframeDataEnc(vdocument).encode(writer);
+    await new Keyframe(vdocument, 1).encode(writer); // 1 asset follows
 
     // Frame 2: Asset (sample image data)
     const sampleImageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]); // PNG header
-    await new AssetDataEnc(123, "https://example.com/image.png", "image", "image/png", sampleImageData.buffer).encode(writer);
+    await new Asset(123, "https://example.com/image.png", "image/png", sampleImageData.buffer).encode(writer);
 
     // Frame 3: ViewportResized
-    await new ViewportResizedDataEnc(1920, 1080).encode(writer);
+    await new ViewportResized(1920, 1080).encode(writer);
 
     // Frame 4: ScrollOffsetChanged
-    await new ScrollOffsetChangedDataEnc(0, 240).encode(writer);
+    await new ScrollOffsetChanged(0, 240).encode(writer);
 
     // Frame 5: MouseMoved
-    await new MouseMovedDataEnc(150, 200).encode(writer);
+    await new MouseMoved(150, 200).encode(writer);
 
     // Frame 6: MouseClicked
-    await new MouseClickedDataEnc(150, 200).encode(writer);
+    await new MouseClicked(150, 200).encode(writer);
 
     // Frame 7: KeyPressed
-    await new KeyPressedDataEnc("Enter").encode(writer);
+    await new KeyPressed("Enter", false, false, false, false).encode(writer);
 
     // Frame 8: ElementFocused
-    await new ElementFocusedDataEnc(42n).encode(writer);
+    await new ElementFocused(42).encode(writer);
 
     // Frame 9: DomTextChanged with operations
     const textOperations = [
         { op: 'remove' as const, index: 0, length: 5 },  // Remove first 5 chars
         { op: 'insert' as const, index: 0, text: 'Updated' }  // Insert "Updated"
     ];
-    await new DomTextChangedDataEnc(42n, textOperations).encode(writer);
+    await new DomTextChanged(42, textOperations).encode(writer);
 
     // Frame 10: DomNodeAdded
     const velement = convertDOMElementToVElement(createSimpleNode());
-    await new DomNodeAddedDataEnc(1n, 0, velement).encode(writer);
+    await new DomNodeAdded(1, 0, velement, 0).encode(writer);
 
     // Frame 11: DomNodeRemoved
-    await new DomNodeRemovedDataEnc(43n).encode(writer);
+    await new DomNodeRemoved(43).encode(writer);
 
     // Frame 12: DomAttributeChanged
-    await new DomAttributeChangedDataEnc(42n, "class", "updated-class").encode(writer);
+    await new DomAttributeChanged(42, "class", "updated-class").encode(writer);
 }

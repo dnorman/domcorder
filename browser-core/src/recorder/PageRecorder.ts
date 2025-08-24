@@ -18,13 +18,13 @@ import {
 } from "../common/protocol";
 import {
   Writer,
-  KeyframeDataEnc,
-  AssetDataEnc,
-  DomNodeAddedDataEnc,
-  DomNodeRemovedDataEnc,
-  DomAttributeChangedDataEnc,
-  DomAttributeRemovedDataEnc,
-  DomTextChangedDataEnc,
+  Keyframe,
+  Asset,
+  DomNodeAdded,
+  DomNodeRemoved,
+  DomAttributeChanged,
+  DomAttributeRemoved,
+  DomTextChanged,
   type TextInsertOperationData,
   type TextRemoveOperationData
 } from "@domcorder/proto-ts";
@@ -125,7 +125,7 @@ export class PageRecorder {
             });
 
             // Additionally encode to server stream
-            await DomNodeAddedDataEnc.encode(this.writer, operation.parentId, operation.index, ev.node);
+            await DomNodeAdded.encode(this.writer, operation.parentId, operation.index, ev.node);
           },
           onAsset: async (asset: Asset) => {
             // Keep existing frameHandler call
@@ -140,7 +140,7 @@ export class PageRecorder {
             });
 
             // Additionally encode to server stream
-            await AssetDataEnc.encode(this.writer, asset.id, asset.url, asset.assetType, asset.mime, asset.buf);
+            await Asset.encode(this.writer, asset.id, asset.url, asset.assetType, asset.mime, asset.buf);
           },
           onInlineComplete: () => { }
         });
@@ -156,7 +156,7 @@ export class PageRecorder {
         });
 
         // Additionally encode to server stream
-        await DomNodeRemovedDataEnc.encode(this.writer, operation.nodeId);
+        await DomNodeRemoved.encode(this.writer, operation.nodeId);
         break;
 
       case "updateAttribute":
@@ -171,7 +171,7 @@ export class PageRecorder {
         });
 
         // Additionally encode to server stream
-        await DomAttributeChangedDataEnc.encode(this.writer, operation.nodeId, operation.name, operation.value);
+        await DomAttributeChanged.encode(this.writer, operation.nodeId, operation.name, operation.value);
         break;
 
       case "removeAttribute":
@@ -185,7 +185,7 @@ export class PageRecorder {
         });
 
         // Additionally encode to server stream
-        await DomAttributeRemovedDataEnc.encode(this.writer, operation.nodeId, operation.name);
+        await DomAttributeRemoved.encode(this.writer, operation.nodeId, operation.name);
         break;
 
       case "updateText":
@@ -218,7 +218,7 @@ export class PageRecorder {
         });
 
         // Additionally encode to server stream - use the rich operations data
-        await DomTextChangedDataEnc.encode(this.writer, operation.nodeId, operations);
+        await DomTextChanged.encode(this.writer, operation.nodeId, operations);
         break;
     }
   }
@@ -388,7 +388,7 @@ export class PageRecorder {
         });
 
         // Additionally encode to server stream
-        await KeyframeDataEnc.encode(this.writer, ev.document);
+        await Keyframe.encode(this.writer, ev.document);
 
         this.pendingAssets = ev.assetCount > 0;
       },
@@ -405,7 +405,7 @@ export class PageRecorder {
         });
 
         // Additionally encode to server stream
-        await AssetDataEnc.encode(this.writer, asset.id, asset.url, asset.assetType, asset.mime, asset.buf);
+        await Asset.encode(this.writer, asset.id, asset.url, asset.assetType, asset.mime, asset.buf);
       },
       onKeyFrameComplete: () => {
         this.pendingAssets = false;

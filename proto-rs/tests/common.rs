@@ -123,11 +123,11 @@ pub fn sample_frames() -> Vec<Frame> {
                     }),
                 ], // End of HtmlDocument children array
             }, // End of HtmlDocument
+            asset_count: 1, // 1 asset follows
         }),
         Frame::Asset(AssetData {
-            id: 123,
+            asset_id: 123,
             url: "https://example.com/image.png".to_string(),
-            asset_type: "image".to_string(),
             mime: Some("image/png".to_string()),
             buf: vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], // PNG header
         }),
@@ -142,9 +142,13 @@ pub fn sample_frames() -> Vec<Frame> {
         Frame::MouseMoved(MouseMovedData { x: 150, y: 200 }),
         Frame::MouseClicked(MouseClickedData { x: 150, y: 200 }),
         Frame::KeyPressed(KeyPressedData {
-            key: "Enter".to_string(),
+            code: "Enter".to_string(),
+            alt_key: false,
+            ctrl_key: false,
+            meta_key: false,
+            shift_key: false,
         }),
-        Frame::ElementFocused(ElementFocusedData { element_id: 42 }),
+        Frame::ElementFocused(ElementFocusedData { node_id: 42 }),
         Frame::DomTextChanged(DomTextChangedData {
             node_id: 42,
             operations: vec![
@@ -168,6 +172,7 @@ pub fn sample_frames() -> Vec<Frame> {
                     content: "New content".to_string(),
                 })],
             }),
+            asset_count: 0,
         }),
         Frame::DomNodeRemoved(DomNodeRemovedData { node_id: 43 }),
         Frame::DomAttributeChanged(DomAttributeChangedData {

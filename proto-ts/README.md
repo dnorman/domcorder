@@ -9,16 +9,16 @@ This package provides TypeScript classes and utilities for encoding DOM structur
 ## Usage
 
 ```typescript
-import { Writer, DomNode, TimestampDataEnc, KeyframeDataEnc } from '@domcorder/proto-ts';
+import { Writer, DomNode, Timestamp, Keyframe } from "@domcorder/proto-ts";
 
 // Create a writer
 const w = new Writer();
 
 // Encode a timestamp frame
-TimestampDataEnc.encode(w, Date.now());
+new Timestamp(Date.now()).encode(w);
 
 // Encode a keyframe with DOM structure
-KeyframeDataEnc.encode(w, document);
+new Keyframe(document).encode(w);
 
 // Get the binary data
 const binaryData = w.finish();

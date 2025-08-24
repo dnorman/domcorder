@@ -2,14 +2,14 @@
 import { describe, test, expect } from "bun:test";
 import { Writer } from "../src/writer.ts";
 import { Reader } from "../src/reader.ts";
-import { TimestampDataEnc, ViewportResizedDataEnc, KeyPressedDataEnc, FrameType, Frame } from "../src/frames.ts";
+import { Timestamp, ViewportResized, KeyPressed, FrameType, Frame } from "../src/frames.ts";
 import { streamObserve, frameStreamObserve } from "./stream-observer.ts";
 
 describe("Reader Basic Functionality", () => {
     test("should read simple timestamp frame", async () => {
         // Create a timestamp frame with Writer
         const [writer, writerStream] = Writer.create();
-        await new TimestampDataEnc(1234567890n).encode(writer);
+        await new Timestamp(1234567890n).encode(writer);
         writer.close();
 
         // Consume writer output
@@ -41,16 +41,16 @@ describe("Reader Basic Functionality", () => {
 
         expect(frames).toHaveLength(1);
         const frame = frames[0].data;
-        expect(frame).toBeInstanceOf(TimestampDataEnc);
-        expect((frame as TimestampDataEnc).timestamp).toBe(1234567890n);
+        expect(frame).toBeInstanceOf(Timestamp);
+        expect((frame as Timestamp).timestamp).toBe(1234567890n);
     });
 
     test("should read multiple simple frames", async () => {
         // Create multiple frames with Writer
         const [writer, writerStream] = Writer.create();
-        await new TimestampDataEnc(1000n).encode(writer);
-        await new ViewportResizedDataEnc(1920, 1080).encode(writer);
-        await new KeyPressedDataEnc("Enter").encode(writer);
+        await new Timestamp(1000n).encode(writer);
+        await new ViewportResized(1920, 1080).encode(writer);
+        await new KeyPressed("Enter").encode(writer);
         writer.close();
 
         // Get writer output
@@ -80,17 +80,17 @@ describe("Reader Basic Functionality", () => {
         expect(frames).toHaveLength(3);
 
         // Check timestamp frame
-        expect(frames[0].data).toBeInstanceOf(TimestampDataEnc);
-        expect((frames[0].data as TimestampDataEnc).timestamp).toBe(1000n);
+        expect(frames[0].data).toBeInstanceOf(Timestamp);
+        expect((frames[0].data as Timestamp).timestamp).toBe(1000n);
 
         // Check viewport frame
-        expect(frames[1].data).toBeInstanceOf(ViewportResizedDataEnc);
-        expect((frames[1].data as ViewportResizedDataEnc).width).toBe(1920);
-        expect((frames[1].data as ViewportResizedDataEnc).height).toBe(1080);
+        expect(frames[1].data).toBeInstanceOf(ViewportResized);
+        expect((frames[1].data as ViewportResized).width).toBe(1920);
+        expect((frames[1].data as ViewportResized).height).toBe(1080);
 
         // Check key pressed frame
-        expect(frames[2].data).toBeInstanceOf(KeyPressedDataEnc);
-        expect((frames[2].data as KeyPressedDataEnc).key).toBe("Enter");
+        expect(frames[2].data).toBeInstanceOf(KeyPressed);
+        expect((frames[2].data as KeyPressed).code).toBe("Enter");
     });
 
     test("should handle file mode with header", async () => {
@@ -99,7 +99,7 @@ describe("Reader Basic Functionality", () => {
         const testTimestamp = BigInt(1691234567890);
 
         writer.writeHeader(testTimestamp);
-        await new TimestampDataEnc(5000n).encode(writer);
+        await new Timestamp(5000n).encode(writer);
         writer.close();
 
         // Get writer output
@@ -135,7 +135,7 @@ describe("Reader Basic Functionality", () => {
         expect(header!.createdAt).toBe(testTimestamp);
 
         expect(frames).toHaveLength(1);
-        expect(frames[0].data).toBeInstanceOf(TimestampDataEnc);
-        expect((frames[0].data as TimestampDataEnc).timestamp).toBe(5000n);
+        expect(frames[0].data).toBeInstanceOf(Timestamp);
+        expect((frames[0].data as Timestamp).timestamp).toBe(5000n);
     });
 });

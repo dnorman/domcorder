@@ -19,8 +19,16 @@ pub enum Frame {
     DomAttributeRemoved(DomAttributeRemovedData) = 12,
     DomTextChanged(DomTextChangedData) = 13,
     DomNodeResized(DomNodeResizedData) = 14,
-    StyleSheetChanged(StyleSheetChangedData) = 15,
+    StyleSheetChanged = 15, // REMOVED - leaving gap for compatibility
     Asset(AssetData) = 16,
+
+    // New frame types
+    AdoptedStyleSheetsChanged(AdoptedStyleSheetsChangedData) = 17,
+    NewAdoptedStyleSheet(NewAdoptedStyleSheetData) = 18,
+    ElementScrolled(ElementScrolledData) = 19,
+    ElementBlurred(ElementBlurredData) = 20,
+    WindowFocused(WindowFocusedData) = 21,
+    WindowBlurred(WindowBlurredData) = 22,
 }
 
 /// Element node representation
@@ -95,6 +103,7 @@ pub struct TimestampData {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeyframeData {
     pub document: HtmlDocument, // Contains the full document structure
+    pub asset_count: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -105,7 +114,9 @@ pub struct ViewportResizedData {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScrollOffsetChangedData {
+    #[serde(rename = "scrollXOffset")]
     pub scroll_x_offset: u32,
+    #[serde(rename = "scrollYOffset")]
     pub scroll_y_offset: u32,
 }
 
@@ -123,44 +134,49 @@ pub struct MouseClickedData {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeyPressedData {
-    pub key: String,
+    pub code: String,
+    pub alt_key: bool,
+    pub ctrl_key: bool,
+    pub meta_key: bool,
+    pub shift_key: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ElementFocusedData {
-    pub element_id: u64,
+    pub node_id: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextSelectionChangedData {
-    pub selection_start_node_id: u64,
+    pub selection_start_node_id: u32,
     pub selection_start_offset: u32,
-    pub selection_end_node_id: u64,
+    pub selection_end_node_id: u32,
     pub selection_end_offset: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DomNodeAddedData {
-    pub parent_node_id: u64,
+    pub parent_node_id: u32,
     pub index: u32,
     pub node: DomNode,
+    pub asset_count: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DomNodeRemovedData {
-    pub node_id: u64,
+    pub node_id: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DomAttributeChangedData {
-    pub node_id: u64,
+    pub node_id: u32,
     pub attribute_name: String,
     pub attribute_value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DomAttributeRemovedData {
-    pub node_id: u64,
+    pub node_id: u32,
     pub attribute_name: String,
 }
 
@@ -185,27 +201,57 @@ pub enum TextOperationData {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DomTextChangedData {
-    pub node_id: u64,
+    pub node_id: u32,
     pub operations: Vec<TextOperationData>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DomNodeResizedData {
-    pub node_id: u64,
+    pub node_id: u32,
     pub width: u32,
     pub height: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssetData {
-    pub id: u32,
+    pub asset_id: u32,
     pub url: String,
-    pub asset_type: String,
     pub mime: Option<String>,
     pub buf: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StyleSheetChangedData {
-    // TODO: Add fields when defined
+pub struct AdoptedStyleSheetsChangedData {
+    pub style_sheet_ids: Vec<u32>,
+    pub added_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewAdoptedStyleSheetData {
+    // TODO: Add VStyleSheet type when available
+    pub asset_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ElementScrolledData {
+    pub node_id: u32,
+    #[serde(rename = "scrollXOffset")]
+    pub scroll_x_offset: u32,
+    #[serde(rename = "scrollYOffset")]
+    pub scroll_y_offset: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ElementBlurredData {
+    pub node_id: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WindowFocusedData {
+    // Empty struct
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WindowBlurredData {
+    // Empty struct
 }
