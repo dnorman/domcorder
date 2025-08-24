@@ -34,6 +34,11 @@ export enum FrameType {
     ElementBlurred = 20,
     WindowFocused = 21,
     WindowBlurred = 22,
+
+    // Additional stylesheet frame types
+    StyleSheetRuleInserted = 23,
+    StyleSheetRuleDeleted = 24,
+    StyleSheetReplaced = 25,
 }
 
 // BufferReader interface for decoding
@@ -663,6 +668,83 @@ export class WindowBlurred extends Frame {
     }
 }
 
+export class StyleSheetRuleInserted extends Frame {
+    constructor(
+        public styleSheetId: number,
+        public ruleIndex: number,
+        public content: string,
+        public assetCount: number
+    ) {
+        super();
+    }
+
+    static decode(reader: BufferReader): StyleSheetRuleInserted {
+        if (reader.readU32() !== FrameType.StyleSheetRuleInserted) throw new Error(`Expected StyleSheetRuleInserted frame type`);
+        const styleSheetId = reader.readU32();
+        const ruleIndex = reader.readU32();
+        const content = reader.readString();
+        const assetCount = reader.readU32();
+        return new StyleSheetRuleInserted(styleSheetId, ruleIndex, content, assetCount);
+    }
+
+    async encode(w: Writer): Promise<void> {
+        w.u32(FrameType.StyleSheetRuleInserted);
+        w.u32(this.styleSheetId);
+        w.u32(this.ruleIndex);
+        w.strUtf8(this.content);
+        w.u32(this.assetCount);
+        await w.endFrame();
+    }
+}
+
+export class StyleSheetRuleDeleted extends Frame {
+    constructor(
+        public styleSheetId: number,
+        public ruleIndex: number
+    ) {
+        super();
+    }
+
+    static decode(reader: BufferReader): StyleSheetRuleDeleted {
+        if (reader.readU32() !== FrameType.StyleSheetRuleDeleted) throw new Error(`Expected StyleSheetRuleDeleted frame type`);
+        const styleSheetId = reader.readU32();
+        const ruleIndex = reader.readU32();
+        return new StyleSheetRuleDeleted(styleSheetId, ruleIndex);
+    }
+
+    async encode(w: Writer): Promise<void> {
+        w.u32(FrameType.StyleSheetRuleDeleted);
+        w.u32(this.styleSheetId);
+        w.u32(this.ruleIndex);
+        await w.endFrame();
+    }
+}
+
+export class StyleSheetReplaced extends Frame {
+    constructor(
+        public styleSheetId: number,
+        public content: string,
+        public assetCount: number
+    ) {
+        super();
+    }
+
+    static decode(reader: BufferReader): StyleSheetReplaced {
+        if (reader.readU32() !== FrameType.StyleSheetReplaced) throw new Error(`Expected StyleSheetReplaced frame type`);
+        const styleSheetId = reader.readU32();
+        const content = reader.readString();
+        const assetCount = reader.readU32();
+        return new StyleSheetReplaced(styleSheetId, content, assetCount);
+    }
+
+    async encode(w: Writer): Promise<void> {
+        w.u32(FrameType.StyleSheetReplaced);
+        w.u32(this.styleSheetId);
+        w.u32(this.assetCount);
+        await w.endFrame();
+    }
+}
+
 DECODERS[FrameType.Timestamp] = Timestamp.decode;
 DECODERS[FrameType.Keyframe] = Keyframe.decode;
 DECODERS[FrameType.Asset] = Asset.decode;
@@ -685,3 +767,6 @@ DECODERS[FrameType.ElementScrolled] = ElementScrolled.decode;
 DECODERS[FrameType.ElementBlurred] = ElementBlurred.decode;
 DECODERS[FrameType.WindowFocused] = WindowFocused.decode;
 DECODERS[FrameType.WindowBlurred] = WindowBlurred.decode;
+DECODERS[FrameType.StyleSheetRuleInserted] = StyleSheetRuleInserted.decode;
+DECODERS[FrameType.StyleSheetRuleDeleted] = StyleSheetRuleDeleted.decode;
+DECODERS[FrameType.StyleSheetReplaced] = StyleSheetReplaced.decode;
