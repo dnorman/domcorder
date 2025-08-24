@@ -1,10 +1,9 @@
 import { Writer } from "../src/writer.ts";
 import { compareBinaryFile } from './util.js';
-import { setupDOMGlobals, generateTestFrames } from "./sample-frames.ts";
+import { generateTestFrames } from "./sample-frames.ts";
 import { streamObserve } from "./stream-observer.ts";
 
 // Set up DOM polyfills
-setupDOMGlobals();
 
 // Generate the standard test frame sequence
 async function generateFrameData(): Promise<Uint8Array> {

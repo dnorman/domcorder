@@ -25,6 +25,7 @@ export class Reader implements BufferReader {
     private header: DCRRHeader | null = null;
     private expectHeader: boolean;
     private headerParsed: boolean = false;
+    private frameNumber: number = 0;
     private static dec = new TextDecoder();
 
     private constructor(inputStream: ReadableStream<Uint8Array>, expectHeader: boolean) {
@@ -84,6 +85,7 @@ export class Reader implements BufferReader {
                 await this.processBuffer();
             }
         } catch (error) {
+            console.error("Reader error:", error);
             this.controller?.error(error);
         } finally {
             reader.releaseLock();
@@ -165,6 +167,8 @@ export class Reader implements BufferReader {
         const startOffset = this.bufferOffset;
 
         try {
+            this.frameNumber++;
+
             // Parse frame using Frame.decode (which reads the frame type internally)
             const frame = Frame.decode(this);
 
@@ -182,11 +186,13 @@ export class Reader implements BufferReader {
         } catch (error) {
             // Restore offset and re-throw if it's a real error
             this.bufferOffset = startOffset;
+            this.frameNumber--; // Decrement since we failed
 
             if (error instanceof Error && error.message.startsWith("Not enough data")) {
                 return false; // Not enough data, wait for more
             }
 
+            console.error(`❌ Reader: Frame ${this.frameNumber + 1} decode failed:`, error);
             throw error; // Real parsing error
         }
     }
@@ -212,7 +218,7 @@ export class Reader implements BufferReader {
         }
 
         const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.bufferOffset, 4);
-        const value = view.getUint32(0, false); // big-endian
+        const value = view.getUint32(0, false); // big-endian (bincode configured)
         this.bufferOffset += 4;
         return value;
     }
@@ -223,7 +229,7 @@ export class Reader implements BufferReader {
         }
 
         const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.bufferOffset, 8);
-        const value = view.getBigUint64(0, false); // big-endian
+        const value = view.getBigUint64(0, false); // big-endian (bincode configured)
         this.bufferOffset += 8;
         return value;
     }
@@ -259,7 +265,7 @@ export class Reader implements BufferReader {
         }
 
         const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.bufferOffset, 4);
-        const value = view.getUint32(0, false); // big-endian
+        const value = view.getUint32(0, false); // big-endian (bincode configured)
         // Note: we don't increment bufferOffset since this is a peek
         return value;
     }

@@ -9,14 +9,14 @@ export class NodeIdBiMap {
     if (!node) {
       return undefined;
     }
-    
+
     return (node as any)[NodeIdBiMap.NODE_ID_PROPERTY];
   }
 
   public static removeNodeId(node: Node) {
     delete (node as any)[NodeIdBiMap.NODE_ID_PROPERTY];
   }
-  
+
   private readonly idToNodeMap;
   private maxNodeId: number;
 
@@ -30,7 +30,7 @@ export class NodeIdBiMap {
     if (id === undefined) {
       throw new Error("Can not adopt node without an ID");
     }
-    
+
     if (id > this.maxNodeId) {
       this.maxNodeId = id;
     }
@@ -58,7 +58,7 @@ export class NodeIdBiMap {
     if (id === undefined) {
       throw new Error("Can not mirror node without an ID");
     }
-    
+
     NodeIdBiMap.setNodeId(targetNode, id);
     this.idToNodeMap.set(id, targetNode);
 
@@ -87,7 +87,7 @@ export class NodeIdBiMap {
     }
 
     NodeIdBiMap.removeNodeId(node);
-    
+
     for (const child of node.childNodes) {
       this.removeNodesInSubtree(child);
     }

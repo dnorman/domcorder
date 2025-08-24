@@ -63,7 +63,10 @@ export abstract class Frame {
     static decode(reader: BufferReader): Frame | null {
         const t = reader.peekU32(); // Peek at frame type without consuming it
         const dec = DECODERS[t]; // direct indexed lookup
-        return dec ? dec(reader) : null; // Let concrete decoder exceptions bubble up
+        if (!dec) {
+            return null;
+        }
+        return dec(reader); // Let concrete decoder exceptions bubble up
     }
 }
 
@@ -135,8 +138,8 @@ export class Asset extends Frame {
         const asset_id = reader.readU32();
         const url = reader.readString();
 
-        // Read optional mime type (this should be a byte, but we'll need to handle it properly)
-        const hasFlag = reader.readU32(); // TODO: Should be readByte() when available
+        // Read optional mime type - bincode format: 1 byte for None/Some
+        const hasFlag = reader.readByte();
         const mime = hasFlag === 1 ? reader.readString() : undefined;
 
         // Read buffer

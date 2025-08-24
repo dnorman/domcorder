@@ -34,6 +34,7 @@ pub enum Frame {
 /// Element node representation
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ElementNode {
+    pub id: u32,
     pub tag_name: String,
     pub attributes: Vec<(String, String)>, // (name, value) pairs
     pub children: Vec<DomNode>,
@@ -42,18 +43,21 @@ pub struct ElementNode {
 /// Text node representation
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextNode {
+    pub id: u32,
     pub content: String,
 }
 
 /// CDATA section representation
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CDataNode {
+    pub id: u32,
     pub content: String,
 }
 
 /// Comment node representation
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommentNode {
+    pub id: u32,
     pub content: String,
 }
 
@@ -66,6 +70,7 @@ pub struct DocumentNode {
 /// DocType node representation
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocTypeNode {
+    pub id: u32,
     pub name: String,
     pub public_id: Option<String>,
     pub system_id: Option<String>,
@@ -73,6 +78,7 @@ pub struct DocTypeNode {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProcessingInstructionNode {
+    pub id: u32,
     pub target: String,
     pub data: String,
 }
@@ -91,6 +97,7 @@ pub enum DomNode {
 /// HTML Document representation - matches TypeScript VDocument
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HtmlDocument {
+    pub id: u32,
     pub children: Vec<DomNode>, // Array of children (typically DOCTYPE + HTML element)
 }
 

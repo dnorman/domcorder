@@ -1,4 +1,4 @@
-import { 
+import {
   VNode,
   VCDATASection,
   VComment,
@@ -253,7 +253,7 @@ export function rewriteStyleSheetsToPendingIds(stylesheet: VStyleSheet, baseURI:
     return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
   });
   return { ...stylesheet, text } as VStyleSheet;
-  
+
 }
 
 // Rewrite using provisional ids (before fetch)

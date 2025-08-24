@@ -1,4 +1,4 @@
-import type { KeyPressedData } from '../common/protocol';
+import type { KeyPressed } from '@domcorder/proto-ts';
 
 /**
  * Configuration options for the TypingSimulator
@@ -147,7 +147,7 @@ export class TypingSimulator {
   /**
    * Simulate a key press by highlighting the corresponding key
    */
-  public simulateKeyPress(keyData: KeyPressedData): void {
+  public simulateKeyPress(keyData: KeyPressed): void {
     // Show keyboard if hidden
     if (!this.isVisible) {
       this.show();
@@ -180,7 +180,7 @@ export class TypingSimulator {
    */
   public show(): void {
     if (!this.keyboardElement) return;
-    
+
     this.isVisible = true;
     this.keyboardElement.style.display = 'block';
     this.keyboardElement.style.opacity = '1';
@@ -192,10 +192,10 @@ export class TypingSimulator {
    */
   public hide(): void {
     if (!this.keyboardElement) return;
-    
+
     this.isVisible = false;
     this.keyboardElement.style.opacity = '0';
-    
+
     // Hide completely after fade animation
     setTimeout(() => {
       if (this.keyboardElement && !this.isVisible) {
@@ -212,12 +212,12 @@ export class TypingSimulator {
       clearTimeout(this.hideTimeout);
       this.hideTimeout = null;
     }
-    
+
     if (this.keyboardElement) {
       this.keyboardElement.remove();
       this.keyboardElement = null;
     }
-    
+
     this.keyElements.clear();
   }
 
@@ -228,17 +228,17 @@ export class TypingSimulator {
     // Create main keyboard container
     this.keyboardElement = document.createElement('div');
     this.keyboardElement.className = 'typing-simulator-keyboard keyboard-simulator';
-    
+
     // Apply base styles
     this.applyKeyboardStyles();
-    
+
     // Create key elements
     this.createKeys();
-    
+
     // Initially hidden
     this.keyboardElement.style.display = 'none';
     this.keyboardElement.style.opacity = '0';
-    
+
     // Add to parent container
     this.parentContainer.appendChild(this.keyboardElement);
   }
@@ -252,7 +252,7 @@ export class TypingSimulator {
     // Calculate total keyboard width based on actual bottom row (widest row)
     const baseWidth = 32;
     const gap = 2;
-    
+
     // Bottom row actual calculation:
     // fn(40) + ⌃(40) + ⌥(40) + ⌘(40) + Space(192) + ⌘(40) + ⌥(40) + ←(32) + ↑↓(16) + →(32) = 512px
     // + 9 gaps × 2px = 18px
@@ -261,7 +261,7 @@ export class TypingSimulator {
     const padding = 10;
 
     const styles = {
-      position: 'absolute', 
+      position: 'absolute',
       width: `${keyboardWidth + (padding * 2)}px`, // Include padding in total width
       height: 'auto',
       backgroundColor: '#2a2a2a',
@@ -295,7 +295,7 @@ export class TypingSimulator {
     const totalUnits = 15;
     const totalGaps = 14;
     const rowWidth = (totalUnits * baseWidth) + (totalGaps * gap);
-    
+
     for (let i = 0; i < 6; i++) {
       const row = document.createElement('div');
       row.className = `keyboard-row-${i}`;
@@ -410,15 +410,15 @@ export class TypingSimulator {
     const key = document.createElement('div');
     key.className = 'keyboard-key';
     key.textContent = keyDef.label;
-    
+
     // Use flex-basis instead of width for better flexbox behavior
     const baseWidth = 32; // Smaller base width for compact layout
     const isFunction = keyDef.row === 0; // Function keys are smaller
     const isArrow = !!keyDef.arrowType; // Arrow keys are smaller
-    
+
     let keyWidth: number;
     let keyHeight: string;
-    
+
     if (isFunction) {
       keyWidth = (keyDef.width || 1) * baseWidth;
       keyHeight = '28px';
@@ -434,7 +434,7 @@ export class TypingSimulator {
       keyWidth = (keyDef.width || 1) * baseWidth;
       keyHeight = '32px';
     }
-    
+
     const styles = {
       flexBasis: `${keyWidth}px`,
       flexShrink: '0',
@@ -456,7 +456,7 @@ export class TypingSimulator {
     };
 
     Object.assign(key.style, styles);
-    
+
     return key;
   }
 
@@ -469,7 +469,7 @@ export class TypingSimulator {
 
     // Apply highlight
     keyElement.style.backgroundColor = '#7a7a7a';
-    
+
     // Remove highlight after duration
     setTimeout(() => {
       keyElement.style.backgroundColor = '#4a4a4a';
@@ -483,7 +483,7 @@ export class TypingSimulator {
     if (this.hideTimeout) {
       clearTimeout(this.hideTimeout);
     }
-    
+
     this.hideTimeout = window.setTimeout(() => {
       this.hide();
     }, this.config.visibleTimeout);

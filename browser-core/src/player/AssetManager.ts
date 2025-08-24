@@ -1,4 +1,4 @@
-import type { AssetData } from "../common";
+import type { Asset } from "@domcorder/proto-ts";
 
 interface AssetEntry {
   blob: Blob;
@@ -60,16 +60,16 @@ export class AssetManager {
   /**
    * Adds an asset to the manager, creating a blob and object URL
    */
-  public addAsset(asset: AssetData): void {
-    if (this.assets.has(asset.id)) {
+  public addAsset(asset: Asset): void {
+    if (this.assets.has(asset.asset_id)) {
       // Asset already exists, don't recreate
       return;
     }
 
     const blob = new Blob([asset.buf], { type: asset.mime || 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
-    
-    this.assets.set(asset.id, {
+
+    this.assets.set(asset.asset_id, {
       blob,
       url,
       referenceCount: 0,
@@ -266,13 +266,13 @@ export class AssetManager {
    */
   public cleanupUnusedAssets(): void {
     const assetsToRemove: number[] = [];
-    
+
     for (const [assetId, asset] of this.assets) {
       if (asset.referenceCount <= 0) {
         assetsToRemove.push(assetId);
       }
     }
-    
+
     // Remove the unused assets
     assetsToRemove.forEach(assetId => {
       this.releaseAssetById(assetId);
@@ -285,13 +285,13 @@ export class AssetManager {
   public dispose(): void {
     // Disconnect the mutation observer
     this.mutationObserver.disconnect();
-    
+
     // Clean up all assets
     for (const [_, asset] of this.assets) {
       URL.revokeObjectURL(asset.url);
     }
     this.assets.clear();
-    
+
     // Clear the WeakMaps (though they will be garbage collected automatically)
     this.elementToAssets = new WeakMap();
     this.adoptedStyleSheetToAssets = new WeakMap();

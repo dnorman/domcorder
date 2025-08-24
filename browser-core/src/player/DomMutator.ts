@@ -6,7 +6,16 @@ export class DomMutator {
   private nodeMap: NodeIdBiMap;
 
   constructor(nodeMap: NodeIdBiMap) {
-      this.nodeMap = nodeMap;
+    this.nodeMap = nodeMap;
+  }
+
+  getElementByNodeId(nodeId: number): Element | null {
+    const node = this.nodeMap.getNodeById(nodeId);
+    return (node && node.nodeType === Node.ELEMENT_NODE) ? node as Element : null;
+  }
+
+  getNodeById(nodeId: number): Node | null {
+    return this.nodeMap.getNodeById(nodeId) || null;
   }
 
   updateElementScrollPosition(nodeId: number, scrollXOffset: number, scrollYOffset: number) {
@@ -40,7 +49,7 @@ export class DomMutator {
             this.nodeMap.removeNodesInSubtree(oldChild);
             this.nodeMap.adoptNodesFromSubTree(newChild);
           }
-          
+
           break;
         }
         case 'updateAttribute': {

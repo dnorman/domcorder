@@ -1,4 +1,5 @@
-import type { Frame } from "../common";
+import type { Frame } from "@domcorder/proto-ts";
+import { Reader } from "@domcorder/proto-ts";
 import { Deferred } from "../common/Deferred";
 import { PagePlayer } from "./PagePlayer";
 
@@ -10,27 +11,48 @@ export class PagePlayerComponent {
   private readonly iframe: HTMLIFrameElement;
 
   private readonly frameQueue: Frame[] = [];
+  private chunkController: ReadableStreamDefaultController<Uint8Array> | null = null;
+  private reader: Reader | null = null;
 
   private readonly readyPromise: Deferred<void>;
 
   constructor(container: HTMLElement) {
     this.readyPromise = new Deferred<void>();
-    
+
     const shadow = container.attachShadow({ mode: 'closed' });
-    
+
     this.overlayElement = container.ownerDocument.createElement("div");
     this.overlayElement.className = "iframe-overlay";
     this.typingSimulatorElement = container.ownerDocument.createElement("div");
     this.typingSimulatorElement.className = "typing-simulator-container";
     this.iframe = container.ownerDocument.createElement("iframe");
     this.iframe.className = "iframe";
-    
+
     // Initialize iframe with proper DOCTYPE to ensure Standards Mode
     this.iframe.srcdoc = '<!DOCTYPE html><html><head></head><body></body></html>';
-    
+
     shadow.appendChild(this.iframe);
     shadow.appendChild(this.overlayElement);
     shadow.appendChild(this.typingSimulatorElement);
+
+    // Set up Reader for binary chunks
+    const chunkStream = new ReadableStream<Uint8Array>({
+      start: (controller) => {
+        console.log("ChunkStream controller started");
+        this.chunkController = controller;
+      },
+      cancel: (reason) => {
+        console.log("ChunkStream cancelled:", reason);
+      }
+    });
+
+    console.log("Creating Reader...");
+    const [reader, frameStream] = Reader.create(chunkStream, false); // false = no header expected
+    this.reader = reader;
+    console.log("Reader created, starting frame processing...");
+
+    // Process frames from the reader
+    void this.processFrameStream(frameStream);
 
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(`
@@ -72,7 +94,7 @@ export class PagePlayerComponent {
     `);
 
     shadow.adoptedStyleSheets = [sheet];
-    
+
     this.player = null;
 
     // We have to wait for the iframe to load before we can create the player
@@ -91,11 +113,40 @@ export class PagePlayerComponent {
     });
   }
 
-  public handleFrame(frame: Frame): void {
-    if (this.player) {
-      this.player.handleFrame(frame);
+  private async processFrameStream(frameStream: ReadableStream<Frame>): Promise<void> {
+    console.log("processFrameStream started");
+    const reader = frameStream.getReader();
+    console.log("Got frameStream reader");
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          console.log("Frame stream ended");
+          break;
+        }
+
+        // Handle the decoded frame
+        console.log("Received frame:", value);
+        if (this.player) {
+          this.player.handleFrame(value);
+        } else {
+          this.frameQueue.push(value);
+        }
+      }
+    } catch (error) {
+      console.error("Error processing frame stream:", error);
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  public handleChunk(chunk: Uint8Array): void {
+    if (this.chunkController) {
+      this.chunkController.enqueue(chunk);
     } else {
-      this.frameQueue.push(frame);
+      console.log("ERROR: chunkController is null!");
     }
   }
 

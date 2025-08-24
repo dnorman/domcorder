@@ -2,13 +2,10 @@
 import { describe, test, expect } from "bun:test";
 import { Writer } from "../src/writer.ts";
 import { Timestamp, Keyframe, ViewportResized } from "../src/frames.ts";
-import { setupDOMGlobals } from "./sample-frames.ts";
-import { streamObserve } from "./stream-observer.ts";
-import { JSDOM } from "jsdom";
-import { convertDOMDocumentToVDocument } from "../src/dom-converter.ts";
 
-// Set up DOM polyfills
-setupDOMGlobals();
+import { streamObserve } from "./stream-observer.ts";
+import { testVDocument } from "./sample-frames.ts";
+
 
 describe("Async Frame Encoders", () => {
     test("should encode simple frames with endFrame", async () => {
@@ -27,20 +24,11 @@ describe("Async Frame Encoders", () => {
     });
 
     test("should encode keyframe with regular encode", async () => {
-        const dom = new JSDOM(`
-            <!DOCTYPE html>
-            <html>
-            <head><title>Test</title></head>
-            <body><div>Hello</div></body>
-            </html>
-        `);
-
         const [writer, stream] = Writer.create();
         const check = streamObserve(stream);
 
         // Encode keyframe (regular version)
-        const vdocument = convertDOMDocumentToVDocument(dom.window.document);
-        await new Keyframe(vdocument).encode(writer);
+        await new Keyframe(testVDocument, 0).encode(writer);
 
         writer.close();
 
@@ -51,24 +39,11 @@ describe("Async Frame Encoders", () => {
     });
 
     test("should encode keyframe with streaming version", async () => {
-        const dom = new JSDOM(`
-            <!DOCTYPE html>
-            <html>
-            <head><title>Test</title></head>
-            <body>
-                <div>Hello</div>
-                <div>World</div>
-                <div>More content</div>
-            </body>
-            </html>
-        `);
-
         const [writer, stream] = Writer.create(64); // Small chunks to force streaming
         const check = streamObserve(stream);
 
         // Encode keyframe (streaming version)
-        const vdocument = convertDOMDocumentToVDocument(dom.window.document);
-        await new Keyframe(vdocument).encodeStreaming(writer);
+        await new Keyframe(testVDocument, 0).encodeStreaming(writer);
 
         writer.close();
 

@@ -8,8 +8,9 @@ export class Writer {
     private bufLength: number = 0;
     private debug: boolean = false;
     private chunkSize: number;
-    private controller: ReadableStreamDefaultController<Uint8Array>;
+    private controller!: ReadableStreamDefaultController<Uint8Array>;
     private stream: ReadableStream<Uint8Array>;
+    private frameNumber: number = 0;
 
     private static enc = new TextEncoder();
 
@@ -66,6 +67,7 @@ export class Writer {
     u32(n: number): void {
         if (this.debug) console.log(`u32: ${n} (0x${n.toString(16)})`);
         // caller ensures 0 <= n < 2**32
+        // big-endian (bincode configured)
         this.byte(n >>> 24); this.byte(n >>> 16); this.byte(n >>> 8); this.byte(n);
     }
 
@@ -176,6 +178,7 @@ export class Writer {
      * Always flushes buffer and yields control - this is when chunks become visible to stream consumers
      */
     async endFrame(): Promise<void> {
+        this.frameNumber++;
         this.flush();
         // Yield control to allow stream processing
         await new Promise<void>((resolve) => setTimeout(resolve, 0));

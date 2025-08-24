@@ -50,7 +50,7 @@ describe("Reader Basic Functionality", () => {
         const [writer, writerStream] = Writer.create();
         await new Timestamp(1000n).encode(writer);
         await new ViewportResized(1920, 1080).encode(writer);
-        await new KeyPressed("Enter").encode(writer);
+        await new KeyPressed("Enter", false, false, false, false).encode(writer);
         writer.close();
 
         // Get writer output

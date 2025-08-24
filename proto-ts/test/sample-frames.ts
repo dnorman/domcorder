@@ -1,5 +1,4 @@
 // Shared frame generation for tests
-import { JSDOM } from "jsdom";
 import { Writer } from "../src/writer.ts";
 import {
     Timestamp,
@@ -11,51 +10,71 @@ import {
     MouseClicked,
     KeyPressed,
     ElementFocused,
+    TextSelectionChanged,
     DomTextChanged,
     DomNodeAdded,
     DomNodeRemoved,
-    DomAttributeChanged
+    DomAttributeChanged,
+    DomAttributeRemoved,
+    DomNodeResized,
+    AdoptedStyleSheetsChanged,
+    NewAdoptedStyleSheet,
+    ElementScrolled,
+    ElementBlurred,
+    WindowFocused,
+    WindowBlurred
 } from "../src/frames.ts";
-import { convertDOMDocumentToVDocument, convertDOMElementToVElement } from "../src/dom-converter.ts";
+import { VComment, VDocument, VDocumentType, VElement, VTextNode } from "../src/vdom.ts";
 
-// Set up JSDOM for DOM polyfills  
-const dom = new JSDOM(`
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>Test Document</title>
-</head>
-<body class="app">
-    <div id="root">
-        <h1>Hello World</h1>
-        <p>This is a test paragraph.</p>
-        <button onclick="alert('clicked')">Click me</button>
-    </div>
-</body>
-</html>
-`);
-
-// Export DOM globals for tests
-export function setupDOMGlobals() {
-    globalThis.Document = dom.window.Document;
-    globalThis.Element = dom.window.Element;
-    globalThis.Text = dom.window.Text;
-    globalThis.Comment = dom.window.Comment;
-    globalThis.DocumentType = dom.window.DocumentType;
-    globalThis.CDATASection = dom.window.CDATASection;
-    globalThis.Node = dom.window.Node;
-}
-
+// Hardcoded VDocument structure for tests
+export const testVDocument = new VDocument(0, [], [
+    new VDocumentType(1, "html", undefined, undefined),
+    new VElement(2, "html", undefined, {}, [
+        new VElement(3, "head", undefined, {}, [
+            new VTextNode(4, "\n    "),
+            new VElement(5, "meta", undefined, { "charset": "utf-8" }, []),
+            new VTextNode(6, "\n    "),
+            new VElement(7, "title", undefined, {}, [
+                new VTextNode(8, "Test Document")
+            ]),
+            new VTextNode(9, "\n    "),
+            new VComment(10, "?xml-stylesheet type=\"text/css\" href=\"style.css\"?"),
+            new VTextNode(11, "\n")
+        ]),
+        new VTextNode(12, "\n"),
+        new VElement(13, "body", undefined, {}, [
+            new VTextNode(14, "\n    "),
+            new VComment(15, " This is a comment "),
+            new VTextNode(16, "\n    "),
+            new VElement(17, "div", undefined, { "id": "root" }, [
+                new VTextNode(18, "\n        "),
+                new VElement(19, "h1", undefined, {}, [
+                    new VTextNode(20, "Hello World")
+                ]),
+                new VTextNode(21, "\n        "),
+                new VElement(22, "p", undefined, {}, [
+                    new VTextNode(23, "This is a test paragraph.")
+                ]),
+                new VTextNode(24, "\n        "),
+                new VElement(25, "button", undefined, { "onclick": "alert('clicked')" }, [
+                    new VTextNode(26, "Click me")
+                ]),
+                new VTextNode(27, "\n        "),
+                new VComment(28, "[CDATA[This is CDATA content]]"),
+                new VTextNode(29, "\n    ")
+            ]),
+            new VTextNode(30, "\n\n\n")
+        ])
+    ])
+]);
 /**
  * Generate the standard test frame sequence used across all tests
  */
 // Create a simple node for testing DomNodeAdded
-function createSimpleNode(): Element {
-    const span = dom.window.document.createElement('span');
-    span.className = 'new-element';
-    span.textContent = 'New content';
-    return span;
+function createSimpleNode(): VElement {
+    return new VElement(99, "span", undefined, { "class": "new-element" }, [
+        new VTextNode(100, "New content")
+    ]);
 }
 
 export async function generateTestFrames(writer: Writer): Promise<void> {
@@ -65,7 +84,7 @@ export async function generateTestFrames(writer: Writer): Promise<void> {
     await new Timestamp(timestamp).encode(writer);
 
     // Frame 1: Keyframe with DOM
-    const vdocument = convertDOMDocumentToVDocument(dom.window.document);
+    const vdocument = testVDocument; // Use the hardcoded VDocument
     await new Keyframe(vdocument, 1).encode(writer); // 1 asset follows
 
     // Frame 2: Asset (sample image data)
@@ -98,7 +117,7 @@ export async function generateTestFrames(writer: Writer): Promise<void> {
     await new DomTextChanged(42, textOperations).encode(writer);
 
     // Frame 10: DomNodeAdded
-    const velement = convertDOMElementToVElement(createSimpleNode());
+    const velement = createSimpleNode();
     await new DomNodeAdded(1, 0, velement, 0).encode(writer);
 
     // Frame 11: DomNodeRemoved
@@ -106,4 +125,31 @@ export async function generateTestFrames(writer: Writer): Promise<void> {
 
     // Frame 12: DomAttributeChanged
     await new DomAttributeChanged(42, "class", "updated-class").encode(writer);
+
+    // Frame 13: TextSelectionChanged
+    await new TextSelectionChanged(42, 5, 42, 10).encode(writer);
+
+    // Frame 14: DomAttributeRemoved
+    await new DomAttributeRemoved(42, "onclick").encode(writer);
+
+    // Frame 15: DomNodeResized
+    await new DomNodeResized(42, 300, 200).encode(writer);
+
+    // Frame 16: AdoptedStyleSheetsChanged
+    await new AdoptedStyleSheetsChanged([1, 2, 3], 1).encode(writer);
+
+    // Frame 17: NewAdoptedStyleSheet
+    await new NewAdoptedStyleSheet({}, 0).encode(writer); // Placeholder styleSheet object
+
+    // Frame 18: ElementScrolled
+    await new ElementScrolled(42, 10, 20).encode(writer);
+
+    // Frame 19: ElementBlurred
+    await new ElementBlurred(42).encode(writer);
+
+    // Frame 20: WindowFocused
+    await new WindowFocused().encode(writer);
+
+    // Frame 21: WindowBlurred
+    await new WindowBlurred().encode(writer);
 }

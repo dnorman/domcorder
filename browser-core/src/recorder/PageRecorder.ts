@@ -1,22 +1,10 @@
 import { generateKeyFrame, inlineSubTree, type InlineStartedEvent, type KeyFrameStartedEvent } from "./inliner";
-import type { Asset } from "./inliner/Asset";
+import type { Asset as InlinerAsset } from "./inliner/Asset";
 import { DomChangeDetector } from "./DomChangeDetector";
 import { UserInteractionTracker, type UserInteractionEventHandler } from "./UserInteractionTracker";
 import {
   FrameType,
-  type NewAdoptedStyleSheetData,
-  type AdoptedStyleSheetsChangedData,
-  type AssetData,
-  type DomAttributeChangedData,
-  type DomAttributeRemovedData,
-  type DomNodeAddedData,
-  type DomNodeRemovedData,
-  type DomTextChangedData,
-  type Frame,
-  type KeyframeData,
-  type TextOperationData
-} from "../common/protocol";
-import {
+  Frame,
   Writer,
   Keyframe,
   Asset,
@@ -25,8 +13,22 @@ import {
   DomAttributeChanged,
   DomAttributeRemoved,
   DomTextChanged,
+  NewAdoptedStyleSheet,
+  AdoptedStyleSheetsChanged,
+  MouseMoved,
+  MouseClicked,
+  KeyPressed,
+  ViewportResized,
+  ScrollOffsetChanged,
+  ElementScrolled,
+  ElementFocused,
+  ElementBlurred,
+  TextSelectionChanged,
+  WindowFocused,
+  WindowBlurred,
   type TextInsertOperationData,
-  type TextRemoveOperationData
+  type TextRemoveOperationData,
+  type TextOperationData
 } from "@domcorder/proto-ts";
 import { NodeIdBiMap } from "../common";
 import type { DomOperation } from "../common/DomOperation";
@@ -48,10 +50,14 @@ export class PageRecorder {
   private userInteractionTracker: UserInteractionTracker | null;
   private writer: Writer;
   private stream: ReadableStream<Uint8Array>;
+  private serverStream: ReadableStream<Uint8Array>;
+  private parentStream: ReadableStream<Uint8Array>;
 
   constructor(sourceDocument: Document, frameHandler: FrameHandler) {
     this.sourceDocument = sourceDocument;
-    this.frameHandler = frameHandler;
+    this.frameHandler = (frame: Frame) => {
+      frameHandler(frame);
+    };
     this.pendingAssets = false;
     this.operationQueue = [];
     this.changeDetector = null;
@@ -59,9 +65,18 @@ export class PageRecorder {
     this.userInteractionTracker = null;
 
     // Create Writer and stream
-    const [writer, stream] = Writer.create(16 * 1024); // 16KB chunks
+    const [writer, stream] = Writer.create(512 * 1024); // 256KB chunks
     this.writer = writer;
     this.stream = stream;
+
+    // Tee the stream for server and parent
+    const [serverStream, parentStream] = stream.tee();
+    this.serverStream = serverStream;
+    this.parentStream = parentStream;
+  }
+
+  getParentStream(): ReadableStream<Uint8Array> {
+    return this.parentStream;
   }
 
   start() {
@@ -113,79 +128,50 @@ export class PageRecorder {
           onInlineStarted: async (ev: InlineStartedEvent) => {
             this.pendingAssets = ev.assetCount > 0;
 
-            // Keep existing frameHandler call
-            frameHandler({
-              frameType: FrameType.DomNodeAdded,
-              data: {
-                parentNodeId: operation.parentId,
-                index: operation.index,
-                node: ev.node,
-                assetCount: ev.assetCount,
-              } as DomNodeAddedData,
-            });
+            // Create frame instance and call frameHandler
+            const frame = new DomNodeAdded(operation.parentId, operation.index, ev.node, ev.assetCount);
+            frameHandler(frame);
 
             // Additionally encode to server stream
-            await DomNodeAdded.encode(this.writer, operation.parentId, operation.index, ev.node);
+            await frame.encode(this.writer);
           },
-          onAsset: async (asset: Asset) => {
-            // Keep existing frameHandler call
-            frameHandler({
-              frameType: FrameType.Asset,
-              data: {
-                id: asset.id,
-                url: asset.url,
-                mime: asset.mime,
-                buf: asset.buf
-              } as AssetData,
-            });
+          onAsset: async (asset: InlinerAsset) => {
+            // Create frame instance and call frameHandler
+            const frame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
+            frameHandler(frame);
 
             // Additionally encode to server stream
-            await Asset.encode(this.writer, asset.id, asset.url, asset.assetType, asset.mime, asset.buf);
+            await frame.encode(this.writer);
           },
           onInlineComplete: () => { }
         });
         break;
 
       case "remove":
-        // Keep existing frameHandler call
-        frameHandler({
-          frameType: FrameType.DomNodeRemoved,
-          data: {
-            nodeId: operation.nodeId
-          } as DomNodeRemovedData,
-        });
+        // Create frame instance and call frameHandler
+        const removeFrame = new DomNodeRemoved(operation.nodeId);
+        frameHandler(removeFrame);
 
         // Additionally encode to server stream
-        await DomNodeRemoved.encode(this.writer, operation.nodeId);
+        await removeFrame.encode(this.writer);
         break;
 
       case "updateAttribute":
-        // Keep existing frameHandler call
-        frameHandler({
-          frameType: FrameType.DomAttributeChanged,
-          data: {
-            nodeId: operation.nodeId,
-            attributeName: operation.name,
-            attributeValue: operation.value
-          } as DomAttributeChangedData,
-        });
+        // Create frame instance and call frameHandler
+        const updateAttrFrame = new DomAttributeChanged(operation.nodeId, operation.name, operation.value);
+        frameHandler(updateAttrFrame);
 
         // Additionally encode to server stream
-        await DomAttributeChanged.encode(this.writer, operation.nodeId, operation.name, operation.value);
+        await updateAttrFrame.encode(this.writer);
         break;
 
       case "removeAttribute":
-        // Keep existing frameHandler call
-        frameHandler({
-          frameType: FrameType.DomAttributeRemoved,
-          data: {
-            nodeId: operation.nodeId,
-            attributeName: operation.name,
-          } as DomAttributeRemovedData,
-        });
+        // Create frame instance and call frameHandler
+        const removeAttrFrame = new DomAttributeRemoved(operation.nodeId, operation.name);
+        frameHandler(removeAttrFrame);
 
         // Additionally encode to server stream
-        await DomAttributeRemoved.encode(this.writer, operation.nodeId, operation.name);
+        await removeAttrFrame.encode(this.writer);
         break;
 
       case "updateText":
@@ -208,17 +194,12 @@ export class PageRecorder {
           }
         });
 
-        // Keep existing frameHandler call
-        frameHandler({
-          frameType: FrameType.DomTextChanged,
-          data: {
-            nodeId: operation.nodeId,
-            operations
-          } as DomTextChangedData,
-        });
+        // Create frame instance and call frameHandler
+        const textFrame = new DomTextChanged(operation.nodeId, operations);
+        frameHandler(textFrame);
 
-        // Additionally encode to server stream - use the rich operations data
-        await DomTextChanged.encode(this.writer, operation.nodeId, operations);
+        // Additionally encode to server stream
+        await textFrame.encode(this.writer);
         break;
     }
   }
@@ -253,7 +234,7 @@ export class PageRecorder {
 
   private async streamToWebSocket(ws: WebSocket): Promise<void> {
     try {
-      const reader = this.stream.getReader();
+      const reader = this.serverStream.getReader();
       while (true) {
         const { done, value } = await reader.read();
 
@@ -276,101 +257,59 @@ export class PageRecorder {
   private createUserInteractionHandler(): UserInteractionEventHandler {
     return {
       onMouseMove: (event) => {
-        this.frameHandler({
-          frameType: FrameType.MouseMoved,
-          data: {
-            x: event.x,
-            y: event.y
-          }
-        });
+        const frame = new MouseMoved(event.x, event.y);
+        this.frameHandler(frame);
+        frame.encode(this.writer); // Background encode
       },
       onMouseClick: (event) => {
-        this.frameHandler({
-          frameType: FrameType.MouseClicked,
-          data: {
-            x: event.x,
-            y: event.y
-          }
-        });
+        const frame = new MouseClicked(event.x, event.y);
+        this.frameHandler(frame);
+        frame.encode(this.writer); // Background encode
       },
       onKeyPress: (event) => {
-        this.frameHandler({
-          frameType: FrameType.KeyPressed,
-          data: {
-            code: event.code,
-            altKey: event.altKey,
-            ctrlKey: event.ctrlKey,
-            metaKey: event.metaKey,
-            shiftKey: event.shiftKey
-          }
-        });
+        const frame = new KeyPressed(event.code, event.altKey, event.ctrlKey, event.metaKey, event.shiftKey);
+        this.frameHandler(frame);
+        frame.encode(this.writer); // Background encode
       },
       onWindowResize: (event) => {
-        this.frameHandler({
-          frameType: FrameType.ViewportResized,
-          data: {
-            width: event.width,
-            height: event.height
-          }
-        });
+        const frame = new ViewportResized(event.width, event.height);
+        this.frameHandler(frame);
+        frame.encode(this.writer); // Background encode
       },
       onScroll: (event) => {
-        this.frameHandler({
-          frameType: FrameType.WindowScrolled,
-          data: {
-            scrollXOffset: event.scrollX,
-            scrollYOffset: event.scrollY
-          }
-        });
+        const frame = new ScrollOffsetChanged(event.scrollX, event.scrollY);
+        this.frameHandler(frame);
+        frame.encode(this.writer); // Background encode
       },
       onElementScroll: (event) => {
-        this.frameHandler({
-          frameType: FrameType.ElementScrolled,
-          data: {
-            id: event.elementId,
-            scrollXOffset: event.scrollLeft,
-            scrollYOffset: event.scrollTop
-          }
-        });
+        const frame = new ElementScrolled(event.elementId, event.scrollLeft, event.scrollTop);
+        this.frameHandler(frame);
+        frame.encode(this.writer); // Background encode
       },
       onElementFocus: (event) => {
-        this.frameHandler({
-          frameType: FrameType.ElementFocused,
-          data: {
-            id: event.elementId.toString()
-          }
-        });
+        const frame = new ElementFocused(event.elementId);
+        this.frameHandler(frame);
+        frame.encode(this.writer); // Background encode
       },
       onElementBlur: (event) => {
-        this.frameHandler({
-          frameType: FrameType.ElementBlurred,
-          data: {
-            id: event.elementId.toString()
-          }
-        });
+        const frame = new ElementBlurred(event.elementId);
+        this.frameHandler(frame);
+        frame.encode(this.writer); // Background encode
       },
       onTextSelection: (event) => {
-        this.frameHandler({
-          frameType: FrameType.TextSelectionChanged,
-          data: {
-            selectionStartNodeId: event.startNodeId,
-            selectionStartOffset: event.startOffset,
-            selectionEndNodeId: event.endNodeId,
-            selectionEndOffset: event.endOffset
-          }
-        });
+        const frame = new TextSelectionChanged(event.startNodeId, event.startOffset, event.endNodeId, event.endOffset);
+        this.frameHandler(frame);
+        frame.encode(this.writer); // Background encode
       },
       onWindowFocus: (event) => {
-        this.frameHandler({
-          frameType: FrameType.WindowFocused,
-          data: {}
-        });
+        const frame = new WindowFocused();
+        this.frameHandler(frame);
+        frame.encode(this.writer); // Background encode
       },
       onWindowBlur: (event) => {
-        this.frameHandler({
-          frameType: FrameType.WindowBlurred,
-          data: {}
-        });
+        const frame = new WindowBlurred();
+        this.frameHandler(frame);
+        frame.encode(this.writer); // Background encode
       }
     };
   }
@@ -378,34 +317,23 @@ export class PageRecorder {
   private createKeyFrameHandler() {
     return {
       onKeyFrameStarted: async (ev: KeyFrameStartedEvent) => {
-        // Keep existing frameHandler call
-        this.frameHandler({
-          frameType: FrameType.Keyframe,
-          data: {
-            document: ev.document,
-            assetCount: ev.assetCount,
-          } as KeyframeData,
-        });
+        // Create frame instance and call frameHandler
+        const keyframe = new Keyframe(ev.document, ev.assetCount);
+        console.log("PageRecorder: Creating keyframe", keyframe);
+        this.frameHandler(keyframe);
 
         // Additionally encode to server stream
-        await Keyframe.encode(this.writer, ev.document);
+        await keyframe.encode(this.writer);
 
         this.pendingAssets = ev.assetCount > 0;
       },
-      onAsset: async (asset: Asset) => {
-        // Keep existing frameHandler call
-        this.frameHandler({
-          frameType: FrameType.Asset,
-          data: {
-            id: asset.id,
-            url: asset.url,
-            mime: asset.mime,
-            buf: asset.buf
-          } as AssetData,
-        });
+      onAsset: async (asset: InlinerAsset) => {
+        // Create frame instance and call frameHandler
+        const assetFrame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
+        this.frameHandler(assetFrame);
 
         // Additionally encode to server stream
-        await Asset.encode(this.writer, asset.id, asset.url, asset.assetType, asset.mime, asset.buf);
+        await assetFrame.encode(this.writer);
       },
       onKeyFrameComplete: () => {
         this.pendingAssets = false;
@@ -416,35 +344,24 @@ export class PageRecorder {
   private createStyleSheetHandler() {
     return async (event: StyleSheetWatcherEvent) => {
       if (event.type === 'adopted-style-sheets') {
-        this.frameHandler({
-          frameType: FrameType.AdoptedStyleSheetsChanged,
-          data: {
-            styleSheetIds: event.now.map(sheet => getStyleSheetId(sheet)),
-            addedCount: event.added.length,
-          } as AdoptedStyleSheetsChangedData
-        });
+        const frame = new AdoptedStyleSheetsChanged(
+          event.now.map(sheet => getStyleSheetId(sheet)),
+          event.added.length
+        );
+        this.frameHandler(frame);
+        frame.encode(this.writer); // Background encode
 
         for (const sheet of event.added) {
           await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, {
             onInlineStarted: (ev: InlineAdoptedStyleSheetEvent) => {
-              this.frameHandler({
-                frameType: FrameType.AdoptedStyleSheetAdded,
-                data: {
-                  styleSheet: ev.styleSheet,
-                  assetCount: ev.assetCount,
-                } as NewAdoptedStyleSheetData
-              });
+              const newStyleSheetFrame = new NewAdoptedStyleSheet(ev.styleSheet, ev.assetCount);
+              this.frameHandler(newStyleSheetFrame);
+              newStyleSheetFrame.encode(this.writer); // Background encode
             },
-            onAsset: (asset: Asset) => {
-              this.frameHandler({
-                frameType: FrameType.Asset,
-                data: {
-                  id: asset.id,
-                  url: asset.url,
-                  mime: asset.mime,
-                  buf: asset.buf
-                } as AssetData,
-              });
+            onAsset: (asset: InlinerAsset) => {
+              const assetFrame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
+              this.frameHandler(assetFrame);
+              assetFrame.encode(this.writer); // Background encode
             },
             onInlineComplete: () => { }
           });

@@ -2,11 +2,10 @@
 import { describe, test, expect } from "bun:test";
 import { Writer, DCRR_MAGIC, DCRR_VERSION, HEADER_SIZE } from "../src/writer.ts";
 import { compareBinaryFile } from "./util.js";
-import { setupDOMGlobals, generateTestFrames } from "./sample-frames.ts";
+import { generateTestFrames } from "./sample-frames.ts";
 import { streamObserve } from "./stream-observer.ts";
 
 // Set up DOM polyfills
-setupDOMGlobals();
 
 describe("File Format (.dcrr)", () => {
     test("should write valid file header", async () => {

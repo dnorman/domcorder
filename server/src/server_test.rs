@@ -104,7 +104,7 @@ mod tests {
             b"DCRR",
             "File should start with DCRR magic bytes"
         );
-        assert_eq!(sample_data.len(), 1012, "Sample file should be 1012 bytes");
+        assert_eq!(sample_data.len(), 1537, "Sample file should be 1537 bytes");
 
         // Verify we can read it as a valid DCRR file using proto-rs
         let mut reader = FrameReader::new(Cursor::new(sample_data), true);
@@ -146,7 +146,7 @@ mod tests {
             saved_data, sample_data,
             "Saved data should match uploaded data"
         );
-        assert_eq!(saved_data.len(), 1012, "Saved file should be 1012 bytes");
+        assert_eq!(saved_data.len(), 1537, "Saved file should be 1537 bytes");
 
         // Verify we can still read it as a valid DCRR file
         let mut reader = FrameReader::new(Cursor::new(&saved_data), true);

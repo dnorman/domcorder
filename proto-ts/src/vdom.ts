@@ -5,6 +5,9 @@ interface BufferReader {
   readU32(): number;
   readU64(): bigint;
   readString(): string;
+  readBytes(length: number): Uint8Array;
+  readByte(): number; // Read a single byte
+  peekU32(): number; // Peek at next u32 without consuming it
 }
 
 // DOM Node Type Constants - sequential indices for bincode compatibility
@@ -66,6 +69,8 @@ export class VTextNode extends VNode {
   encode(w: Writer): void {
     // Write enum variant index
     w.u32(DomNodeType.Text);
+    // Write node ID
+    w.u32(this.id);
     // Write text content
     w.strUtf8(this.text);
   }
@@ -77,10 +82,11 @@ export class VTextNode extends VNode {
   }
 
   static decode(r: BufferReader): VTextNode {
+    // Read node ID
+    const id = r.readU32();
     // Read text content
     const text = r.readString();
-    // Note: id will be set by the caller since it's not stored in the binary format
-    return new VTextNode(0, text);
+    return new VTextNode(id, text);
   }
 }
 
@@ -96,6 +102,8 @@ export class VCDATASection extends VNode {
   encode(w: Writer): void {
     // Write enum variant index
     w.u32(DomNodeType.CData);
+    // Write node ID
+    w.u32(this.id);
     // Write CDATA content
     w.strUtf8(this.data);
   }
@@ -107,9 +115,11 @@ export class VCDATASection extends VNode {
   }
 
   static decode(r: BufferReader): VCDATASection {
+    // Read node ID
+    const id = r.readU32();
     // Read CDATA content
     const data = r.readString();
-    return new VCDATASection(0, data);
+    return new VCDATASection(id, data);
   }
 }
 
@@ -125,6 +135,8 @@ export class VComment extends VNode {
   encode(w: Writer): void {
     // Write enum variant index
     w.u32(DomNodeType.Comment);
+    // Write node ID
+    w.u32(this.id);
     // Write comment content
     w.strUtf8(this.data);
   }
@@ -136,9 +148,11 @@ export class VComment extends VNode {
   }
 
   static decode(r: BufferReader): VComment {
+    // Read node ID
+    const id = r.readU32();
     // Read comment content
     const data = r.readString();
-    return new VComment(0, data);
+    return new VComment(id, data);
   }
 }
 
@@ -156,6 +170,8 @@ export class VProcessingInstruction extends VNode {
   encode(w: Writer): void {
     // Write enum variant index
     w.u32(DomNodeType.ProcessingInstruction);
+    // Write node ID
+    w.u32(this.id);
     // Write target and data
     w.strUtf8(this.target);
     w.strUtf8(this.data);
@@ -168,10 +184,12 @@ export class VProcessingInstruction extends VNode {
   }
 
   static decode(r: BufferReader): VProcessingInstruction {
+    // Read node ID
+    const id = r.readU32();
     // Read target and data
     const target = r.readString();
     const data = r.readString();
-    return new VProcessingInstruction(0, target, data);
+    return new VProcessingInstruction(id, target, data);
   }
 }
 
@@ -191,6 +209,8 @@ export class VDocumentType extends VNode {
   encode(w: Writer): void {
     // Write enum variant index
     w.u32(DomNodeType.DocType);
+    // Write node ID
+    w.u32(this.id);
     // Write doctype name
     w.strUtf8(this.name);
 
@@ -218,24 +238,26 @@ export class VDocumentType extends VNode {
   }
 
   static decode(r: BufferReader): VDocumentType {
+    // Read node ID
+    const id = r.readU32();
     // Read doctype name
     const name = r.readString();
 
     // Read optional public ID - bincode format: 1 byte for None/Some
-    const hasPublicId = r.readU32(); // Note: readU32 for now, should be readU8 when available
+    const hasPublicId = r.readByte();
     let publicId: string | undefined;
-    if ((hasPublicId & 0xFF) === 1) {
+    if (hasPublicId === 1) {
       publicId = r.readString();
     }
 
     // Read optional system ID - bincode format: 1 byte for None/Some  
-    const hasSystemId = r.readU32(); // Note: readU32 for now, should be readU8 when available
+    const hasSystemId = r.readByte();
     let systemId: string | undefined;
-    if ((hasSystemId & 0xFF) === 1) {
+    if (hasSystemId === 1) {
       systemId = r.readString();
     }
 
-    return new VDocumentType(0, name, publicId, systemId);
+    return new VDocumentType(id, name, publicId, systemId);
   }
 }
 
@@ -259,6 +281,8 @@ export class VElement extends VNode {
   encode(w: Writer): void {
     // Write enum variant index
     w.u32(DomNodeType.Element);
+    // Write node ID
+    w.u32(this.id);
     // Write tag name
     w.strUtf8(this.tag.toLowerCase());
 
@@ -306,6 +330,8 @@ export class VElement extends VNode {
   }
 
   static decode(r: BufferReader): VElement {
+    // Read node ID
+    const id = r.readU32();
     // Read tag name
     const tag = r.readString();
 
@@ -325,7 +351,7 @@ export class VElement extends VNode {
       children.push(VNode.decode(r));
     }
 
-    return new VElement(0, tag, undefined, attrs, children);
+    return new VElement(id, tag, undefined, attrs, children);
   }
 }
 
@@ -356,6 +382,8 @@ export class VDocument extends VNode {
 
   encode(w: Writer): void {
     // VDocument doesn't have a node type - it represents the document itself
+    // Write document ID
+    w.u32(this.id);
     // Encode children as Vec<VNode>
     w.u64(BigInt(this.children.length));
     for (const child of this.children) {
@@ -365,6 +393,8 @@ export class VDocument extends VNode {
 
   async encodeStreaming(w: Writer): Promise<void> {
     // VDocument doesn't have a node type - it represents the document itself
+    // Write document ID
+    w.u32(this.id);
     // Encode children as Vec<VNode> - this is where we yield during recursion
     w.u64(BigInt(this.children.length));
     for (const child of this.children) {
@@ -373,6 +403,8 @@ export class VDocument extends VNode {
   }
 
   static decode(r: BufferReader): VDocument {
+    // Read document ID
+    const id = r.readU32();
     // Read children (u64 count + VNodes)
     const childCount = Number(r.readU64());
     const children: VNode[] = [];
@@ -380,6 +412,6 @@ export class VDocument extends VNode {
       children.push(VNode.decode(r));
     }
 
-    return new VDocument(0, [], children);
+    return new VDocument(id, [], children);
   }
 }

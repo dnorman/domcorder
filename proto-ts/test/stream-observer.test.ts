@@ -3,12 +3,9 @@ import { describe, test, expect } from "bun:test";
 import { Writer } from "../src/writer.ts";
 import { streamObserve, StreamObserver } from "./stream-observer.ts";
 import { Timestamp, Keyframe } from "../src/frames.ts";
-import { setupDOMGlobals } from "./sample-frames.ts";
-import { JSDOM } from "jsdom";
-import { convertDOMDocumentToVDocument } from "../src/dom-converter.ts";
+import { testVDocument } from "./sample-frames.ts";
 
 // Set up DOM polyfills
-setupDOMGlobals();
 
 describe("Stream Observer Utility", () => {
     test("should observe chunks only after yield points", async () => {
@@ -83,14 +80,8 @@ describe("Stream Observer Utility", () => {
         expect(analysis.chunkCount).toBe(1);
         expect(analysis.totalBytes).toBe(12); // u32 frame type + u64 timestamp
 
-        // Encode a keyframe with small DOM
-        const dom = new JSDOM(`
-            <!DOCTYPE html>
-            <html><head><title>Test</title></head><body><div>Hello</div></body></html>
-        `);
-
-        const vdocument = convertDOMDocumentToVDocument(dom.window.document);
-        await new Keyframe(vdocument).encode(writer);
+        // Encode a keyframe with test DOM
+        await new Keyframe(testVDocument, 0).encode(writer);
 
         analysis = await check();
         expect(analysis.chunkCount).toBeGreaterThan(0);
@@ -100,26 +91,11 @@ describe("Stream Observer Utility", () => {
     });
 
     test("should support streaming frame encoding analysis", async () => {
-        const dom = new JSDOM(`
-            <!DOCTYPE html>
-            <html>
-            <head><title>Test</title></head>
-            <body>
-                <div>Content 1</div>
-                <div>Content 2</div>
-                <div>Content 3</div>
-                <div>Content 4</div>
-                <div>Content 5</div>
-            </body>
-            </html>
-        `);
-
         const [writer, stream] = Writer.create(32); // Small chunks to force streaming
         const check = streamObserve(stream);
 
         // Use streaming encoding
-        const vdocument = convertDOMDocumentToVDocument(dom.window.document);
-        await new Keyframe(vdocument).encodeStreaming(writer);
+        await new Keyframe(testVDocument, 0).encodeStreaming(writer);
 
         const analysis = await check();
 
