@@ -1,5 +1,5 @@
 import { Writer } from "./writer.ts";
-import { VNode, VDocument } from "./vdom.ts";
+import { VNode, VDocument, VStyleSheet } from "./vdom.ts";
 
 
 export enum FrameType {
@@ -566,7 +566,7 @@ export class AdoptedStyleSheetsChanged extends Frame {
 
 export class NewAdoptedStyleSheet extends Frame {
     constructor(
-        public styleSheet: any, // VStyleSheet - using any for now to avoid import issues
+        public styleSheet: VStyleSheet,
         public assetCount: number
     ) {
         super();
@@ -574,15 +574,14 @@ export class NewAdoptedStyleSheet extends Frame {
 
     static decode(reader: BufferReader): NewAdoptedStyleSheet {
         if (reader.readU32() !== FrameType.NewAdoptedStyleSheet) throw new Error(`Expected NewAdoptedStyleSheet frame type`);
-        // TODO: Implement VStyleSheet.decode when available
-        const styleSheet = {}; // Placeholder
+        const styleSheet = VStyleSheet.decode(reader);
         const assetCount = reader.readU32();
         return new NewAdoptedStyleSheet(styleSheet, assetCount);
     }
 
     async encode(w: Writer): Promise<void> {
         w.u32(FrameType.NewAdoptedStyleSheet);
-        // TODO: Implement styleSheet.encode when VStyleSheet is available
+        this.styleSheet.encode(w);
         w.u32(this.assetCount);
         await w.endFrame();
     }

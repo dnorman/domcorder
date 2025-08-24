@@ -252,7 +252,7 @@ export function rewriteStyleSheetsToPendingIds(stylesheet: VStyleSheet, baseURI:
     const id = idForUrl(raw, baseURI, pending);
     return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
   });
-  return { ...stylesheet, text } as VStyleSheet;
+  return new VStyleSheet(stylesheet.id, text, stylesheet.media);
 
 }
 

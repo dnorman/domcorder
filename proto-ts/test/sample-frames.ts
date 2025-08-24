@@ -25,6 +25,7 @@ import {
     WindowBlurred
 } from "../src/frames.ts";
 import { VComment, VDocument, VDocumentType, VElement, VTextNode } from "../src/vdom.ts";
+import { VStyleSheet } from "../src/vdom.ts";
 
 // Hardcoded VDocument structure for tests
 export const testVDocument = new VDocument(0, [], [
@@ -139,7 +140,8 @@ export async function generateTestFrames(writer: Writer): Promise<void> {
     await new AdoptedStyleSheetsChanged([1, 2, 3], 1).encode(writer);
 
     // Frame 17: NewAdoptedStyleSheet
-    await new NewAdoptedStyleSheet({}, 0).encode(writer); // Placeholder styleSheet object
+    const testStyleSheet = new VStyleSheet(1, "body { color: red; }", "screen");
+    await new NewAdoptedStyleSheet(testStyleSheet, 0).encode(writer);
 
     // Frame 18: ElementScrolled
     await new ElementScrolled(42, 10, 20).encode(writer);

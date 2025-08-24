@@ -94,10 +94,19 @@ pub enum DomNode {
     ProcessingInstruction(ProcessingInstructionNode), // 5
 }
 
+/// VStyleSheet representation - matches TypeScript VStyleSheet
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VStyleSheet {
+    pub id: u32,
+    pub text: String,
+    pub media: Option<String>,
+}
+
 /// HTML Document representation - matches TypeScript VDocument
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HtmlDocument {
     pub id: u32,
+    pub adopted_style_sheets: Vec<VStyleSheet>,
     pub children: Vec<DomNode>, // Array of children (typically DOCTYPE + HTML element)
 }
 
@@ -235,7 +244,7 @@ pub struct AdoptedStyleSheetsChangedData {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewAdoptedStyleSheetData {
-    // TODO: Add VStyleSheet type when available
+    pub style_sheet: VStyleSheet,
     pub asset_count: u32,
 }
 

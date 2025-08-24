@@ -1,4 +1,4 @@
-import type { VStyleSheet } from "@domcorder/proto-ts";
+import { VStyleSheet } from "@domcorder/proto-ts";
 import { collectCssUrlsAssign, fetchAssets, rewriteStyleSheetsToPendingIds } from "./inline";
 import { PendingAssets } from "./PendingAssets";
 import type { Asset } from "./Asset";
@@ -17,7 +17,7 @@ export interface InlineSubTreeHandler {
 export async function inlineAdoptedStyleSheet(
   sheet: CSSStyleSheet,
   baseURI: string,
-  handler: InlineSubTreeHandler, 
+  handler: InlineSubTreeHandler,
   concurrency: number = 6,
   inlineCrossOrigin: boolean = false) {
   const pendingAssets = new PendingAssets();
@@ -26,11 +26,11 @@ export async function inlineAdoptedStyleSheet(
   try {
     const rules = Array.from(sheet.cssRules);
     const text = rules.map(rule => rule.cssText).join('\n');
-    const vStyleSheet: VStyleSheet = {
-      id: (sheet as any).__css_stylesheet_id__,
-      media: sheet.media.mediaText || undefined,
-      text
-    };
+    const vStyleSheet: VStyleSheet = new VStyleSheet(
+      (sheet as any).__css_stylesheet_id__,
+      text,
+      sheet.media.mediaText || undefined
+    );
 
     collectCssUrlsAssign(text, baseURI, pendingAssets);
     const updated = rewriteStyleSheetsToPendingIds(vStyleSheet, baseURI, pendingAssets);
@@ -41,7 +41,7 @@ export async function inlineAdoptedStyleSheet(
     });
 
     await fetchAssets(
-      concurrency, 
+      concurrency,
       inlineCrossOrigin,
       pendingAssets,
       (asset) => handler.onAsset(asset));

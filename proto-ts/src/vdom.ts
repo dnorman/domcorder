@@ -367,6 +367,25 @@ export class VStyleSheet {
     this.media = media;
     this.text = text;
   }
+
+  encode(w: Writer): void {
+    w.u32(this.id);
+    w.strUtf8(this.text);
+    if (this.media) {
+      w.byte(1); // Some flag
+      w.strUtf8(this.media);
+    } else {
+      w.byte(0); // None flag
+    }
+  }
+
+  static decode(r: BufferReader): VStyleSheet {
+    const id = r.readU32();
+    const text = r.readString();
+    const hasMedia = r.readByte() === 1;
+    const media = hasMedia ? r.readString() : undefined;
+    return new VStyleSheet(id, text, media);
+  }
 }
 
 export class VDocument extends VNode {
@@ -384,6 +403,13 @@ export class VDocument extends VNode {
     // VDocument doesn't have a node type - it represents the document itself
     // Write document ID
     w.u32(this.id);
+
+    // Encode adopted stylesheets as Vec<VStyleSheet>
+    w.u64(BigInt(this.adoptedStyleSheets.length));
+    for (const sheet of this.adoptedStyleSheets) {
+      sheet.encode(w);
+    }
+
     // Encode children as Vec<VNode>
     w.u64(BigInt(this.children.length));
     for (const child of this.children) {
@@ -395,6 +421,13 @@ export class VDocument extends VNode {
     // VDocument doesn't have a node type - it represents the document itself
     // Write document ID
     w.u32(this.id);
+
+    // Encode adopted stylesheets as Vec<VStyleSheet>
+    w.u64(BigInt(this.adoptedStyleSheets.length));
+    for (const sheet of this.adoptedStyleSheets) {
+      sheet.encode(w);
+    }
+
     // Encode children as Vec<VNode> - this is where we yield during recursion
     w.u64(BigInt(this.children.length));
     for (const child of this.children) {
@@ -405,6 +438,14 @@ export class VDocument extends VNode {
   static decode(r: BufferReader): VDocument {
     // Read document ID
     const id = r.readU32();
+
+    // Read adopted stylesheets (u64 count + VStyleSheets)
+    const adoptedStyleSheetCount = Number(r.readU64());
+    const adoptedStyleSheets: VStyleSheet[] = [];
+    for (let i = 0; i < adoptedStyleSheetCount; i++) {
+      adoptedStyleSheets.push(VStyleSheet.decode(r));
+    }
+
     // Read children (u64 count + VNodes)
     const childCount = Number(r.readU64());
     const children: VNode[] = [];
@@ -412,6 +453,6 @@ export class VDocument extends VNode {
       children.push(VNode.decode(r));
     }
 
-    return new VDocument(id, [], children);
+    return new VDocument(id, adoptedStyleSheets, children);
   }
 }

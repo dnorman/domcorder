@@ -8,7 +8,8 @@ pub fn sample_frames() -> Vec<Frame> {
         }),
         Frame::Keyframe(KeyframeData {
             document: HtmlDocument {
-                id: 0, // Document ID (matches TypeScript testVDocument)
+                id: 0,                        // Document ID (matches TypeScript testVDocument)
+                adopted_style_sheets: vec![], // Empty for now
                 children: vec![
                     // Child 0: DOCTYPE node
                     DomNode::DocType(DocTypeNode {
@@ -258,7 +259,14 @@ pub fn sample_frames() -> Vec<Frame> {
             style_sheet_ids: vec![1, 2, 3],
             added_count: 1,
         }),
-        Frame::NewAdoptedStyleSheet(NewAdoptedStyleSheetData { asset_count: 0 }),
+        Frame::NewAdoptedStyleSheet(NewAdoptedStyleSheetData {
+            style_sheet: VStyleSheet {
+                id: 1,
+                text: "body { color: red; }".to_string(),
+                media: Some("screen".to_string()),
+            },
+            asset_count: 0,
+        }),
         Frame::ElementScrolled(ElementScrolledData {
             node_id: 42,
             scroll_x_offset: 10,

@@ -1,7 +1,6 @@
 import type { NodeIdBiMap } from "../../common/NodeIdBiMap";
 import { PendingAssets } from "./PendingAssets";
-import { VDocument } from "@domcorder/proto-ts";
-import type { VNode, VStyleSheet } from "@domcorder/proto-ts";
+import { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
 import {
   collectCssUrlsAssign,
   fetchAssets,
@@ -121,11 +120,11 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, antiAnimat
       try {
         const rules = Array.from(sheet.cssRules);
         const text = rules.map(rule => rule.cssText).join('\n');
-        adoptedStyleSheets.push({
-          id: (sheet as any).__css_stylesheet_id__,
-          media: sheet.media.mediaText || undefined,
-          text
-        });
+        adoptedStyleSheets.push(new VStyleSheet(
+          (sheet as any).__css_stylesheet_id__,
+          text,
+          sheet.media.mediaText || undefined
+        ));
         collectCssUrlsAssign(text, doc.baseURI, pending);
       } catch (error) {
         console.warn('Failed to process adopted stylesheet:', error);
