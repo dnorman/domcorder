@@ -112,7 +112,6 @@ export class PagePlayerComponent {
         left: 0;
         z-index: 1000;
         overflow: hidden;
-        pointer-events: none;
       }
 
       .typing-simulator-container {
