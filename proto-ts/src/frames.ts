@@ -54,7 +54,7 @@ export abstract class Frame {
     static decode(reader: BufferReader): Frame | null {
         const t = reader.peekU32(); // Peek at frame type without consuming it
         const dec = DECODERS[t]; // direct indexed lookup
-        return dec ? dec(reader) : null;
+        return dec ? dec(reader) : null; // Let concrete decoder exceptions bubble up
     }
 }
 
@@ -63,8 +63,8 @@ export class TimestampDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): TimestampDataEnc | null {
-        if (reader.readU32() !== FrameType.Timestamp) return null;
+    static decode(reader: BufferReader): TimestampDataEnc {
+        if (reader.readU32() !== FrameType.Timestamp) throw new Error(`Expected Timestamp frame type`);
         const timestamp = reader.readU64();
         return new TimestampDataEnc(timestamp);
     }
@@ -82,8 +82,8 @@ export class KeyframeDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): KeyframeDataEnc | null {
-        if (reader.readU32() !== FrameType.Keyframe) return null;
+    static decode(reader: BufferReader): KeyframeDataEnc {
+        if (reader.readU32() !== FrameType.Keyframe) throw new Error(`Expected Keyframe frame type`);
         const docType = reader.readString(); // Read and ignore doctype for now
         const vdocument = VDocument.decode(reader);
         return new KeyframeDataEnc(vdocument);
@@ -129,8 +129,8 @@ export class AssetDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): AssetDataEnc | null {
-        if (reader.readU32() !== FrameType.Asset) return null;
+    static decode(reader: BufferReader): AssetDataEnc {
+        if (reader.readU32() !== FrameType.Asset) throw new Error(`Expected Asset frame type`);
         const id = reader.readU32();
         const url = reader.readString();
         const assetType = reader.readString();
@@ -174,8 +174,8 @@ export class ViewportResizedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): ViewportResizedDataEnc | null {
-        if (reader.readU32() !== FrameType.ViewportResized) return null;
+    static decode(reader: BufferReader): ViewportResizedDataEnc {
+        if (reader.readU32() !== FrameType.ViewportResized) throw new Error(`Expected ViewportResized frame type`);
         const width = reader.readU32();
         const height = reader.readU32();
         return new ViewportResizedDataEnc(width, height);
@@ -194,8 +194,8 @@ export class ScrollOffsetChangedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): ScrollOffsetChangedDataEnc | null {
-        if (reader.readU32() !== FrameType.ScrollOffsetChanged) return null;
+    static decode(reader: BufferReader): ScrollOffsetChangedDataEnc {
+        if (reader.readU32() !== FrameType.ScrollOffsetChanged) throw new Error(`Expected ScrollOffsetChanged frame type`);
         const scroll_x_offset = reader.readU32();
         const scroll_y_offset = reader.readU32();
         return new ScrollOffsetChangedDataEnc(scroll_x_offset, scroll_y_offset);
@@ -214,8 +214,8 @@ export class MouseMovedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): MouseMovedDataEnc | null {
-        if (reader.readU32() !== FrameType.MouseMoved) return null;
+    static decode(reader: BufferReader): MouseMovedDataEnc {
+        if (reader.readU32() !== FrameType.MouseMoved) throw new Error(`Expected MouseMoved frame type`);
         const x = reader.readU32();
         const y = reader.readU32();
         return new MouseMovedDataEnc(x, y);
@@ -234,8 +234,8 @@ export class MouseClickedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): MouseClickedDataEnc | null {
-        if (reader.readU32() !== FrameType.MouseClicked) return null;
+    static decode(reader: BufferReader): MouseClickedDataEnc {
+        if (reader.readU32() !== FrameType.MouseClicked) throw new Error(`Expected MouseClicked frame type`);
         const x = reader.readU32();
         const y = reader.readU32();
         return new MouseClickedDataEnc(x, y);
@@ -254,8 +254,8 @@ export class KeyPressedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): KeyPressedDataEnc | null {
-        if (reader.readU32() !== FrameType.KeyPressed) return null;
+    static decode(reader: BufferReader): KeyPressedDataEnc {
+        if (reader.readU32() !== FrameType.KeyPressed) throw new Error(`Expected KeyPressed frame type`);
         const key = reader.readString();
         return new KeyPressedDataEnc(key);
     }
@@ -272,8 +272,8 @@ export class ElementFocusedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): ElementFocusedDataEnc | null {
-        if (reader.readU32() !== FrameType.ElementFocused) return null;
+    static decode(reader: BufferReader): ElementFocusedDataEnc {
+        if (reader.readU32() !== FrameType.ElementFocused) throw new Error(`Expected ElementFocused frame type`);
         const elementId = reader.readU64();
         return new ElementFocusedDataEnc(elementId);
     }
@@ -295,8 +295,8 @@ export class TextSelectionChangedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): TextSelectionChangedDataEnc | null {
-        if (reader.readU32() !== FrameType.TextSelectionChanged) return null;
+    static decode(reader: BufferReader): TextSelectionChangedDataEnc {
+        if (reader.readU32() !== FrameType.TextSelectionChanged) throw new Error(`Expected TextSelectionChanged frame type`);
         const selectionStartNodeId = reader.readU64();
         const selectionStartOffset = reader.readU32();
         const selectionEndNodeId = reader.readU64();
@@ -323,8 +323,8 @@ export class DomNodeAddedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): DomNodeAddedDataEnc | null {
-        if (reader.readU32() !== FrameType.DomNodeAdded) return null;
+    static decode(reader: BufferReader): DomNodeAddedDataEnc {
+        if (reader.readU32() !== FrameType.DomNodeAdded) throw new Error(`Expected DomNodeAdded frame type`);
         const parentNodeId = reader.readU64();
         const index = reader.readU32();
         const vnode = VNode.decode(reader);
@@ -355,8 +355,8 @@ export class DomNodeRemovedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): DomNodeRemovedDataEnc | null {
-        if (reader.readU32() !== FrameType.DomNodeRemoved) return null;
+    static decode(reader: BufferReader): DomNodeRemovedDataEnc {
+        if (reader.readU32() !== FrameType.DomNodeRemoved) throw new Error(`Expected DomNodeRemoved frame type`);
         const nodeId = reader.readU64();
         return new DomNodeRemovedDataEnc(nodeId);
     }
@@ -377,8 +377,8 @@ export class DomAttributeChangedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): DomAttributeChangedDataEnc | null {
-        if (reader.readU32() !== FrameType.DomAttributeChanged) return null;
+    static decode(reader: BufferReader): DomAttributeChangedDataEnc {
+        if (reader.readU32() !== FrameType.DomAttributeChanged) throw new Error(`Expected DomAttributeChanged frame type`);
         const nodeId = reader.readU64();
         const attributeName = reader.readString();
         const attributeValue = reader.readString();
@@ -402,8 +402,8 @@ export class DomAttributeRemovedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): DomAttributeRemovedDataEnc | null {
-        if (reader.readU32() !== FrameType.DomAttributeRemoved) return null;
+    static decode(reader: BufferReader): DomAttributeRemovedDataEnc {
+        if (reader.readU32() !== FrameType.DomAttributeRemoved) throw new Error(`Expected DomAttributeRemoved frame type`);
         const nodeId = reader.readU64();
         const attributeName = reader.readString();
         return new DomAttributeRemovedDataEnc(nodeId, attributeName);
@@ -440,8 +440,8 @@ export class DomTextChangedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): DomTextChangedDataEnc | null {
-        if (reader.readU32() !== FrameType.DomTextChanged) return null;
+    static decode(reader: BufferReader): DomTextChangedDataEnc {
+        if (reader.readU32() !== FrameType.DomTextChanged) throw new Error(`Expected DomTextChanged frame type`);
         const nodeId = reader.readU64();
         const operationCount = Number(reader.readU64());
         const operations: TextOperationData[] = [];
@@ -494,8 +494,8 @@ export class DomNodeResizedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): DomNodeResizedDataEnc | null {
-        if (reader.readU32() !== FrameType.DomNodeResized) return null;
+    static decode(reader: BufferReader): DomNodeResizedDataEnc {
+        if (reader.readU32() !== FrameType.DomNodeResized) throw new Error(`Expected DomNodeResized frame type`);
         const nodeId = reader.readU64();
         const width = reader.readU32();
         const height = reader.readU32();
@@ -516,8 +516,8 @@ export class StyleSheetChangedDataEnc extends Frame {
         super();
     }
 
-    static decode(reader: BufferReader): StyleSheetChangedDataEnc | null {
-        if (reader.readU32() !== FrameType.StyleSheetChanged) return null;
+    static decode(reader: BufferReader): StyleSheetChangedDataEnc {
+        if (reader.readU32() !== FrameType.StyleSheetChanged) throw new Error(`Expected StyleSheetChanged frame type`);
         // TODO: Add data fields when StyleSheetChangedData is defined
         return new StyleSheetChangedDataEnc();
     }
