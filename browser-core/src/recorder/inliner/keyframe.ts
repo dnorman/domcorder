@@ -13,6 +13,8 @@ import { ensureStyleSheetId } from "../StyleSheetWatcher";
 export interface KeyFrameStartedEvent {
   document: VDocument;
   assetCount: number;
+  viewportWidth: number;
+  viewportHeight: number;
 }
 
 export interface KeyFrameEventHandler {
@@ -48,10 +50,16 @@ export async function generateKeyFrame(
     const snap = snapshotVDomStreaming(doc, nodeIdMap, antiAnimationStylesheet);
     rewriteAllRefsToPendingIds(snap, doc.baseURI, pendingAssets); // proactive rewrite
 
+    // Capture viewport dimensions
+    const viewportWidth = doc.defaultView?.innerWidth || 600;
+    const viewportHeight = doc.defaultView?.innerHeight || 500;
+
     // Emit the structural snapshot right away
     handler.onKeyFrameStarted({
       document: snap,
-      assetCount: pendingAssets.order.length
+      assetCount: pendingAssets.order.length,
+      viewportWidth,
+      viewportHeight
     });
 
     // Phase 2: cache-first fetch & stream assets one-by-one

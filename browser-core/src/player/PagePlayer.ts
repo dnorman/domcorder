@@ -76,7 +76,14 @@ export class PagePlayer {
   private readonly styleSheetWatcher: StyleSheetWatcher;
   private readonly adoptedStyleSheetMutator: AdoptedStyleSheetMutator;
 
-  constructor(targetIframe: HTMLIFrameElement, overlayElement: HTMLElement, typingSimulatorElement: HTMLElement) {
+  // Viewport dimensions
+  private viewportWidth: number = 0;
+  private viewportHeight: number = 0;
+  private readonly targetIframe: HTMLIFrameElement;
+  private readonly playerComponent?: any;
+
+  constructor(targetIframe: HTMLIFrameElement, overlayElement: HTMLElement, typingSimulatorElement: HTMLElement, playerComponent?: any) {
+    this.targetIframe = targetIframe;
     this.targetDocument = targetIframe.contentDocument!;
     this.assetManager = new AssetManager(this.targetDocument);
     this.materializer = new DomMaterializer(this.targetDocument, this.assetManager);
@@ -86,6 +93,7 @@ export class PagePlayer {
     this.typingSimulator = new TypingSimulator(typingSimulatorElement);
     this.openFrameStack = [];
     this.mutator = null;
+    this.playerComponent = playerComponent;
 
     this.styleSheetWatcher = new StyleSheetWatcher({
       root: this.targetDocument,
@@ -202,6 +210,11 @@ export class PagePlayer {
   }
 
   private _handleKeyFrame(keyframeData: Keyframe) {
+    // Update viewport dimensions from keyframe
+    this.viewportWidth = keyframeData.viewportWidth;
+    this.viewportHeight = keyframeData.viewportHeight;
+    this._updateIframeSize();
+
     const activeKeyFrame: OpenFrame = {
       type: 'keyframe',
       document: keyframeData.vdocument,
@@ -424,14 +437,35 @@ export class PagePlayer {
   }
 
   private _handleViewportResizedFrame(frame: ViewportResized): void {
-    // Resize the target document viewport if needed
-    // This might involve updating iframe dimensions or viewport meta tags
+    // Update viewport dimensions and resize iframe
+    this.viewportWidth = frame.width;
+    this.viewportHeight = frame.height;
+    this._updateIframeSize();
     console.debug('Viewport resized:', frame.width, 'x', frame.height);
-    // TODO: Implement viewport resizing logic if needed
   }
 
   private _handleKeyPressedFrame(frame: KeyPressed): void {
     this.typingSimulator.simulateKeyPress(frame);
+  }
+
+  private _updateIframeSize(): void {
+    if (this.viewportWidth > 0 && this.viewportHeight > 0) {
+      this.targetIframe.style.width = `${this.viewportWidth}px`;
+      this.targetIframe.style.height = `${this.viewportHeight}px`;
+
+      // Also update overlay and typing simulator to match
+      this.overlayElement.style.width = `${this.viewportWidth}px`;
+      this.overlayElement.style.height = `${this.viewportHeight}px`;
+      this.typingSimulatorElement.style.width = `${this.viewportWidth}px`;
+      this.typingSimulatorElement.style.height = `${this.viewportHeight}px`;
+
+      console.debug('Updated iframe size to:', this.viewportWidth, 'x', this.viewportHeight);
+
+      // Notify player component to update scaling
+      if (this.playerComponent && this.playerComponent.onViewportChanged) {
+        this.playerComponent.onViewportChanged();
+      }
+    }
   }
 
   private _handleElementFocusedFrame(frame: ElementFocused): void {

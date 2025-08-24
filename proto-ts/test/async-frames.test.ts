@@ -28,7 +28,7 @@ describe("Async Frame Encoders", () => {
         const check = streamObserve(stream);
 
         // Encode keyframe (regular version)
-        await new Keyframe(testVDocument, 0).encode(writer);
+        await new Keyframe(testVDocument, 0, 1920, 1080).encode(writer);
 
         writer.close();
 
@@ -43,7 +43,7 @@ describe("Async Frame Encoders", () => {
         const check = streamObserve(stream);
 
         // Encode keyframe (streaming version)
-        await new Keyframe(testVDocument, 0).encodeStreaming(writer);
+        await new Keyframe(testVDocument, 0, 1920, 1080).encodeStreaming(writer);
 
         writer.close();
 

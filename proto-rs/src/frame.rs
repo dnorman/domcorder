@@ -120,6 +120,8 @@ pub struct TimestampData {
 pub struct KeyframeData {
     pub document: HtmlDocument, // Contains the full document structure
     pub asset_count: u32,
+    pub viewport_width: u32,
+    pub viewport_height: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -97,7 +97,9 @@ export class Timestamp extends Frame {
 export class Keyframe extends Frame {
     constructor(
         public vdocument: VDocument,
-        public assetCount: number
+        public assetCount: number,
+        public viewportWidth: number,
+        public viewportHeight: number
     ) {
         super();
     }
@@ -106,7 +108,9 @@ export class Keyframe extends Frame {
         if (reader.readU32() !== FrameType.Keyframe) throw new Error(`Expected Keyframe frame type`);
         const vdocument = VDocument.decode(reader);
         const assetCount = reader.readU32();
-        return new Keyframe(vdocument, assetCount);
+        const viewportWidth = reader.readU32();
+        const viewportHeight = reader.readU32();
+        return new Keyframe(vdocument, assetCount, viewportWidth, viewportHeight);
     }
 
     // Regular async - yields only at frame boundary
@@ -115,6 +119,8 @@ export class Keyframe extends Frame {
         // Encode the VDocument synchronously
         this.vdocument.encode(w);
         w.u32(this.assetCount);
+        w.u32(this.viewportWidth);
+        w.u32(this.viewportHeight);
         await w.endFrame();
     }
 
@@ -124,6 +130,8 @@ export class Keyframe extends Frame {
         // Encode the VDocument with streaming
         await this.vdocument.encodeStreaming(w);
         w.u32(this.assetCount);
+        w.u32(this.viewportWidth);
+        w.u32(this.viewportHeight);
         await w.endFrame();
     }
 }

@@ -86,7 +86,7 @@ export async function generateTestFrames(writer: Writer): Promise<void> {
 
     // Frame 1: Keyframe with DOM
     const vdocument = testVDocument; // Use the hardcoded VDocument
-    await new Keyframe(vdocument, 1).encode(writer); // 1 asset follows
+    await new Keyframe(vdocument, 1, 1920, 1080).encode(writer); // 1 asset follows
 
     // Frame 2: Asset (sample image data)
     const sampleImageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]); // PNG header

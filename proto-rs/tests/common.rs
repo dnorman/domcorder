@@ -182,6 +182,8 @@ pub fn sample_frames() -> Vec<Frame> {
                 ],
             },
             asset_count: 1,
+            viewport_width: 1920,
+            viewport_height: 1080,
         }),
         Frame::Asset(AssetData {
             asset_id: 123,

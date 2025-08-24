@@ -1,6 +1,7 @@
 {
   "name": "@domcorder/browser-core",
-  "module": "index.ts",
+  "main": "dist/index.js",
+  "module": "src/index.ts",
   "type": "module",
   "scripts": {
     "build": " bun build src/index.ts --outdir dist --target bun",

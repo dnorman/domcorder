@@ -5,17 +5,17 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "demo-app",
     "proto-ts",
-    "browser-core"
+    "browser-core",
+    "player"
   ],
   "scripts": {
-    "dev": "cd demo-app && bun run dev",
-    "build": "cd demo-app && bun run build",
+    "dev": "cd player && bun run dev",
+    "build": "cd player && bun run build",
     "test:proto-ts": "cd proto-ts && bun run test",
     "test:proto-rs": "cd proto-rs && cargo test",
     "test:all": "bun run test:proto-ts && bun run test:proto-rs",
-    "clean": "rm -rf demo-app/node_modules proto-ts/node_modules node_modules && rm -rf proto-rs/target"
+    "clean": "rm -rf player/node_modules proto-ts/node_modules browser-core/node_modules node_modules && rm -rf proto-rs/target"
   },
   "keywords": [
     "dom",

@@ -318,7 +318,7 @@ export class PageRecorder {
     return {
       onKeyFrameStarted: async (ev: KeyFrameStartedEvent) => {
         // Create frame instance and call frameHandler
-        const keyframe = new Keyframe(ev.document, ev.assetCount);
+        const keyframe = new Keyframe(ev.document, ev.assetCount, ev.viewportWidth, ev.viewportHeight);
         console.log("PageRecorder: Creating keyframe", keyframe);
         this.frameHandler(keyframe);
 
