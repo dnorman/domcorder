@@ -120,8 +120,11 @@ export type MouseClickedData = {
 }
 
 export type KeyPressedData = {
-    key: string;
-    // FIXME modifier keys.
+    code: string;
+    altKey: boolean;
+    ctrlKey: boolean;
+    metaKey: boolean;
+    shiftKey: boolean;
 }
 
 

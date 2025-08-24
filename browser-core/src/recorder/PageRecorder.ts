@@ -297,7 +297,11 @@ export class PageRecorder {
         this.frameHandler({
           frameType: FrameType.KeyPressed,
           data: {
-            key: event.key
+            code: event.code,
+            altKey: event.altKey,
+            ctrlKey: event.ctrlKey,
+            metaKey: event.metaKey,
+            shiftKey: event.shiftKey
           }
         });
       },

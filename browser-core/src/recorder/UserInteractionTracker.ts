@@ -1,3 +1,4 @@
+import type { KeyPressedData } from '../common';
 import { NodeIdBiMap } from '../common/NodeIdBiMap';
 import { EventRateLimiter } from './EventRateLimiter';
 
@@ -7,7 +8,7 @@ import { EventRateLimiter } from './EventRateLimiter';
 export interface UserInteractionEventHandler {
   onMouseMove?: (event: { x: number; y: number }) => void;
   onMouseClick?: (event: { x: number; y: number }) => void;
-  onKeyPress?: (event: { key: string; code: string; ctrlKey: boolean; altKey: boolean; shiftKey: boolean; metaKey: boolean }) => void;
+  onKeyPress?: (event: { code: string; ctrlKey: boolean; altKey: boolean; shiftKey: boolean; metaKey: boolean }) => void;
   onWindowResize?: (event: { width: number; height: number }) => void;
   onScroll?: (event: { scrollX: number; scrollY: number }) => void;
   onElementScroll?: (event: { elementId: number; scrollLeft: number; scrollTop: number }) => void;
@@ -275,13 +276,12 @@ export class UserInteractionTracker {
 
   private handleKeyPress = (event: KeyboardEvent): void => {
     this.eventHandler.onKeyPress?.({
-      key: event.key,
       code: event.code,
       ctrlKey: event.ctrlKey,
       altKey: event.altKey,
       shiftKey: event.shiftKey,
       metaKey: event.metaKey
-    });
+    } as KeyPressedData);
   };
 
   private handleWindowResize = (): void => {
