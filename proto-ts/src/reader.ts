@@ -1,11 +1,12 @@
-import { type Frame, FrameType } from "./protocol.ts";
 import { VNode, VDocument } from "./vdom.ts";
+import { Frame, FrameType } from "./frames.ts";
 
 // BufferReader interface for DOM decoding
 interface BufferReader {
     readU32(): number;
     readU64(): bigint;
     readString(): string;
+    readBytes(length: number): Uint8Array;
 }
 
 // Header structure for .dcrr files
@@ -18,7 +19,7 @@ export interface DCRRHeader {
 export class Reader implements BufferReader {
     private buffer: Uint8Array;
     private bufferOffset: number = 0;
-    private controller: ReadableStreamDefaultController<Frame>;
+    private controller?: ReadableStreamDefaultController<Frame>;
     private stream: ReadableStream<Frame>;
     private header: DCRRHeader | null = null;
     private expectHeader: boolean;
@@ -71,7 +72,7 @@ export class Reader implements BufferReader {
                     if (this.bufferOffset < this.buffer.length) {
                         throw new Error("Unexpected end of stream: incomplete frame data");
                     }
-                    this.controller.close();
+                    this.controller?.close();
                     break;
                 }
 
@@ -82,7 +83,7 @@ export class Reader implements BufferReader {
                 await this.processBuffer();
             }
         } catch (error) {
-            this.controller.error(error);
+            this.controller?.error(error);
         } finally {
             reader.releaseLock();
         }
@@ -163,20 +164,15 @@ export class Reader implements BufferReader {
         const startOffset = this.bufferOffset;
 
         try {
-            // Parse frame type
-            const frameType = this.readU32();
+            // Parse frame using Frame.decode (which reads the frame type internally)
+            const frame = Frame.decode(this);
 
-            // Parse frame data based on type
-            const frameData = this.parseFrameData(frameType);
-
-            // Create complete frame
-            const frame: Frame = {
-                frameType: frameType as FrameType,
-                data: frameData
-            };
+            if (frame === null) {
+                throw new Error("Failed to decode frame - unknown or invalid frame type");
+            }
 
             // Emit the frame
-            this.controller.enqueue(frame);
+            this.controller?.enqueue(frame);
 
             // Compact buffer by removing consumed bytes
             this.compactBuffer();
@@ -186,73 +182,11 @@ export class Reader implements BufferReader {
             // Restore offset and re-throw if it's a real error
             this.bufferOffset = startOffset;
 
-            if (error instanceof Error && error.message.includes("Not enough data")) {
+            if (error instanceof Error && error.message.startsWith("Not enough data")) {
                 return false; // Not enough data, wait for more
             }
 
             throw error; // Real parsing error
-        }
-    }
-
-    private parseFrameData(frameType: number): any {
-        switch (frameType) {
-            case FrameType.Timestamp:
-                return { timestamp: Number(this.readU64()) };
-
-            case FrameType.ViewportResized:
-                return {
-                    width: this.readU32(),
-                    height: this.readU32()
-                };
-
-            case FrameType.MouseMoved:
-                return {
-                    x: this.readU32(),
-                    y: this.readU32()
-                };
-
-            case FrameType.MouseClicked:
-                return {
-                    x: this.readU32(),
-                    y: this.readU32()
-                };
-
-            case FrameType.KeyPressed:
-                return {
-                    key: this.readString()
-                };
-
-            case FrameType.ElementFocused:
-                return {
-                    elementId: Number(this.readU64())
-                };
-
-            case FrameType.TextSelectionChanged:
-                return {
-                    selectionStartNodeId: Number(this.readU64()),
-                    selectionStartOffset: this.readU32(),
-                    selectionEndNodeId: Number(this.readU64()),
-                    selectionEndOffset: this.readU32()
-                };
-
-            case FrameType.Keyframe:
-                return {
-                    document: {
-                        docType: this.readString(),
-                        documentElement: DomNode.decode(this)
-                    }
-                };
-
-            case FrameType.DomNodeAdded:
-                return {
-                    parentNodeId: Number(this.readU64()),
-                    index: this.readU32(),
-                    node: DomNode.decode(this)
-                };
-
-            // TODO: Implement remaining DOM frame types
-            default:
-                throw new Error(`Unsupported frame type: ${frameType}`);
         }
     }
 
@@ -296,6 +230,27 @@ export class Reader implements BufferReader {
         this.bufferOffset += length;
 
         return Reader.dec.decode(bytes);
+    }
+
+    readBytes(length: number): Uint8Array {
+        if (this.availableBytes() < length) {
+            throw new Error("Not enough data for bytes");
+        }
+
+        const bytes = this.buffer.slice(this.bufferOffset, this.bufferOffset + length);
+        this.bufferOffset += length;
+        return bytes;
+    }
+
+    peekU32(): number {
+        if (this.availableBytes() < 4) {
+            throw new Error("Not enough data for u32");
+        }
+
+        const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.bufferOffset, 4);
+        const value = view.getUint32(0, false); // big-endian
+        // Note: we don't increment bufferOffset since this is a peek
+        return value;
     }
 
     private compactBuffer(): void {

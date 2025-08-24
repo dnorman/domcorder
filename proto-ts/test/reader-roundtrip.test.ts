@@ -2,8 +2,7 @@
 import { describe, test, expect } from "bun:test";
 import { Writer } from "../src/writer.ts";
 import { Reader } from "../src/reader.ts";
-import { TimestampDataEnc, ViewportResizedDataEnc, KeyPressedDataEnc, MouseMovedDataEnc } from "../src/frames.ts";
-import { FrameType, Frame, TimestampData, ViewportResizedData, KeyPressedData, MouseMovedData } from "../src/protocol.ts";
+import { TimestampDataEnc, ViewportResizedDataEnc, KeyPressedDataEnc, MouseMovedDataEnc, FrameType, Frame } from "../src/frames.ts";
 import { streamObserve, frameStreamObserve } from "./stream-observer.ts";
 
 describe("Writer → Reader Round-trip Tests", () => {
@@ -61,24 +60,24 @@ describe("Writer → Reader Round-trip Tests", () => {
 
         // Verify frame count and types
         expect(frames).toHaveLength(7);
-        expect(frames[0].data.frameType).toBe(FrameType.Timestamp);
-        expect(frames[1].data.frameType).toBe(FrameType.ViewportResized);
-        expect(frames[2].data.frameType).toBe(FrameType.MouseMoved);
-        expect(frames[3].data.frameType).toBe(FrameType.KeyPressed);
-        expect(frames[4].data.frameType).toBe(FrameType.KeyPressed);
-        expect(frames[5].data.frameType).toBe(FrameType.Timestamp);
-        expect(frames[6].data.frameType).toBe(FrameType.KeyPressed);
+        expect(frames[0].data).toBeInstanceOf(TimestampDataEnc);
+        expect(frames[1].data).toBeInstanceOf(ViewportResizedDataEnc);
+        expect(frames[2].data).toBeInstanceOf(MouseMovedDataEnc);
+        expect(frames[3].data).toBeInstanceOf(KeyPressedDataEnc);
+        expect(frames[4].data).toBeInstanceOf(KeyPressedDataEnc);
+        expect(frames[5].data).toBeInstanceOf(TimestampDataEnc);
+        expect(frames[6].data).toBeInstanceOf(KeyPressedDataEnc);
 
         // Verify frame data
-        expect((frames[0].data.data as TimestampData).timestamp).toBe(1000);
-        expect((frames[1].data.data as ViewportResizedData).width).toBe(1920);
-        expect((frames[1].data.data as ViewportResizedData).height).toBe(1080);
-        expect((frames[2].data.data as MouseMovedData).x).toBe(100);
-        expect((frames[2].data.data as MouseMovedData).y).toBe(200);
-        expect((frames[3].data.data as KeyPressedData).key).toBe("a");
-        expect((frames[4].data.data as KeyPressedData).key).toBe("Enter");
-        expect((frames[5].data.data as TimestampData).timestamp).toBe(2000);
-        expect((frames[6].data.data as KeyPressedData).key).toBe("This is a longer string to test string handling");
+        expect((frames[0].data as TimestampDataEnc).timestamp).toBe(1000n);
+        expect((frames[1].data as ViewportResizedDataEnc).width).toBe(1920);
+        expect((frames[1].data as ViewportResizedDataEnc).height).toBe(1080);
+        expect((frames[2].data as MouseMovedDataEnc).x).toBe(100);
+        expect((frames[2].data as MouseMovedDataEnc).y).toBe(200);
+        expect((frames[3].data as KeyPressedDataEnc).key).toBe("a");
+        expect((frames[4].data as KeyPressedDataEnc).key).toBe("Enter");
+        expect((frames[5].data as TimestampDataEnc).timestamp).toBe(2000n);
+        expect((frames[6].data as KeyPressedDataEnc).key).toBe("This is a longer string to test string handling");
     });
 
     test("should handle 1-byte chunks (extreme fragmentation)", async () => {
@@ -108,10 +107,10 @@ describe("Writer → Reader Round-trip Tests", () => {
         const frames = (await readerCheck()).chunks;
 
         expect(frames).toHaveLength(2);
-        expect(frames[0].data.frameType).toBe(FrameType.Timestamp);
-        expect((frames[0].data.data as TimestampData).timestamp).toBe(12345);
-        expect(frames[1].data.frameType).toBe(FrameType.KeyPressed);
-        expect((frames[1].data.data as KeyPressedData).key).toBe("test");
+        expect(frames[0].data).toBeInstanceOf(TimestampDataEnc);
+        expect((frames[0].data as TimestampDataEnc).timestamp).toBe(12345n);
+        expect(frames[1].data).toBeInstanceOf(KeyPressedDataEnc);
+        expect((frames[1].data as KeyPressedDataEnc).key).toBe("test");
     });
 
     test("should handle various chunk sizes", async () => {
@@ -144,11 +143,11 @@ describe("Writer → Reader Round-trip Tests", () => {
             const frames = (await readerCheck()).chunks;
 
             expect(frames).toHaveLength(2);
-            expect(frames[0].data.frameType).toBe(FrameType.ViewportResized);
-            expect((frames[0].data.data as ViewportResizedData).width).toBe(800);
-            expect((frames[0].data.data as ViewportResizedData).height).toBe(600);
-            expect(frames[1].data.frameType).toBe(FrameType.KeyPressed);
-            expect((frames[1].data.data as KeyPressedData).key).toBe(`chunk-size-${chunkSize}`);
+            expect(frames[0].data).toBeInstanceOf(ViewportResizedDataEnc);
+            expect((frames[0].data as ViewportResizedDataEnc).width).toBe(800);
+            expect((frames[0].data as ViewportResizedDataEnc).height).toBe(600);
+            expect(frames[1].data).toBeInstanceOf(KeyPressedDataEnc);
+            expect((frames[1].data as KeyPressedDataEnc).key).toBe(`chunk-size-${chunkSize}`);
         }
     });
 
@@ -192,11 +191,11 @@ describe("Writer → Reader Round-trip Tests", () => {
 
             // Check frames
             expect(frames).toHaveLength(2);
-            expect(frames[0].data.frameType).toBe(FrameType.Timestamp);
-            expect((frames[0].data.data as TimestampData).timestamp).toBe(9999);
-            expect(frames[1].data.frameType).toBe(FrameType.ViewportResized);
-            expect((frames[1].data.data as ViewportResizedData).width).toBe(1024);
-            expect((frames[1].data.data as ViewportResizedData).height).toBe(768);
+            expect(frames[0].data).toBeInstanceOf(TimestampDataEnc);
+            expect((frames[0].data as TimestampDataEnc).timestamp).toBe(9999n);
+            expect(frames[1].data).toBeInstanceOf(ViewportResizedDataEnc);
+            expect((frames[1].data as ViewportResizedDataEnc).width).toBe(1024);
+            expect((frames[1].data as ViewportResizedDataEnc).height).toBe(768);
         }
     });
 });

@@ -2,8 +2,7 @@
 import { describe, test, expect } from "bun:test";
 import { Writer } from "../src/writer.ts";
 import { Reader } from "../src/reader.ts";
-import { TimestampDataEnc, ViewportResizedDataEnc, KeyPressedDataEnc } from "../src/frames.ts";
-import { FrameType, Frame, TimestampData, ViewportResizedData, KeyPressedData } from "../src/protocol.ts";
+import { TimestampDataEnc, ViewportResizedDataEnc, KeyPressedDataEnc, FrameType, Frame } from "../src/frames.ts";
 import { streamObserve, frameStreamObserve } from "./stream-observer.ts";
 
 describe("Reader Basic Functionality", () => {
@@ -42,8 +41,8 @@ describe("Reader Basic Functionality", () => {
 
         expect(frames).toHaveLength(1);
         const frame = frames[0].data;
-        expect(frame.frameType).toBe(FrameType.Timestamp);
-        expect((frame.data as TimestampData).timestamp).toBe(1234567890);
+        expect(frame).toBeInstanceOf(TimestampDataEnc);
+        expect((frame as TimestampDataEnc).timestamp).toBe(1234567890n);
     });
 
     test("should read multiple simple frames", async () => {
@@ -81,17 +80,17 @@ describe("Reader Basic Functionality", () => {
         expect(frames).toHaveLength(3);
 
         // Check timestamp frame
-        expect(frames[0].data.frameType).toBe(FrameType.Timestamp);
-        expect((frames[0].data.data as TimestampData).timestamp).toBe(1000);
+        expect(frames[0].data).toBeInstanceOf(TimestampDataEnc);
+        expect((frames[0].data as TimestampDataEnc).timestamp).toBe(1000n);
 
         // Check viewport frame
-        expect(frames[1].data.frameType).toBe(FrameType.ViewportResized);
-        expect((frames[1].data.data as ViewportResizedData).width).toBe(1920);
-        expect((frames[1].data.data as ViewportResizedData).height).toBe(1080);
+        expect(frames[1].data).toBeInstanceOf(ViewportResizedDataEnc);
+        expect((frames[1].data as ViewportResizedDataEnc).width).toBe(1920);
+        expect((frames[1].data as ViewportResizedDataEnc).height).toBe(1080);
 
         // Check key pressed frame
-        expect(frames[2].data.frameType).toBe(FrameType.KeyPressed);
-        expect((frames[2].data.data as KeyPressedData).key).toBe("Enter");
+        expect(frames[2].data).toBeInstanceOf(KeyPressedDataEnc);
+        expect((frames[2].data as KeyPressedDataEnc).key).toBe("Enter");
     });
 
     test("should handle file mode with header", async () => {
@@ -136,7 +135,7 @@ describe("Reader Basic Functionality", () => {
         expect(header!.createdAt).toBe(testTimestamp);
 
         expect(frames).toHaveLength(1);
-        expect(frames[0].data.frameType).toBe(FrameType.Timestamp);
-        expect((frames[0].data.data as TimestampData).timestamp).toBe(5000);
+        expect(frames[0].data).toBeInstanceOf(TimestampDataEnc);
+        expect((frames[0].data as TimestampDataEnc).timestamp).toBe(5000n);
     });
 });

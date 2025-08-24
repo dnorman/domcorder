@@ -2,7 +2,7 @@
 import { describe, test, expect } from "bun:test";
 import { Reader } from "../src/reader.ts";
 import { frameStreamObserve } from "./stream-observer.ts";
-import { Frame } from "../src/protocol.ts";
+import { Frame } from "../src/frames.ts";
 
 describe("Reader Error Handling", () => {
     test("should fail immediately on invalid magic bytes when expecting header", async () => {
@@ -78,7 +78,7 @@ describe("Reader Error Handling", () => {
         await expect(async () => {
             const streamReader = frameStream.getReader();
             await streamReader.read();
-        }).toThrow("Unsupported frame type: 999");
+        }).toThrow("Failed to decode frame - unknown or invalid frame type");
     });
 
     test("should fail on string with invalid length", async () => {
