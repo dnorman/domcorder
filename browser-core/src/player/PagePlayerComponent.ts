@@ -6,6 +6,7 @@ export class PagePlayerComponent {
 
   private player: PagePlayer | null;
   private readonly overlayElement: HTMLDivElement;
+  private readonly typingSimulatorElement: HTMLDivElement;
   private readonly iframe: HTMLIFrameElement;
 
   private readonly frameQueue: Frame[] = [];
@@ -19,6 +20,8 @@ export class PagePlayerComponent {
     
     this.overlayElement = container.ownerDocument.createElement("div");
     this.overlayElement.className = "iframe-overlay";
+    this.typingSimulatorElement = container.ownerDocument.createElement("div");
+    this.typingSimulatorElement.className = "typing-simulator-container";
     this.iframe = container.ownerDocument.createElement("iframe");
     this.iframe.className = "iframe";
     
@@ -27,6 +30,7 @@ export class PagePlayerComponent {
     
     shadow.appendChild(this.iframe);
     shadow.appendChild(this.overlayElement);
+    shadow.appendChild(this.typingSimulatorElement);
 
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(`
@@ -46,6 +50,25 @@ export class PagePlayerComponent {
         z-index: 1000;
         overflow: hidden;
       }
+
+      .typing-simulator-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        right: 0;
+        z-index: 2000;
+        pointer-events: none;
+        overflow: hidden;
+        opacity: 0.7;
+      }
+
+      .typing-simulator-container .keyboard-simulator {
+        bottom: 0;
+        right: 0;
+        scale: 0.7;
+        transform-origin: bottom right;
+      }
     `);
 
     shadow.adoptedStyleSheets = [sheet];
@@ -56,7 +79,7 @@ export class PagePlayerComponent {
     // because the player needs the iframe's contentDocument to be available
     // and the iframe's contentDocument is not available until the iframe has loaded.
     new Promise(res => this.iframe.addEventListener('load', res, { once: true })).then(() => {
-      this.player = new PagePlayer(this.iframe, this.overlayElement);
+      this.player = new PagePlayer(this.iframe, this.overlayElement, this.typingSimulatorElement);
 
       for (const frame of this.frameQueue) {
         this.player.handleFrame(frame);

@@ -12,6 +12,7 @@ import {
   type DomTextChangedData,
   type Frame,
   type KeyframeData,
+  type KeyPressedData,
   type AdoptedStyleSheetsChangedData,
   type NewAdoptedStyleSheetData,
   type WindowScrolledData,
@@ -26,6 +27,7 @@ import { StyleSheetWatcher, type StyleSheetWatcherEvent } from "../recorder/Styl
 import { AdoptedStyleSheetMutator } from "./AdoptedStyleSheetMutator";
 import { MouseSimulator } from "./MouseSimulator";
 import { SelectionSimulator } from "./SelectionSimulator";
+import { TypingSimulator } from "./TypingSimulator";
 
 
 export type OpenFrame = {
@@ -57,7 +59,9 @@ export class PagePlayer {
   private readonly materializer: DomMaterializer;
   private readonly assetManager: AssetManager;
   private readonly overlayElement: HTMLElement;
+  private readonly typingSimulatorElement: HTMLElement;
   private readonly mouseSimulator: MouseSimulator;
+  private readonly typingSimulator: TypingSimulator;
   private selectionSimulator: SelectionSimulator | null;
   
   private readonly openFrameStack: OpenFrame[];
@@ -66,12 +70,14 @@ export class PagePlayer {
   private readonly styleSheetWatcher: StyleSheetWatcher;
   private readonly adoptedStyleSheetMutator: AdoptedStyleSheetMutator;
 
-  constructor(targetIframe: HTMLIFrameElement, overlayElement: HTMLElement) {
+  constructor(targetIframe: HTMLIFrameElement, overlayElement: HTMLElement, typingSimulatorElement: HTMLElement) {
     this.targetDocument = targetIframe.contentDocument!;
     this.assetManager = new AssetManager(this.targetDocument);
     this.materializer = new DomMaterializer(this.targetDocument, this.assetManager);
     this.overlayElement = overlayElement;
+    this.typingSimulatorElement = typingSimulatorElement;
     this.mouseSimulator = new MouseSimulator(overlayElement);
+    this.typingSimulator = new TypingSimulator(typingSimulatorElement);
     this.openFrameStack = [];
     this.mutator = null;
 
@@ -150,6 +156,10 @@ export class PagePlayer {
 
       case FrameType.MouseClicked:
         this._handleMouseClickedFrame(frame.data as MouseClickedData);
+        break;
+
+      case FrameType.KeyPressed:
+        this._handleKeyPressedFrame(frame.data as KeyPressedData);
         break;
 
       case FrameType.TextSelectionChanged:
@@ -384,6 +394,10 @@ export class PagePlayer {
 
   private _handleMouseClickedFrame(mouseClickedData: MouseClickedData): void {
     this.mouseSimulator.click(mouseClickedData.x, mouseClickedData.y);
+  }
+
+  private _handleKeyPressedFrame(keyPressedData: KeyPressedData): void {
+    this.typingSimulator.simulateKeyPress(keyPressedData);
   }
 
   private _handleTextSelectionChangedFrame(textSelectionChangedData: TextSelectionChangedData): void {

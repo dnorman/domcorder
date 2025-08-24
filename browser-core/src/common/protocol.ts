@@ -129,12 +129,12 @@ export type KeyPressedData = {
 
 
 export type ElementFocusedData = {
-    id: string;
+    id: number;
 }
 
 // FIXME this is new
 export type ElementBlurredData = {
-    id: string;
+    id: number;
 }
 
 // For some reason the node ids in here were strings. They are numbers now.
