@@ -13,17 +13,17 @@ export class DomChangeDetector {
   private readonly dirtySubtrees = new Set<Node>();
 
   private readonly callback: (ops: DomOperation[]) => void;
-  private readonly batchTimeoutMs: number;
-  private batchTimeout: number | null = null;
+  private readonly batchIntervalMs: number;
+  private batchInterval: number | null = null;
 
-  constructor(liveDomRoot: Node, liveNodeMap: NodeIdBiMap, callback: (ops: DomOperation[]) => void, batchTimeoutMs: number = 1000) {
+  constructor(liveDomRoot: Node, liveNodeMap: NodeIdBiMap, callback: (ops: DomOperation[]) => void, batchIntervalMs: number = 1000) {
     this.liveDomRoot = liveDomRoot;
     this.snapshotDomRoot = liveDomRoot.cloneNode(true);
     this.liveNodeMap = liveNodeMap;
     this.snapshotNodeMap = new NodeIdBiMap();
     this.snapshotNodeMap.assignNodeIdsToSubTree(this.snapshotDomRoot);
     this.callback = callback;
-    this.batchTimeoutMs = batchTimeoutMs;
+    this.batchIntervalMs = batchIntervalMs;
 
     this.liveDomObserver = new MutationObserver(this.handleMutations.bind(this));
 
@@ -33,6 +33,11 @@ export class DomChangeDetector {
       childList: true,
       characterData: true,
     });
+
+    // Start regular interval processing
+    this.batchInterval = setInterval(() => {
+      this.processDirtyRegions();
+    }, this.batchIntervalMs) as unknown as number;
   }
 
   public getSnapshotDomRoot(): Node {
@@ -60,14 +65,7 @@ export class DomChangeDetector {
       // and we should then remove it from the dirty regions.
     }
 
-    // Batch process changes
-    if (this.batchTimeout) {
-      clearTimeout(this.batchTimeout);
-    }
-
-    this.batchTimeout = setTimeout(() => {
-      this.processDirtyRegions();
-    }, this.batchTimeoutMs) as unknown as number;
+    // No timeout logic needed - the interval will process dirty regions regularly
   }
 
   private processDirtyRegions(): void {
@@ -271,9 +269,9 @@ export class DomChangeDetector {
 
   disconnect(): void {
     this.liveDomObserver.disconnect();
-    if (this.batchTimeout) {
-      clearTimeout(this.batchTimeout);
-      this.batchTimeout = null;
+    if (this.batchInterval) {
+      clearInterval(this.batchInterval);
+      this.batchInterval = null;
     }
   }
 }

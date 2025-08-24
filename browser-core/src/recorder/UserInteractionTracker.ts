@@ -1,4 +1,3 @@
-import type { KeyPressedData } from '../common';
 import { NodeIdBiMap } from '../common/NodeIdBiMap';
 import { EventRateLimiter } from './EventRateLimiter';
 
@@ -34,11 +33,11 @@ export interface UserInteractionTrackerConfig {
  * Default configuration values
  */
 const DEFAULT_CONFIG: Required<UserInteractionTrackerConfig> = {
-  mouseMoveRateLimitMs: 250,  // 250ms for mouse movement
-  scrollRateLimitMs: 250,     // 250ms for scroll events
-  resizeRateLimitMs: 500,    // 1000ms for resize events
-  selectionRateLimitMs: 500, // 1000ms for selection events
-  elementScrollRateLimitMs: 250 // 500ms for element scroll events
+  mouseMoveRateLimitMs: 100,  
+  scrollRateLimitMs: 100,     
+  resizeRateLimitMs: 250,    
+  selectionRateLimitMs: 250, 
+  elementScrollRateLimitMs: 100
 };
 
 export class UserInteractionTracker {
@@ -281,7 +280,7 @@ export class UserInteractionTracker {
       altKey: event.altKey,
       shiftKey: event.shiftKey,
       metaKey: event.metaKey
-    } as KeyPressedData);
+    });
   };
 
   private handleWindowResize = (): void => {
