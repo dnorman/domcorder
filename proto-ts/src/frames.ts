@@ -84,7 +84,6 @@ export class KeyframeDataEnc extends Frame {
 
     static decode(reader: BufferReader): KeyframeDataEnc {
         if (reader.readU32() !== FrameType.Keyframe) throw new Error(`Expected Keyframe frame type`);
-        const docType = reader.readString(); // Read and ignore doctype for now
         const vdocument = VDocument.decode(reader);
         return new KeyframeDataEnc(vdocument);
     }
@@ -92,12 +91,6 @@ export class KeyframeDataEnc extends Frame {
     // Regular async - yields only at frame boundary
     async encode(w: Writer): Promise<void> {
         w.u32(FrameType.Keyframe);
-
-        // FIXME this needs to be removed.
-        // Extract doctype from document - use full DOCTYPE string to match Rust
-        const docType = "<!DOCTYPE html>";
-        w.strUtf8(docType);
-
         // Encode the VDocument synchronously
         this.vdocument.encode(w);
         await w.endFrame();
@@ -106,12 +99,6 @@ export class KeyframeDataEnc extends Frame {
     // Streaming async - can yield during DOM recursion
     async encodeStreaming(w: Writer): Promise<void> {
         w.u32(FrameType.Keyframe);
-
-        // FIXME this needs to be removed.
-        // Extract doctype from document - use full DOCTYPE string to match Rust
-        const docType = "<!DOCTYPE html>";
-        w.strUtf8(docType);
-
         // Encode the VDocument with streaming
         await this.vdocument.encodeStreaming(w);
         await w.endFrame();

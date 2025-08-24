@@ -94,8 +94,7 @@ pub struct TimestampData {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeyframeData {
-    pub doc_type: String,
-    pub document: HtmlDocument, // Now contains the full document structure
+    pub document: HtmlDocument, // Contains the full document structure
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

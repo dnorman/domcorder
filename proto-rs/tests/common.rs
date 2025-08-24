@@ -7,7 +7,6 @@ pub fn sample_frames() -> Vec<Frame> {
             timestamp: 1722550000000, // Use a fixed timestamp to match frames-basic.bin
         }),
         Frame::Keyframe(KeyframeData {
-            doc_type: "<!DOCTYPE html>".to_string(),
             document: HtmlDocument {
                 children: vec![
                     // Child 0: DOCTYPE node
