@@ -141,6 +141,7 @@ export const PlayerWrapper: React.FC<PlayerWrapperProps> = ({ recording }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const playerRef = useRef<PagePlayerComponent | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isStreaming, setIsStreaming] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [progress, setProgress] = useState<{ loaded: number; total: number } | null>(null);
 
@@ -182,6 +183,7 @@ export const PlayerWrapper: React.FC<PlayerWrapperProps> = ({ recording }) => {
 
         try {
             setIsLoading(true);
+            setIsStreaming(false);
             setError(null);
             setProgress(null);
 
@@ -222,8 +224,9 @@ export const PlayerWrapper: React.FC<PlayerWrapperProps> = ({ recording }) => {
                     console.log('Frame chunk reader done');
                 }
             });
-            
 
+
+            let isFirstChunk = true;
             try {
                 while (true) {
                     const { done, value } = await reader.read();
@@ -233,25 +236,35 @@ export const PlayerWrapper: React.FC<PlayerWrapperProps> = ({ recording }) => {
                         break;
                     }
 
+                    // On first chunk, switch from loading to playing
+                    if (isFirstChunk) {
+                        setIsLoading(false);
+                        setIsStreaming(true);
+                        console.log('Recording playback started');
+                        isFirstChunk = false;
+                    }
+
                     // Update progress
                     loadedBytes += value.length;
                     setProgress({ loaded: loadedBytes, total: totalBytes });
 
                     console.log("Reading frame chunk from server", value.length);
                     frameChunkReader.read(value);
-                    
+
                 }
             } finally {
                 reader.releaseLock();
             }
 
-            setIsLoading(false);
-            console.log('Recording playback started');
+            // Mark streaming as complete
+            setIsStreaming(false);
+            console.log('Recording playback completed');
 
         } catch (err) {
             console.error('Error loading recording:', err);
             setError(err instanceof Error ? err.message : 'Failed to load recording');
             setIsLoading(false);
+            setIsStreaming(false);
         }
     };
 
@@ -272,6 +285,8 @@ export const PlayerWrapper: React.FC<PlayerWrapperProps> = ({ recording }) => {
                         <RecordingDetails>
                             <span>📁 {(recording.size / 1024 / 1024).toFixed(1)} MB</span>
                             <span>🕒 {new Date(recording.created).toLocaleString()}</span>
+                            {isStreaming && <span>▶️ Playing</span>}
+                            {isLoading && <span>⏳ Loading...</span>}
                         </RecordingDetails>
                     </RecordingInfo>
                 ) : (
@@ -282,11 +297,11 @@ export const PlayerWrapper: React.FC<PlayerWrapperProps> = ({ recording }) => {
                 )}
             </PlayerHeader>
 
-            {isLoading && (
+            {isLoading && !isStreaming && (
                 <Overlay>
                     <OverlayContent>
                         <Spinner />
-                        <p>Loading recording...</p>
+                        <p>Connecting to recording...</p>
                         {progress && <Progress>{formatProgress()}</Progress>}
                     </OverlayContent>
                 </Overlay>

@@ -6,6 +6,7 @@ interface Recording {
     filename: string;
     size: number;
     created: string;
+    is_active: boolean;
 }
 
 interface RecordingsListProps {
@@ -94,7 +95,7 @@ const RecordingsGrid = styled.div`
   gap: 0.5rem;
 `;
 
-const RecordingItem = styled.div<{ selected: boolean }>`
+const RecordingItem = styled.div<{ selected: boolean; $isActive: boolean }>`
   border: 1px solid #dee2e6;
   border-radius: 8px;
   padding: 1rem;
@@ -103,12 +104,16 @@ const RecordingItem = styled.div<{ selected: boolean }>`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-color: ${props => props.selected ? '#3498db' : '#dee2e6'};
-  background: ${props => props.selected ? '#e3f2fd' : 'white'};
+  border-color: ${props =>
+        props.selected ? '#3498db' :
+            props.$isActive ? '#e74c3c' : '#dee2e6'};
+  background: ${props =>
+        props.selected ? '#e3f2fd' :
+            props.$isActive ? '#fdf2f2' : 'white'};
 
   &:hover {
-    border-color: #3498db;
-    box-shadow: 0 2px 4px rgba(52, 152, 219, 0.1);
+    border-color: ${props => props.$isActive ? '#c0392b' : '#3498db'};
+    box-shadow: 0 2px 4px rgba(${props => props.$isActive ? '231, 76, 60' : '52, 152, 219'}, 0.1);
   }
 `;
 
@@ -258,6 +263,7 @@ export const RecordingsList: React.FC<RecordingsListProps> = ({
                             <RecordingItem
                                 key={recording.id}
                                 selected={selectedRecording?.id === recording.id}
+                                $isActive={recording.is_active}
                                 onClick={() => onRecordingSelect(recording)}
                             >
                                 <RecordingInfo>
@@ -267,6 +273,7 @@ export const RecordingsList: React.FC<RecordingsListProps> = ({
                                     <RecordingMeta>
                                         <span>📁 {formatFileSize(recording.size)}</span>
                                         <span>🕒 {formatDate(recording.created)}</span>
+                                        {recording.is_active && <span>🔴 Recording in progress</span>}
                                     </RecordingMeta>
                                 </RecordingInfo>
                                 <RecordingActions>

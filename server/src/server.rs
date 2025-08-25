@@ -12,7 +12,7 @@ use futures::TryStreamExt;
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::AsyncWriteExt;
 
-use tokio_util::io::StreamReader;
+use tokio_util::io::{ReaderStream, StreamReader};
 use tower_http::cors::CorsLayer;
 use tracing::{debug, error, info, warn};
 
@@ -228,20 +228,18 @@ async fn handle_get_recording(
         return (StatusCode::NOT_FOUND, "Recording not found").into_response();
     }
 
-    match state.get_recording(&filename) {
-        Ok(data) => {
-            // Skip the 32-byte DCRR header
-            if data.len() < 32 {
-                return (StatusCode::BAD_REQUEST, "Invalid recording file").into_response();
-            }
-
-            let frame_data = &data[32..];
+    match state.get_recording_stream(&filename).await {
+        Ok(stream) => {
+            // Convert the AsyncRead into a stream of bytes
+            let stream = ReaderStream::new(stream);
+            let body = axum::body::Body::from_stream(stream);
 
             Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CONTENT_TYPE, "application/octet-stream")
                 .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-                .body(axum::body::Body::from(frame_data.to_vec()))
+                .header(header::CACHE_CONTROL, "no-cache") // Prevent caching for live streams
+                .body(body)
                 .unwrap()
                 .into_response()
         }
