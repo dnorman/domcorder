@@ -81,7 +81,11 @@ export class PagePlayer {
   private readonly targetIframe: HTMLIFrameElement;
   private readonly playerComponent?: any;
 
-  constructor(targetIframe: HTMLIFrameElement, overlayElement: HTMLElement, typingSimulatorElement: HTMLElement, playerComponent?: any) {
+  constructor(
+    targetIframe: HTMLIFrameElement,
+    overlayElement: HTMLElement,
+    typingSimulatorElement: HTMLElement,
+    playerComponent?: any) {
     this.targetIframe = targetIframe;
     this.targetDocument = targetIframe.contentDocument!;
     this.assetManager = new AssetManager(this.targetDocument);
@@ -451,13 +455,7 @@ export class PagePlayer {
     if (this.viewportWidth > 0 && this.viewportHeight > 0) {
       this.targetIframe.style.width = `${this.viewportWidth}px`;
       this.targetIframe.style.height = `${this.viewportHeight}px`;
-
-      // Also update overlay and typing simulator to match
-      this.overlayElement.style.width = `${this.viewportWidth}px`;
-      this.overlayElement.style.height = `${this.viewportHeight}px`;
-      this.typingSimulatorElement.style.width = `${this.viewportWidth}px`;
-      this.typingSimulatorElement.style.height = `${this.viewportHeight}px`;
-
+      
       console.debug('Updated iframe size to:', this.viewportWidth, 'x', this.viewportHeight);
 
       // Notify player component to update scaling

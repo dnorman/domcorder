@@ -18,6 +18,7 @@ export class PagePlayerComponent {
   private currentScale: number = 1;
 
   private readonly readyPromise: Deferred<void>;
+  keyboardContainer: HTMLDivElement;
 
   constructor(container: HTMLElement) {
     this.readyPromise = new Deferred<void>();
@@ -30,6 +31,10 @@ export class PagePlayerComponent {
     this.overlayElement.className = "iframe-overlay";
     this.typingSimulatorElement = container.ownerDocument.createElement("div");
     this.typingSimulatorElement.className = "typing-simulator-container";
+
+    this.keyboardContainer = container.ownerDocument.createElement("div");
+    this.keyboardContainer.className = "keyboard-container";
+
     this.iframe = container.ownerDocument.createElement("iframe");
     this.iframe.className = "iframe";
 
@@ -46,6 +51,8 @@ export class PagePlayerComponent {
     playerContent.appendChild(this.iframe);
     playerContent.appendChild(this.overlayElement);
     playerContent.appendChild(this.typingSimulatorElement);
+
+    this.typingSimulatorElement.appendChild(this.keyboardContainer);
 
     playerContainer.appendChild(playerContent);
     shadow.appendChild(playerContainer);
@@ -90,6 +97,8 @@ export class PagePlayerComponent {
         position: absolute;
         top: 0;
         left: 0;
+        bottom: 0;
+        right: 0;
         z-index: 1000;
         overflow: hidden;
       }
@@ -98,13 +107,16 @@ export class PagePlayerComponent {
         position: absolute;
         top: 0;
         left: 0;
+        bottom: 0;
+        right: 0;
         z-index: 2000;
         pointer-events: none;
         overflow: hidden;
         opacity: 0.7;
       }
 
-      .typing-simulator-container .keyboard-simulator {
+      .typing-simulator-container .keyboard-container {
+        position: absolute;
         bottom: 0;
         right: 0;
         scale: 0.7;
@@ -126,7 +138,7 @@ export class PagePlayerComponent {
     // because the player needs the iframe's contentDocument to be available
     // and the iframe's contentDocument is not available until the iframe has loaded.
     new Promise(res => this.iframe.addEventListener('load', res, { once: true })).then(() => {
-      this.player = new PagePlayer(this.iframe, this.overlayElement, this.typingSimulatorElement, this);
+      this.player = new PagePlayer(this.iframe, this.overlayElement, this.keyboardContainer, this);
 
       for (const frame of this.frameQueue) {
         this.player.handleFrame(frame);

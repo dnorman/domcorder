@@ -26,10 +26,12 @@ const DEFAULT_CONFIG: Required<TypingSimulatorConfig> = {
 interface KeyDefinition {
   code: string;
   label: string;
+  shiftLabel?: string; // Shifted character (displayed on top)
   row: number;
   col: number;
   width?: number; // Relative width (1 = normal key, 1.5 = wider key, etc.)
   arrowType?: 'up' | 'down' | 'left' | 'right'; // Special positioning for arrow keys
+  expand?: boolean; // Whether this key should expand to fill remaining space
 }
 
 /**
@@ -37,89 +39,89 @@ interface KeyDefinition {
  */
 const KEYBOARD_LAYOUT: KeyDefinition[] = [
   // Row 0 - Function keys (13 keys total, wider to match 15 unit row width)
-  { code: 'Escape', label: 'esc', row: 0, col: 0, width: 1.154 },
-  { code: 'F1', label: 'F1', row: 0, col: 1, width: 1.154 },
-  { code: 'F2', label: 'F2', row: 0, col: 2, width: 1.154 },
-  { code: 'F3', label: 'F3', row: 0, col: 3, width: 1.154 },
-  { code: 'F4', label: 'F4', row: 0, col: 4, width: 1.154 },
-  { code: 'F5', label: 'F5', row: 0, col: 5, width: 1.154 },
-  { code: 'F6', label: 'F6', row: 0, col: 6, width: 1.154 },
-  { code: 'F7', label: 'F7', row: 0, col: 7, width: 1.154 },
-  { code: 'F8', label: 'F8', row: 0, col: 8, width: 1.154 },
-  { code: 'F9', label: 'F9', row: 0, col: 9, width: 1.154 },
-  { code: 'F10', label: 'F10', row: 0, col: 10, width: 1.154 },
-  { code: 'F11', label: 'F11', row: 0, col: 11, width: 1.154 },
-  { code: 'F12', label: 'F12', row: 0, col: 12, width: 1.154 },
+  { code: 'Escape', label: 'esc', row: 0, col: 0, width: 1.2, expand: true },
+  { code: 'F1', label: 'F1', row: 0, col: 1, width: 1.2 },
+  { code: 'F2', label: 'F2', row: 0, col: 2, width: 1.2 },
+  { code: 'F3', label: 'F3', row: 0, col: 3, width: 1.2 },
+  { code: 'F4', label: 'F4', row: 0, col: 4, width: 1.2 },
+  { code: 'F5', label: 'F5', row: 0, col: 5, width: 1.2 },
+  { code: 'F6', label: 'F6', row: 0, col: 6, width: 1.2 },
+  { code: 'F7', label: 'F7', row: 0, col: 7, width: 1.2 },
+  { code: 'F8', label: 'F8', row: 0, col: 8, width: 1.2 },
+  { code: 'F9', label: 'F9', row: 0, col: 9, width: 1.2 },
+  { code: 'F10', label: 'F10', row: 0, col: 10, width: 1.2 },
+  { code: 'F11', label: 'F11', row: 0, col: 11, width: 1.2 },
+  { code: 'F12', label: 'F12', row: 0, col: 12, width: 1.2 },
 
   // Row 1 - Number row (15 units total)
-  { code: 'Backquote', label: '`', row: 1, col: 0 },
-  { code: 'Digit1', label: '1', row: 1, col: 1 },
-  { code: 'Digit2', label: '2', row: 1, col: 2 },
-  { code: 'Digit3', label: '3', row: 1, col: 3 },
-  { code: 'Digit4', label: '4', row: 1, col: 4 },
-  { code: 'Digit5', label: '5', row: 1, col: 5 },
-  { code: 'Digit6', label: '6', row: 1, col: 6 },
-  { code: 'Digit7', label: '7', row: 1, col: 7 },
-  { code: 'Digit8', label: '8', row: 1, col: 8 },
-  { code: 'Digit9', label: '9', row: 1, col: 9 },
-  { code: 'Digit0', label: '0', row: 1, col: 10 },
-  { code: 'Minus', label: '-', row: 1, col: 11 },
-  { code: 'Equal', label: '=', row: 1, col: 12 },
-  { code: 'Backspace', label: '⌫', row: 1, col: 13, width: 2 },
+  { code: 'Backquote', label: '`', shiftLabel: '~', row: 1, col: 0 },
+  { code: 'Digit1', label: '1', shiftLabel: '!', row: 1, col: 1 },
+  { code: 'Digit2', label: '2', shiftLabel: '@', row: 1, col: 2 },
+  { code: 'Digit3', label: '3', shiftLabel: '#', row: 1, col: 3 },
+  { code: 'Digit4', label: '4', shiftLabel: '$', row: 1, col: 4 },
+  { code: 'Digit5', label: '5', shiftLabel: '%', row: 1, col: 5 },
+  { code: 'Digit6', label: '6', shiftLabel: '^', row: 1, col: 6 },
+  { code: 'Digit7', label: '7', shiftLabel: '&', row: 1, col: 7 },
+  { code: 'Digit8', label: '8', shiftLabel: '*', row: 1, col: 8 },
+  { code: 'Digit9', label: '9', shiftLabel: '(', row: 1, col: 9 },
+  { code: 'Digit0', label: '0', shiftLabel: ')', row: 1, col: 10 },
+  { code: 'Minus', label: '-', shiftLabel: '_', row: 1, col: 11 },
+  { code: 'Equal', label: '=', shiftLabel: '+', row: 1, col: 12 },
+  { code: 'Backspace', label: '⌫', row: 1, col: 13, width: 2.5, expand: true },
 
   // Row 2 - QWERTY row (15 units total)
-  { code: 'Tab', label: '→|', row: 2, col: 0, width: 1.5 },
-  { code: 'KeyQ', label: 'q', row: 2, col: 1 },
-  { code: 'KeyW', label: 'w', row: 2, col: 2 },
-  { code: 'KeyE', label: 'e', row: 2, col: 3 },
-  { code: 'KeyR', label: 'r', row: 2, col: 4 },
-  { code: 'KeyT', label: 't', row: 2, col: 5 },
-  { code: 'KeyY', label: 'y', row: 2, col: 6 },
-  { code: 'KeyU', label: 'u', row: 2, col: 7 },
-  { code: 'KeyI', label: 'i', row: 2, col: 8 },
-  { code: 'KeyO', label: 'o', row: 2, col: 9 },
-  { code: 'KeyP', label: 'p', row: 2, col: 10 },
-  { code: 'BracketLeft', label: '[', row: 2, col: 11 },
-  { code: 'BracketRight', label: ']', row: 2, col: 12 },
-  { code: 'Backslash', label: '\\', row: 2, col: 13, width: 2 },
+  { code: 'Tab', label: '→|', row: 2, col: 0, width: 2.5, expand: true },
+  { code: 'KeyQ', label: 'Q', row: 2, col: 1 },
+  { code: 'KeyW', label: 'W', row: 2, col: 2 },
+  { code: 'KeyE', label: 'E', row: 2, col: 3 },
+  { code: 'KeyR', label: 'R', row: 2, col: 4 },
+  { code: 'KeyT', label: 'T', row: 2, col: 5 },
+  { code: 'KeyY', label: 'Y', row: 2, col: 6 },
+  { code: 'KeyU', label: 'U', row: 2, col: 7 },
+  { code: 'KeyI', label: 'I', row: 2, col: 8 },
+  { code: 'KeyO', label: 'O', row: 2, col: 9 },
+  { code: 'KeyP', label: 'P', row: 2, col: 10 },
+  { code: 'BracketLeft', label: '[', shiftLabel: '{', row: 2, col: 11 },
+  { code: 'BracketRight', label: ']', shiftLabel: '}', row: 2, col: 12 },
+  { code: 'Backslash', label: '\\', shiftLabel: '|', row: 2, col: 13, width: 1 },
 
   // Row 3 - ASDF row (15 units total)
-  { code: 'CapsLock', label: '⇪', row: 3, col: 0, width: 1.75 },
-  { code: 'KeyA', label: 'a', row: 3, col: 1 },
-  { code: 'KeyS', label: 's', row: 3, col: 2 },
-  { code: 'KeyD', label: 'd', row: 3, col: 3 },
-  { code: 'KeyF', label: 'f', row: 3, col: 4 },
-  { code: 'KeyG', label: 'g', row: 3, col: 5 },
-  { code: 'KeyH', label: 'h', row: 3, col: 6 },
-  { code: 'KeyJ', label: 'j', row: 3, col: 7 },
-  { code: 'KeyK', label: 'k', row: 3, col: 8 },
-  { code: 'KeyL', label: 'l', row: 3, col: 9 },
-  { code: 'Semicolon', label: ';', row: 3, col: 10 },
-  { code: 'Quote', label: "'", row: 3, col: 11 },
-  { code: 'Enter', label: '↵', row: 3, col: 12, width: 3.25 },
+  { code: 'CapsLock', label: '⇪', row: 3, col: 0, width: 2.25, expand: true },
+  { code: 'KeyA', label: 'A', row: 3, col: 1 },
+  { code: 'KeyS', label: 'S', row: 3, col: 2 },
+  { code: 'KeyD', label: 'D', row: 3, col: 3 },
+  { code: 'KeyF', label: 'F', row: 3, col: 4 },
+  { code: 'KeyG', label: 'G', row: 3, col: 5 },
+  { code: 'KeyH', label: 'H', row: 3, col: 6 },
+  { code: 'KeyJ', label: 'J', row: 3, col: 7 },
+  { code: 'KeyK', label: 'K', row: 3, col: 8 },
+  { code: 'KeyL', label: 'L', row: 3, col: 9 },
+  { code: 'Semicolon', label: ';', shiftLabel: ':', row: 3, col: 10 },
+  { code: 'Quote', label: "'", shiftLabel: '"', row: 3, col: 11 },
+  { code: 'Enter', label: '↵', row: 3, col: 12, width: 2.5 },
 
   // Row 4 - ZXCV row (15 units total)
-  { code: 'ShiftLeft', label: '⇧', row: 4, col: 0, width: 2.25 },
-  { code: 'KeyZ', label: 'z', row: 4, col: 1 },
-  { code: 'KeyX', label: 'x', row: 4, col: 2 },
-  { code: 'KeyC', label: 'c', row: 4, col: 3 },
-  { code: 'KeyV', label: 'v', row: 4, col: 4 },
-  { code: 'KeyB', label: 'b', row: 4, col: 5 },
-  { code: 'KeyN', label: 'n', row: 4, col: 6 },
-  { code: 'KeyM', label: 'm', row: 4, col: 7 },
-  { code: 'Comma', label: ',', row: 4, col: 8 },
-  { code: 'Period', label: '.', row: 4, col: 9 },
-  { code: 'Slash', label: '/', row: 4, col: 10 },
-  { code: 'ShiftRight', label: '⇧', row: 4, col: 11, width: 3.25 },
+  { code: 'ShiftLeft', label: '⇧', row: 4, col: 0, width: 3, expand: true },
+  { code: 'KeyZ', label: 'Z', row: 4, col: 1 },
+  { code: 'KeyX', label: 'X', row: 4, col: 2 },
+  { code: 'KeyC', label: 'C', row: 4, col: 3 },
+  { code: 'KeyV', label: 'V', row: 4, col: 4 },
+  { code: 'KeyB', label: 'B', row: 4, col: 5 },
+  { code: 'KeyN', label: 'N', row: 4, col: 6 },
+  { code: 'KeyM', label: 'M', row: 4, col: 7 },
+  { code: 'Comma', label: ',', shiftLabel: '<', row: 4, col: 8 },
+  { code: 'Period', label: '.', shiftLabel: '>', row: 4, col: 9 },
+  { code: 'Slash', label: '/', shiftLabel: '?', row: 4, col: 10 },
+  { code: 'ShiftRight', label: '⇧', row: 4, col: 11, width: 3, expand: true },
 
   // Row 5 - Bottom row with inverted T arrow cluster (15 units total for proper width)
-  { code: 'ControlLeft', label: 'fn', row: 5, col: 0, width: 1.25 },
-  { code: 'MetaLeft', label: '⌃', row: 5, col: 1, width: 1.25 },
-  { code: 'AltLeft', label: '⌥', row: 5, col: 2, width: 1.25 },
-  { code: 'MetaRight', label: '⌘', row: 5, col: 3, width: 1.25 },
-  { code: 'Space', label: '', row: 5, col: 4, width: 6 },
-  { code: 'AltRight', label: '⌘', row: 5, col: 5, width: 1.25 },
-  { code: 'ControlRight', label: '⌥', row: 5, col: 6, width: 1.25 },
+  { code: 'ControlLeft', label: 'fn', row: 5, col: 0, width: 1.1 },
+  { code: 'MetaLeft', label: '⌃', row: 5, col: 1, width: 1.1 },
+  { code: 'AltLeft', label: '⌥', row: 5, col: 2, width: 1.1 },
+  { code: 'MetaRight', label: '⌘', row: 5, col: 3, width: 1.1 },
+  { code: 'Space', label: '', row: 5, col: 4, width: 6.75, expand: true },
+  { code: 'AltRight', label: '⌘', row: 5, col: 5, width: 1.1 },
+  { code: 'ControlRight', label: '⌥', row: 5, col: 6, width: 1.1 },
   // Arrow cluster: All same size (1 unit each)
   { code: 'ArrowLeft', label: '←', row: 5, col: 7, width: 1, arrowType: 'left' },
   { code: 'ArrowUp', label: '↑', row: 5, col: 8, width: 1, arrowType: 'up' },
@@ -264,7 +266,6 @@ export class TypingSimulator {
     const stylesheet = new CSSStyleSheet();
     stylesheet.replaceSync(`
       .keyboard-simulator {
-        position: absolute;
         height: auto;
         background-color: #2a2a2a;
         border: 2px solid #444;
@@ -282,9 +283,8 @@ export class TypingSimulator {
 
       .keyboard-row {
         display: flex;
-        gap: 2px;
+        gap: 4px;
         align-items: center;
-        width: 555px;
         justify-content: flex-start;
       }
 
@@ -317,6 +317,10 @@ export class TypingSimulator {
         flex-grow: 0;
       }
 
+      .keyboard-key.expand {
+        flex-grow: 1;
+      }
+
       .keyboard-key.highlighted {
         background-color: #7a7a7a;
       }
@@ -337,11 +341,31 @@ export class TypingSimulator {
         font-size: 10px;
       }
 
+      .keyboard-key.dual-character {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        line-height: 1;
+        font-size: 10px;
+      }
+
+      .keyboard-key.dual-character .top-char {
+        font-size: 8px;
+        line-height: 1;
+        margin-bottom: 3px;
+      }
+
+      .keyboard-key.dual-character .bottom-char {
+        font-size: 10px;
+        line-height: 1;
+      }
+
       .arrow-container {
         display: flex;
         align-items: flex-end;
         height: 33px;
-        gap: 2px;
+        gap: 4px;
       }
 
       .up-down-container {
@@ -463,7 +487,14 @@ export class TypingSimulator {
   private createKeyElement(keyDef: KeyDefinition): HTMLElement {
     const key = document.createElement('div');
     key.className = 'keyboard-key';
-    key.textContent = keyDef.label;
+
+    // Handle dual-character keys (keys with shiftLabel)
+    if (keyDef.shiftLabel) {
+      key.classList.add('dual-character');
+      key.innerHTML = `<div class="top-char">${keyDef.shiftLabel}</div><div class="bottom-char">${keyDef.label}</div>`;
+    } else {
+      key.textContent = keyDef.label;
+    }
 
     // Add specific classes based on key type
     const isFunction = keyDef.row === 0;
@@ -477,8 +508,13 @@ export class TypingSimulator {
       key.classList.add('regular-key');
     }
 
-    if (keyDef.label.length > 2) {
+    if (keyDef.label.length > 2 && keyDef.row !== 1) {
       key.classList.add('long-label');
+    }
+
+    // Add expand class if specified
+    if (keyDef.expand) {
+      key.classList.add('expand');
     }
 
     // Set flex-basis based on key width
