@@ -16,7 +16,7 @@ export interface TypingSimulatorConfig {
 const DEFAULT_CONFIG: Required<TypingSimulatorConfig> = {
   keyboardWidth: 800,
   keyHighlightDuration: 150,
-  visibleTimeout: 3000,
+  visibleTimeout: 300000,
   fadeOutDuration: 1000,
 };
 
@@ -134,6 +134,7 @@ export class TypingSimulator {
   private parentContainer: HTMLElement;
   private config: Required<TypingSimulatorConfig>;
   private keyboardElement: HTMLElement | null = null;
+  private shadowRoot: ShadowRoot | null = null;
   private keyElements: Map<string, HTMLElement> = new Map();
   private isVisible: boolean = false;
   private hideTimeout: number | null = null;
@@ -222,91 +223,152 @@ export class TypingSimulator {
   }
 
   /**
-   * Create the keyboard DOM structure
+   * Create the keyboard DOM structure with Shadow DOM
    */
   private createKeyboard(): void {
     // Create main keyboard container
     this.keyboardElement = document.createElement('div');
-    this.keyboardElement.className = 'typing-simulator-keyboard keyboard-simulator';
+    this.keyboardElement.className = 'typing-simulator-keyboard';
 
-    // Apply base styles
-    this.applyKeyboardStyles();
+    // Create shadow root
+    this.shadowRoot = this.keyboardElement.attachShadow({ mode: 'open' });
+
+    // Create adopted stylesheet
+    this.createAdoptedStylesheet();
+
+    // Create keyboard container within shadow DOM
+    const keyboardContainer = document.createElement('div');
+    keyboardContainer.className = 'keyboard-simulator';
 
     // Create key elements
-    this.createKeys();
+    this.createKeys(keyboardContainer);
 
     // Initially hidden
     this.keyboardElement.style.display = 'none';
     this.keyboardElement.style.opacity = '0';
+    this.keyboardElement.style.transition = `opacity ${this.config.fadeOutDuration}ms ease-in-out`;
+
+    // Add to shadow DOM
+    this.shadowRoot.appendChild(keyboardContainer);
 
     // Add to parent container
     this.parentContainer.appendChild(this.keyboardElement);
   }
 
   /**
-   * Apply CSS styles to the keyboard
+   * Create and attach adopted stylesheet to shadow root
    */
-  private applyKeyboardStyles(): void {
-    if (!this.keyboardElement) return;
+  private createAdoptedStylesheet(): void {
+    if (!this.shadowRoot) return;
 
-    // Calculate total keyboard width based on actual bottom row (widest row)
-    const baseWidth = 32;
-    const gap = 2;
+    const stylesheet = new CSSStyleSheet();
+    stylesheet.replaceSync(`
+      .keyboard-simulator {
+        position: absolute;
+        height: auto;
+        background-color: #2a2a2a;
+        border: 2px solid #444;
+        border-radius: 8px;
+        padding: 10px;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        color: #fff;
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        box-sizing: border-box;
+      }
 
-    // Bottom row actual calculation:
-    // fn(40) + ⌃(40) + ⌥(40) + ⌘(40) + Space(192) + ⌘(40) + ⌥(40) + ←(32) + ↑↓(16) + →(32) = 512px
-    // + 9 gaps × 2px = 18px
-    // Total: 530px + 30px buffer for layout quirks
-    const keyboardWidth = 555;
-    const padding = 10;
+      .keyboard-row {
+        display: flex;
+        gap: 2px;
+        align-items: center;
+        width: 555px;
+        justify-content: flex-start;
+      }
 
-    const styles = {
-      position: 'absolute',
-      width: `${keyboardWidth + (padding * 2)}px`, // Include padding in total width
-      height: 'auto',
-      backgroundColor: '#2a2a2a',
-      border: '2px solid #444',
-      borderRadius: '8px',
-      padding: `${padding}px`,
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '14px',
-      color: '#fff',
-      zIndex: '10000',
-      transition: `opacity ${this.config.fadeOutDuration}ms ease-in-out`,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '4px',
-      boxSizing: 'border-box',
-    };
+      .keyboard-row-0 {
+        height: 32px;
+      }
 
-    Object.assign(this.keyboardElement.style, styles);
+      .keyboard-row-1,
+      .keyboard-row-2,
+      .keyboard-row-3,
+      .keyboard-row-4,
+      .keyboard-row-5 {
+        height: 36px;
+      }
+
+      .keyboard-key {
+        background-color: #4a4a4a;
+        border: 1px solid #666;
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: default;
+        user-select: none;
+        transition: background-color ${this.config.keyHighlightDuration}ms ease;
+        font-weight: 500;
+        min-width: 0;
+        text-align: center;
+        flex-shrink: 0;
+        flex-grow: 0;
+      }
+
+      .keyboard-key.highlighted {
+        background-color: #7a7a7a;
+      }
+
+      .keyboard-key.function-key {
+        font-size: 9px;
+      }
+
+      .keyboard-key.arrow-key {
+        font-size: 10px;
+      }
+
+      .keyboard-key.regular-key {
+        font-size: 12px;
+      }
+
+      .keyboard-key.long-label {
+        font-size: 10px;
+      }
+
+      .arrow-container {
+        display: flex;
+        align-items: flex-end;
+        height: 33px;
+        gap: 2px;
+      }
+
+      .up-down-container {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        width: 32px;
+        height: 32px;
+        justify-content: flex-end;
+      }
+    `);
+
+    this.shadowRoot.adoptedStyleSheets = [stylesheet];
   }
 
   /**
    * Create individual key elements
    */
-  private createKeys(): void {
-    if (!this.keyboardElement) return;
-
+  private createKeys(keyboardContainer: HTMLElement): void {
     // Create a container for each row (6 rows for compact keyboard)
     const rows: HTMLElement[] = [];
-    const baseWidth = 32;
-    const gap = 2;
-    const totalUnits = 15;
-    const totalGaps = 14;
-    const rowWidth = (totalUnits * baseWidth) + (totalGaps * gap);
 
     for (let i = 0; i < 6; i++) {
       const row = document.createElement('div');
-      row.className = `keyboard-row-${i}`;
-      row.style.display = 'flex';
-      row.style.gap = '2px';
-      row.style.height = i === 0 ? '32px' : '36px'; // Function row is shorter
-      row.style.alignItems = 'center';
-      row.style.width = `${rowWidth}px`; // Force exact row width
-      row.style.justifyContent = 'flex-start';
+      row.className = `keyboard-row keyboard-row-${i}`;
       rows.push(row);
-      this.keyboardElement.appendChild(row);
+      keyboardContainer.appendChild(row);
     }
 
     // Group keys by row and sort by column
@@ -352,10 +414,7 @@ export class TypingSimulator {
 
     // Create arrow key container
     const arrowContainer = document.createElement('div');
-    arrowContainer.style.display = 'flex';
-    arrowContainer.style.alignItems = 'flex-end'; // Bottom align
-    arrowContainer.style.height = '36px'; // Full row height
-    arrowContainer.style.gap = '2px';
+    arrowContainer.className = 'arrow-container';
 
     // Group arrows by position
     const leftArrow = arrowKeys.find(key => key.arrowType === 'left');
@@ -372,12 +431,7 @@ export class TypingSimulator {
 
     // Create up/down stack container
     const upDownContainer = document.createElement('div');
-    upDownContainer.style.display = 'flex';
-    upDownContainer.style.flexDirection = 'column';
-    upDownContainer.style.gap = '2px';
-    upDownContainer.style.width = '16px'; // Match up/down arrow key width (16px)
-    upDownContainer.style.height = '34px'; // 16px + 2px gap + 16px = 34px total
-    upDownContainer.style.justifyContent = 'flex-end'; // Bottom align the stack
+    upDownContainer.className = 'up-down-container';
 
     if (upArrow) {
       const upElement = this.createKeyElement(upArrow);
@@ -411,11 +465,24 @@ export class TypingSimulator {
     key.className = 'keyboard-key';
     key.textContent = keyDef.label;
 
-    // Use flex-basis instead of width for better flexbox behavior
-    const baseWidth = 32; // Smaller base width for compact layout
-    const isFunction = keyDef.row === 0; // Function keys are smaller
-    const isArrow = !!keyDef.arrowType; // Arrow keys are smaller
+    // Add specific classes based on key type
+    const isFunction = keyDef.row === 0;
+    const isArrow = !!keyDef.arrowType;
 
+    if (isFunction) {
+      key.classList.add('function-key');
+    } else if (isArrow) {
+      key.classList.add('arrow-key');
+    } else {
+      key.classList.add('regular-key');
+    }
+
+    if (keyDef.label.length > 2) {
+      key.classList.add('long-label');
+    }
+
+    // Set flex-basis based on key width
+    const baseWidth = 32;
     let keyWidth: number;
     let keyHeight: string;
 
@@ -424,38 +491,19 @@ export class TypingSimulator {
       keyHeight = '28px';
     } else if (isArrow) {
       if (keyDef.arrowType === 'left' || keyDef.arrowType === 'right') {
-        keyWidth = 32; // All arrow keys are 32px wide to match left/right arrows
-        keyHeight = '16px'; // Keep height at 16px
+        keyWidth = 32;
+        keyHeight = '14px';
       } else {
-        keyWidth = 16; // All arrow keys are 32px wide to match left/right arrows
-        keyHeight = '16px'; // Keep height at 16px
+        keyWidth = 14;
+        keyHeight = '14px';
       }
     } else {
       keyWidth = (keyDef.width || 1) * baseWidth;
       keyHeight = '32px';
     }
 
-    const styles = {
-      flexBasis: `${keyWidth}px`,
-      flexShrink: '0',
-      flexGrow: '0',
-      height: keyHeight,
-      backgroundColor: '#4a4a4a',
-      border: '1px solid #666',
-      borderRadius: '3px', // Smaller radius for compact look
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      cursor: 'default',
-      userSelect: 'none',
-      transition: `background-color ${this.config.keyHighlightDuration}ms ease`,
-      fontSize: isFunction ? '9px' : (keyDef.label.length > 2 ? '10px' : '12px'),
-      fontWeight: '500', // Less bold for cleaner look
-      minWidth: '0',
-      textAlign: 'center'
-    };
-
-    Object.assign(key.style, styles);
+    key.style.flexBasis = `${keyWidth}px`;
+    key.style.height = keyHeight;
 
     return key;
   }
@@ -467,12 +515,12 @@ export class TypingSimulator {
     const keyElement = this.keyElements.get(keyCode);
     if (!keyElement) return;
 
-    // Apply highlight
-    keyElement.style.backgroundColor = '#7a7a7a';
+    // Add highlight class
+    keyElement.classList.add('highlighted');
 
     // Remove highlight after duration
     setTimeout(() => {
-      keyElement.style.backgroundColor = '#4a4a4a';
+      keyElement.classList.remove('highlighted');
     }, this.config.keyHighlightDuration);
   }
 

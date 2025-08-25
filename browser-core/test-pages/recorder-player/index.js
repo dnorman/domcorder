@@ -11,7 +11,6 @@ const frameChunkReader = new FrameChunkReader({
 });
 
 const handleChunk = (chunk) => {
-  console.log("forwarding chunk to player", chunk.length);
   frameChunkReader.read(chunk);
 };
 

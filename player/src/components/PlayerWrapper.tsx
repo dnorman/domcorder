@@ -185,7 +185,7 @@ export const PlayerWrapper: React.FC<PlayerWrapperProps> = ({ recording }) => {
             setError(null);
             setProgress(null);
 
-            console.log('Loading recording:', recording.filename);
+            console.debug('Loading recording:', recording.filename);
 
             // Fetch the recording data with streaming
             const response = await fetch(`http://localhost:8723/recording/${recording.filename}`);

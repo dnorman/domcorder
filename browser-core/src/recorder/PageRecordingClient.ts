@@ -51,7 +51,6 @@ export class PageRecordingClient {
   private createFrameChunkWriter(): FrameChunkWriter {
     return new FrameChunkWriter({
       next: (chunk: Uint8Array) => {
-        console.log("Sending chunk to server", chunk.length);
         this.ws?.send(chunk);
       },
       error: (error: Error) => {
@@ -61,7 +60,7 @@ export class PageRecordingClient {
         console.error('Frame chunk writer cancelled:', reason);
       },
       done: () => {
-        console.log('Frame chunk writer done');
+        
       }
     }, {
       chunkSize: this.options.chunkSize ?? 512 * 1024
@@ -83,9 +82,7 @@ export class PageRecordingClient {
 
       while (this.frameQueue.length > 0 && this.ws?.readyState === WebSocket.OPEN) {
         const frame = this.frameQueue.shift()!;
-        console.log("Writing frame", frame);
         await this.frameChunkWriter.write(frame);
-        console.log("Frame written", frame);
       }
     } catch (error) {
       console.error('Error processing frame queue:', error);
@@ -95,14 +92,14 @@ export class PageRecordingClient {
   }
   
   private connectToServer(): void {
-    console.log('🔌 Connecting to WebSocket server...');
+    console.debug('🔌 Connecting to WebSocket server...');
     try {
       this.ws = this.options.webSocketFactory ? 
         this.options.webSocketFactory(this.serverUrl) : 
         new WebSocket(this.serverUrl);
 
       this.ws.onopen = async () => {
-        console.log('🔌 WebSocket connected');
+        console.debug('🔌 WebSocket connected');
         
         // Start processing any queued frames
         if (this.frameQueue.length > 0 && !this.isProcessingQueue) {
@@ -111,7 +108,7 @@ export class PageRecordingClient {
       };
 
       this.ws.onmessage = (event) => {
-        console.log('📨 Server message:', event.data);
+        console.debug('📨 Server message:', event.data);
       };
 
       this.ws.onerror = (error) => {
@@ -119,7 +116,7 @@ export class PageRecordingClient {
       };
 
       this.ws.onclose = () => {
-        console.log('🔌 WebSocket closed');
+        console.debug('🔌 WebSocket closed');
       };
 
     } catch (error) {

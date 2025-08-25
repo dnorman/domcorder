@@ -48,7 +48,7 @@ export class Writer {
         this.bufLength++;
 
         if (this.debug) {
-            console.log(`  byte: 0x${(n & 0xff).toString(16).padStart(2, '0')}`);
+            console.debug(`  byte: 0x${(n & 0xff).toString(16).padStart(2, '0')}`);
         }
 
         // Auto-flush if buffer reaches chunk size (prevents buffer overflow)
@@ -65,14 +65,14 @@ export class Writer {
     }
 
     u32(n: number): void {
-        if (this.debug) console.log(`u32: ${n} (0x${n.toString(16)})`);
+        if (this.debug) console.debug(`u32: ${n} (0x${n.toString(16)})`);
         // caller ensures 0 <= n < 2**32
         // big-endian (bincode configured)
         this.byte(n >>> 24); this.byte(n >>> 16); this.byte(n >>> 8); this.byte(n);
     }
 
     u64(n: bigint): void {
-        if (this.debug) console.log(`u64: ${n} (0x${n.toString(16)})`);
+        if (this.debug) console.debug(`u64: ${n} (0x${n.toString(16)})`);
         // caller ensures 0n <= n < 2n**64n
         for (let i = 7; i >= 0; i--) this.byte(Number((n >> (BigInt(8 * i))) & 0xffn));
     }
@@ -109,7 +109,7 @@ export class Writer {
 
     /** Write UTF-8 string as: u64 length (BE) + bytes (bincode style). */
     strUtf8(s: string): void {
-        if (this.debug) console.log(`strUtf8: "${s}" (${s.length} chars)`);
+        if (this.debug) console.debug(`strUtf8: "${s}" (${s.length} chars)`);
         const bytes = Writer.enc.encode(s);
         this.u64(BigInt(bytes.length));
         this.bytes(bytes);
@@ -117,7 +117,7 @@ export class Writer {
 
     /** Write UTF-8 string with streaming for large strings */
     async strUtf8Streaming(s: string): Promise<void> {
-        if (this.debug) console.log(`strUtf8Streaming: "${s}" (${s.length} chars)`);
+        if (this.debug) console.debug(`strUtf8Streaming: "${s}" (${s.length} chars)`);
         const bytes = Writer.enc.encode(s);
 
         // Write length prefix
