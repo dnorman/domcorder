@@ -208,6 +208,22 @@ export const PlayerWrapper: React.FC<PlayerWrapperProps> = ({ recording }) => {
             // Create a reader for the response stream
             const reader = response.body.getReader();
 
+            const frameChunkReader = new FrameChunkReader({
+                next: (frame) => {
+                    playerRef.current?.handleFrame(frame);
+                },
+                error: (error) => {
+                    console.error('Error reading frame chunk:', error);
+                },
+                cancelled: (reason) => {
+                    console.error('Frame chunk reader cancelled:', reason);
+                },
+                done: () => {
+                    console.log('Frame chunk reader done');
+                }
+            });
+            
+
             try {
                 while (true) {
                     const { done, value } = await reader.read();
@@ -221,20 +237,6 @@ export const PlayerWrapper: React.FC<PlayerWrapperProps> = ({ recording }) => {
                     loadedBytes += value.length;
                     setProgress({ loaded: loadedBytes, total: totalBytes });
 
-                    const frameChunkReader = new FrameChunkReader({
-                        next: (frame) => {
-                            playerRef.current?.handleFrame(frame);
-                        },
-                        error: (error) => {
-                            console.error('Error reading frame chunk:', error);
-                        },
-                        cancelled: (reason) => {
-                            console.error('Frame chunk reader cancelled:', reason);
-                        },
-                        done: () => {
-                            console.log('Frame chunk reader done');
-                        }
-                    });
                     console.log("Reading frame chunk from server", value.length);
                     frameChunkReader.read(value);
                     
