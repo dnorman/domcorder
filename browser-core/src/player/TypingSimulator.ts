@@ -16,7 +16,7 @@ export interface TypingSimulatorConfig {
 const DEFAULT_CONFIG: Required<TypingSimulatorConfig> = {
   keyboardWidth: 800,
   keyHighlightDuration: 150,
-  visibleTimeout: 300000,
+  visibleTimeout: 3000,
   fadeOutDuration: 1000,
 };
 

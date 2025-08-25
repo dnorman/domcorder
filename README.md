@@ -53,3 +53,8 @@ bun run test:all
 ### Binary Protocol
 
 The TypeScript and Rust packages work together to provide a cross-language binary serialization protocol for DOM structures and frame data. The TypeScript implementation generates bincode-compatible binary data that the Rust implementation can parse perfectly.
+
+
+```
+cargo watch -x 'run --bin domcorder-server'
+```
