@@ -34,6 +34,7 @@ import { AdoptedStyleSheetMutator } from "./AdoptedStyleSheetMutator";
 import { MouseSimulator } from "./MouseSimulator";
 import { SelectionSimulator } from "./SelectionSimulator";
 import { TypingSimulator } from "./TypingSimulator";
+import { PlaybackQueue, PlayEvent } from "./PlaybackQueue";
 
 export type OpenFrame = {
   type: 'keyframe',
@@ -81,6 +82,8 @@ export class PagePlayer {
   private readonly targetIframe: HTMLIFrameElement;
   private readonly playerComponent?: any;
 
+  private readonly playbackQueue: PlaybackQueue;
+
   constructor(
     targetIframe: HTMLIFrameElement,
     overlayElement: HTMLElement,
@@ -119,9 +122,19 @@ export class PagePlayer {
         this.selectionSimulator!.updateScrollPosition(this.targetDocument.defaultView!.scrollX, this.targetDocument.defaultView!.scrollY);
       }
     });
+
+    this.playbackQueue = new PlaybackQueue((event: PlayEvent) => {
+      for (const frame of event.frames) {
+        this.handleFrame(frame);
+      }
+    });
   }
 
-  handleFrame(frame: Frame) {
+  public queueFrame(frame: Frame) {
+    this.playbackQueue.enqueueFrame(frame);
+  }
+
+  private handleFrame(frame: Frame) {
     if (frame instanceof Keyframe) {
       this._handleKeyFrame(frame as Keyframe);
     } else if (frame instanceof Asset) {
@@ -434,9 +447,7 @@ export class PagePlayer {
   }
 
   private _handleTimestampFrame(frame: Timestamp): void {
-    // Timestamps are typically used for synchronization/timing
-    // For now, we'll just log them for debugging
-    console.debug('Timestamp frame:', frame.timestamp);
+    // NoOp
   }
 
   private _handleViewportResizedFrame(frame: ViewportResized): void {

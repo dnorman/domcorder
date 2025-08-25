@@ -71,6 +71,7 @@ export class PageRecorder {
   }
 
   private async emitFrame(frame: Frame, timestamp: boolean = true) {
+    console.log('emitFrame', frame);
     if (timestamp) {
       this.emitTimestampFrame();
     }
@@ -160,7 +161,9 @@ export class PageRecorder {
             await this.emitFrame(frame, false);
           },
           onInlineComplete: () => {
-            this.pendingAssetsComplete();
+            if (this.pendingAssets) {
+              this.pendingAssetsComplete();
+            }
            }
         });
         break;
@@ -210,7 +213,6 @@ export class PageRecorder {
     this.pendingAssets = false;
     await this.processOperationQueue();
   }
-
 
   private createUserInteractionHandler(): UserInteractionEventHandler {
     return {
@@ -274,7 +276,9 @@ export class PageRecorder {
         await this.emitFrame(assetFrame, false);
       },
       onKeyFrameComplete: () => {
-        this.pendingAssetsComplete();
+        if (this.pendingAssets) {
+          this.pendingAssetsComplete();
+        }
       },
     };
   }
@@ -301,7 +305,9 @@ export class PageRecorder {
               this.emitFrame(assetFrame, false);
             },
             onInlineComplete: () => { 
-              this.pendingAssetsComplete();
+              if (this.pendingAssets) {
+                this.pendingAssetsComplete();
+              }
             }
           });
         }

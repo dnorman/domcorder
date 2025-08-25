@@ -141,7 +141,7 @@ export class PagePlayerComponent {
       this.player = new PagePlayer(this.iframe, this.overlayElement, this.keyboardContainer, this);
 
       for (const frame of this.frameQueue) {
-        this.player.handleFrame(frame);
+        this.player.queueFrame(frame);
       }
 
       this.frameQueue.length = 0;
@@ -158,10 +158,11 @@ export class PagePlayerComponent {
   }
 
   public handleFrame(frame: Frame): void {
+    console.log('handleFrame', frame);
     if (!this.player) {
       this.frameQueue.push(frame);
     } else {
-      this.player.handleFrame(frame);
+      this.player.queueFrame(frame);
     }
   }
 
