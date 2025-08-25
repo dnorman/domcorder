@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
-import { PagePlayerComponent } from '@domcorder/browser-core';
+import { FrameChunkReader, PagePlayerComponent } from '@domcorder/browser-core';
 
 interface Recording {
     id: string;
@@ -221,8 +221,23 @@ export const PlayerWrapper: React.FC<PlayerWrapperProps> = ({ recording }) => {
                     loadedBytes += value.length;
                     setProgress({ loaded: loadedBytes, total: totalBytes });
 
-                    // Send chunk to player
-                    playerRef.current.handleChunk(value);
+                    const frameChunkReader = new FrameChunkReader({
+                        next: (frame) => {
+                            playerRef.current?.handleFrame(frame);
+                        },
+                        error: (error) => {
+                            console.error('Error reading frame chunk:', error);
+                        },
+                        cancelled: (reason) => {
+                            console.error('Frame chunk reader cancelled:', reason);
+                        },
+                        done: () => {
+                            console.log('Frame chunk reader done');
+                        }
+                    });
+                    console.log("Reading frame chunk from server", value.length);
+                    frameChunkReader.read(value);
+                    
                 }
             } finally {
                 reader.releaseLock();

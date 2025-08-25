@@ -3,9 +3,7 @@ import type { Asset as InlinerAsset } from "./inliner/Asset";
 import { DomChangeDetector } from "./DomChangeDetector";
 import { UserInteractionTracker, type UserInteractionEventHandler } from "./UserInteractionTracker";
 import {
-  FrameType,
   Frame,
-  Writer,
   Keyframe,
   Asset,
   DomNodeAdded,
@@ -35,75 +33,72 @@ import type { DomOperation } from "../common/DomOperation";
 import { getStyleSheetId, StyleSheetWatcher, type StyleSheetWatcherEvent } from "./StyleSheetWatcher";
 import { inlineAdoptedStyleSheet, type InlineAdoptedStyleSheetEvent } from "./inliner/inlineAdoptedStyleSheet";
 
-// This 100% no matter how far we refactor this.. should
-// def be the real binary frame.
-export type FrameHandler = (frame: Frame) => void;
+export type FrameHandler = (frame: Frame) => Promise<void>;
 
 export class PageRecorder {
   private sourceDocument: Document;
-  private frameHandler: FrameHandler;
+
+  private frameHandlers: FrameHandler[];
 
   private pendingAssets: boolean;
   private operationQueue: DomOperation[];
   private changeDetector: DomChangeDetector | null;
   private styleSheetWatcher: StyleSheetWatcher | null;
   private userInteractionTracker: UserInteractionTracker | null;
-  private writer: Writer;
-  private stream: ReadableStream<Uint8Array>;
-  private serverStream: ReadableStream<Uint8Array>;
-  private parentStream: ReadableStream<Uint8Array>;
+  private sourceDocNodeIdMap: NodeIdBiMap | null;
 
-  constructor(sourceDocument: Document, frameHandler: FrameHandler) {
+  constructor(sourceDocument: Document) {
     this.sourceDocument = sourceDocument;
-    this.frameHandler = (frame: Frame) => {
-      frameHandler(frame);
-    };
+    this.frameHandlers = [];
+
     this.pendingAssets = false;
     this.operationQueue = [];
     this.changeDetector = null;
     this.styleSheetWatcher = null;
     this.userInteractionTracker = null;
-
-    // Create Writer and stream
-    const [writer, stream] = Writer.create(512 * 1024); // 256KB chunks
-    this.writer = writer;
-    this.stream = stream;
-
-    // Tee the stream for server and parent
-    const [serverStream, parentStream] = stream.tee();
-    this.serverStream = serverStream;
-    this.parentStream = parentStream;
+    this.sourceDocNodeIdMap = null;
   }
 
-  getParentStream(): ReadableStream<Uint8Array> {
-    return this.parentStream;
+  public addFrameHandler(handler: FrameHandler) {
+    this.frameHandlers.push(handler);
+  }
+
+  public removeFrameHandler(handler: FrameHandler) {
+    this.frameHandlers = this.frameHandlers.filter(h => h !== handler);
+  }
+
+  private async emitFrame(frame: Frame) {
+    for (const handler of this.frameHandlers) {
+      try {
+       await handler(frame);
+      } catch (error) {
+        console.error("Error handling frame:", error);
+      }
+    }
   }
 
   start() {
-    const sourceDocNodeIdMap = new NodeIdBiMap();
-    sourceDocNodeIdMap.assignNodeIdsToSubTree(this.sourceDocument);
-
-    // Start server stream
-    this.startServerStream();
+    this.sourceDocNodeIdMap = new NodeIdBiMap();
+    this.sourceDocNodeIdMap.assignNodeIdsToSubTree(this.sourceDocument);
 
     // Setup user interaction tracking
     this.userInteractionTracker = new UserInteractionTracker(
       window,
-      sourceDocNodeIdMap,
+      this.sourceDocNodeIdMap,
       this.createUserInteractionHandler()
     );
     this.userInteractionTracker.start();
 
     generateKeyFrame(
-      this.sourceDocument, sourceDocNodeIdMap, this.createKeyFrameHandler()
+      this.sourceDocument, this.sourceDocNodeIdMap, this.createKeyFrameHandler()
     );
 
-    this.changeDetector = new DomChangeDetector(this.sourceDocument, sourceDocNodeIdMap, async (operations) => {
+    this.changeDetector = new DomChangeDetector(this.sourceDocument, this.sourceDocNodeIdMap, async (operations) => {
       for (const operation of operations) {
         if (this.pendingAssets) {
           this.operationQueue.push(operation);
         } else {
-          await this.processOperation(operation, sourceDocNodeIdMap, this.frameHandler);
+          await this.processOperation(operation, this.sourceDocNodeIdMap!);
         }
       }
     }, 500);
@@ -117,61 +112,47 @@ export class PageRecorder {
     this.styleSheetWatcher.start();
   }
 
+  public stop() {
+    this.userInteractionTracker?.stop();
+    this.changeDetector?.disconnect();
+    this.styleSheetWatcher?.stop();
+  }
+
   private async processOperation(
     operation: DomOperation,
-    nodeIdMap: NodeIdBiMap,
-    frameHandler: FrameHandler
+    nodeIdMap: NodeIdBiMap
   ): Promise<void> {
     switch (operation.op) {
       case "insert":
         inlineSubTree(operation.node, nodeIdMap, {
           onInlineStarted: async (ev: InlineStartedEvent) => {
             this.pendingAssets = ev.assetCount > 0;
-
-            // Create frame instance and call frameHandler
             const frame = new DomNodeAdded(operation.parentId, operation.index, ev.node, ev.assetCount);
-            frameHandler(frame);
-
-            // Additionally encode to server stream
-            await frame.encode(this.writer);
+            await this.emitFrame(frame);
           },
           onAsset: async (asset: InlinerAsset) => {
-            // Create frame instance and call frameHandler
             const frame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
-            frameHandler(frame);
-
-            // Additionally encode to server stream
-            await frame.encode(this.writer);
+            await this.emitFrame(frame);
           },
-          onInlineComplete: () => { }
+          onInlineComplete: () => {
+            this.pendingAssetsComplete();
+           }
         });
         break;
 
       case "remove":
-        // Create frame instance and call frameHandler
         const removeFrame = new DomNodeRemoved(operation.nodeId);
-        frameHandler(removeFrame);
-
-        // Additionally encode to server stream
-        await removeFrame.encode(this.writer);
+        await this.emitFrame(removeFrame);
         break;
 
       case "updateAttribute":
-        // Create frame instance and call frameHandler
         const updateAttrFrame = new DomAttributeChanged(operation.nodeId, operation.name, operation.value);
-        frameHandler(updateAttrFrame);
-
-        // Additionally encode to server stream
-        await updateAttrFrame.encode(this.writer);
+        await this.emitFrame(updateAttrFrame);
         break;
 
       case "removeAttribute":
-        // Create frame instance and call frameHandler
         const removeAttrFrame = new DomAttributeRemoved(operation.nodeId, operation.name);
-        frameHandler(removeAttrFrame);
-
-        // Additionally encode to server stream
-        await removeAttrFrame.encode(this.writer);
+        await this.emitFrame(removeAttrFrame);
         break;
 
       case "updateText":
@@ -194,122 +175,66 @@ export class PageRecorder {
           }
         });
 
-        // Create frame instance and call frameHandler
         const textFrame = new DomTextChanged(operation.nodeId, operations);
-        frameHandler(textFrame);
-
-        // Additionally encode to server stream
-        await textFrame.encode(this.writer);
+        await this.emitFrame(textFrame);
         break;
     }
   }
 
-  private async startServerStream(): Promise<void> {
-    // Use WebSocket for streaming instead of fetch
-    console.log('🔌 Connecting to WebSocket server...');
-    try {
-      const ws = new WebSocket('ws://localhost:8723/ws/record');
-
-      ws.onopen = () => {
-        console.log('🔌 WebSocket connected');
-        this.streamToWebSocket(ws);
-      };
-
-      ws.onmessage = (event) => {
-        console.log('📨 Server message:', event.data);
-      };
-
-      ws.onerror = (error) => {
-        console.error('❌ WebSocket error:', error);
-      };
-
-      ws.onclose = () => {
-        console.log('🔌 WebSocket closed');
-      };
-
-    } catch (error) {
-      console.error('Error connecting to WebSocket:', error);
+  pendingAssetsComplete() {
+    this.pendingAssets = false;
+    for (const operation of this.operationQueue) {
+      this.processOperation(operation, this.sourceDocNodeIdMap!);
     }
+    this.operationQueue = [];
   }
 
-  private async streamToWebSocket(ws: WebSocket): Promise<void> {
-    try {
-      const reader = this.serverStream.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (done) {
-          console.log('📡 Stream finished, closing WebSocket');
-          ws.close();
-          break;
-        }
-
-        if (value) {
-          ws.send(value);
-        }
-      }
-
-    } catch (error) {
-      console.error('Error streaming to WebSocket:', error);
-    }
-  }
 
   private createUserInteractionHandler(): UserInteractionEventHandler {
     return {
       onMouseMove: (event) => {
         const frame = new MouseMoved(event.x, event.y);
-        this.frameHandler(frame);
-        frame.encode(this.writer); // Background encode
+        this.emitFrame(frame);
       },
       onMouseClick: (event) => {
         const frame = new MouseClicked(event.x, event.y);
-        this.frameHandler(frame);
-        frame.encode(this.writer); // Background encode
+        this.emitFrame(frame);
       },
       onKeyPress: (event) => {
         const frame = new KeyPressed(event.code, event.altKey, event.ctrlKey, event.metaKey, event.shiftKey);
-        this.frameHandler(frame);
-        frame.encode(this.writer); // Background encode
+        this.emitFrame(frame);
       },
       onWindowResize: (event) => {
         const frame = new ViewportResized(event.width, event.height);
-        this.frameHandler(frame);
-        frame.encode(this.writer); // Background encode
+        this.emitFrame(frame);
       },
       onScroll: (event) => {
         const frame = new ScrollOffsetChanged(event.scrollX, event.scrollY);
-        this.frameHandler(frame);
-        frame.encode(this.writer); // Background encode
+        this.emitFrame(frame);
       },
       onElementScroll: (event) => {
         const frame = new ElementScrolled(event.elementId, event.scrollLeft, event.scrollTop);
-        this.frameHandler(frame);
-        frame.encode(this.writer); // Background encode
+        this.emitFrame(frame);
       },
       onElementFocus: (event) => {
         const frame = new ElementFocused(event.elementId);
-        this.frameHandler(frame);
-        frame.encode(this.writer); // Background encode
+        this.emitFrame(frame);
       },
       onElementBlur: (event) => {
         const frame = new ElementBlurred(event.elementId);
-        this.frameHandler(frame);
-        frame.encode(this.writer); // Background encode
+        this.emitFrame(frame);
       },
       onTextSelection: (event) => {
         const frame = new TextSelectionChanged(event.startNodeId, event.startOffset, event.endNodeId, event.endOffset);
-        this.frameHandler(frame);
-        frame.encode(this.writer); // Background encode
+        this.emitFrame(frame);
       },
       onWindowFocus: (event) => {
         const frame = new WindowFocused();
-        this.frameHandler(frame);
-        frame.encode(this.writer); // Background encode
+        this.emitFrame(frame);
       },
       onWindowBlur: (event) => {
         const frame = new WindowBlurred();
-        this.frameHandler(frame);
-        frame.encode(this.writer); // Background encode
+        this.emitFrame(frame);
       }
     };
   }
@@ -317,26 +242,17 @@ export class PageRecorder {
   private createKeyFrameHandler() {
     return {
       onKeyFrameStarted: async (ev: KeyFrameStartedEvent) => {
-        // Create frame instance and call frameHandler
         const keyframe = new Keyframe(ev.document, ev.assetCount, ev.viewportWidth, ev.viewportHeight);
-        console.log("PageRecorder: Creating keyframe", keyframe);
-        this.frameHandler(keyframe);
-
-        // Additionally encode to server stream
-        await keyframe.encode(this.writer);
+        await this.emitFrame(keyframe);
 
         this.pendingAssets = ev.assetCount > 0;
       },
       onAsset: async (asset: InlinerAsset) => {
-        // Create frame instance and call frameHandler
         const assetFrame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
-        this.frameHandler(assetFrame);
-
-        // Additionally encode to server stream
-        await assetFrame.encode(this.writer);
+        await this.emitFrame(assetFrame);
       },
       onKeyFrameComplete: () => {
-        this.pendingAssets = false;
+        this.pendingAssetsComplete();
       },
     };
   }
@@ -348,22 +264,22 @@ export class PageRecorder {
           event.now.map(sheet => getStyleSheetId(sheet)),
           event.added.length
         );
-        this.frameHandler(frame);
-        frame.encode(this.writer); // Background encode
+        await this.emitFrame(frame);
 
         for (const sheet of event.added) {
           await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, {
             onInlineStarted: (ev: InlineAdoptedStyleSheetEvent) => {
+              this.pendingAssets = ev.assetCount > 0;
               const newStyleSheetFrame = new NewAdoptedStyleSheet(ev.styleSheet, ev.assetCount);
-              this.frameHandler(newStyleSheetFrame);
-              newStyleSheetFrame.encode(this.writer); // Background encode
+              this.emitFrame(newStyleSheetFrame);
             },
             onAsset: (asset: InlinerAsset) => {
               const assetFrame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
-              this.frameHandler(assetFrame);
-              assetFrame.encode(this.writer); // Background encode
+              this.emitFrame(assetFrame);
             },
-            onInlineComplete: () => { }
+            onInlineComplete: () => { 
+              this.pendingAssetsComplete();
+            }
           });
         }
       }

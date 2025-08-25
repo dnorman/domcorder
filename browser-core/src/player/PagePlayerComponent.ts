@@ -1,5 +1,4 @@
 import type { Frame } from "@domcorder/proto-ts";
-import { Reader } from "@domcorder/proto-ts";
 import { Deferred } from "../common/Deferred";
 import { PagePlayer } from "./PagePlayer";
 
@@ -13,8 +12,8 @@ export class PagePlayerComponent {
   private readonly shadowRoot: ShadowRoot;
 
   private readonly frameQueue: Frame[] = [];
-  private chunkController: ReadableStreamDefaultController<Uint8Array> | null = null;
-  private reader: Reader | null = null;
+  
+  
   private resizeObserver: ResizeObserver | null = null;
   private currentScale: number = 1;
 
@@ -50,25 +49,6 @@ export class PagePlayerComponent {
 
     playerContainer.appendChild(playerContent);
     shadow.appendChild(playerContainer);
-
-    // Set up Reader for binary chunks
-    const chunkStream = new ReadableStream<Uint8Array>({
-      start: (controller) => {
-        console.log("ChunkStream controller started");
-        this.chunkController = controller;
-      },
-      cancel: (reason) => {
-        console.log("ChunkStream cancelled:", reason);
-      }
-    });
-
-    console.log("Creating Reader...");
-    const [reader, frameStream] = Reader.create(chunkStream, false); // false = no header expected
-    this.reader = reader;
-    console.log("Reader created, starting frame processing...");
-
-    // Process frames from the reader
-    void this.processFrameStream(frameStream);
 
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(`
@@ -161,45 +141,16 @@ export class PagePlayerComponent {
     });
   }
 
-  private async processFrameStream(frameStream: ReadableStream<Frame>): Promise<void> {
-    console.log("processFrameStream started");
-    const reader = frameStream.getReader();
-    console.log("Got frameStream reader");
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (done) {
-          console.log("Frame stream ended");
-          break;
-        }
-
-        // Handle the decoded frame
-        console.log("Received frame:", value);
-        if (this.player) {
-          this.player.handleFrame(value);
-        } else {
-          this.frameQueue.push(value);
-        }
-      }
-    } catch (error) {
-      console.error("Error processing frame stream:", error);
-    } finally {
-      reader.releaseLock();
-    }
-  }
-
-  public handleChunk(chunk: Uint8Array): void {
-    if (this.chunkController) {
-      this.chunkController.enqueue(chunk);
-    } else {
-      console.log("ERROR: chunkController is null!");
-    }
-  }
-
   public ready(): Promise<void> {
     return this.readyPromise.promise();
+  }
+
+  public handleFrame(frame: Frame): void {
+    if (!this.player) {
+      this.frameQueue.push(frame);
+    } else {
+      this.player.handleFrame(frame);
+    }
   }
 
   private updateScale(): void {

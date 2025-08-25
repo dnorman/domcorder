@@ -1,4 +1,4 @@
-import { PageRecorder } from "../../../dist/index.js";
+import { PageRecorder, PageRecordingClient, FrameChunkWriter } from "../../../dist/index.js";
 
 // General Page Set Up
 const stylesheet = new CSSStyleSheet();
@@ -10,28 +10,19 @@ stylesheet.replaceSync(`
 `);
 document.adoptedStyleSheets = [stylesheet];
 
-const screenRecorder = new PageRecorder(document, (frame) => {
-  // This frameHandler is still needed for the recorder's internal logic
-  // We'll tee the writer stream to send chunks to the parent
+const pageRecorder = new PageRecorder(document);
+
+const frameChunkWriter = new FrameChunkWriter({
+  next: (chunk) => {
+    window.parent.handleChunk(chunk);
+  }
 });
 
-// Get the parent stream (already teed in PageRecorder)
-const parentStream = screenRecorder.getParentStream();
+pageRecorder.addFrameHandler((frame) => {
+  return frameChunkWriter.write(frame);
+});
 
-// Send chunks to parent
-const parentReader = parentStream.getReader();
-(async () => {
-  try {
-    while (true) {
-      const { done, value } = await parentReader.read();
-      if (done) break;
+const pageRecordingClient = new PageRecordingClient(pageRecorder, "ws://localhost:8723/ws/record");
+pageRecordingClient.start();
 
-      console.log("Sending chunk to parent:", value.length);
-      window.parent.chunkHandler(value);
-    }
-  } catch (error) {
-    console.error("Error sending chunks to parent:", error);
-  }
-})();
-
-screenRecorder.start();
+pageRecorder.start();

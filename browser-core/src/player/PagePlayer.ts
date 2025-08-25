@@ -35,7 +35,6 @@ import { MouseSimulator } from "./MouseSimulator";
 import { SelectionSimulator } from "./SelectionSimulator";
 import { TypingSimulator } from "./TypingSimulator";
 
-
 export type OpenFrame = {
   type: 'keyframe',
   document: VDocument,

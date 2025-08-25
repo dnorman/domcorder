@@ -501,7 +501,7 @@ export function checkAdoptedStyleSheets(iframe1: HTMLIFrameElement, iframe2: HTM
         console.log(`      Rule ${j}: ${rule.cssText}`);
       }
     } catch (e) {
-      console.log(`      Cannot access rules: ${e.message}`);
+      console.log(`      Cannot access rules: ${(e as Error).message}`);
     }
   }
   
@@ -515,7 +515,7 @@ export function checkAdoptedStyleSheets(iframe1: HTMLIFrameElement, iframe2: HTM
         console.log(`      Rule ${j}: ${rule.cssText}`);
       }
     } catch (e) {
-      console.log(`      Cannot access rules: ${e.message}`);
+      console.log(`      Cannot access rules: ${(e as Error).message}`);
     }
   }
   
@@ -840,8 +840,8 @@ export function checkTimingIssues(iframe1: HTMLIFrameElement, iframe2: HTMLIFram
   
   if (container1 && container2) {
     // Force reflow
-    container1.offsetHeight;
-    container2.offsetHeight;
+      (container1 as HTMLElement).offsetHeight;
+  (container2 as HTMLElement).offsetHeight;
     
     // Wait a bit and measure again
     setTimeout(() => {
