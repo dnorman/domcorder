@@ -6,6 +6,7 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use tokio::io::AsyncRead;
 use tokio_stream::StreamExt;
+use tracing::{error, info};
 use uuid::Uuid;
 
 impl StorageState {
@@ -106,6 +107,51 @@ impl StorageState {
     pub fn is_recording_active(&self, filename: &str) -> bool {
         let active_recordings = self.active_recordings.lock().unwrap();
         active_recordings.contains_key(filename)
+    }
+
+    /// TEMPORARILY BYPASS FRAME PROCESSING: Stream raw data directly to file with header
+    pub async fn save_recording_stream_raw<R: AsyncRead + Unpin>(
+        &self,
+        mut source: R,
+    ) -> io::Result<String> {
+        let filename = self.generate_filename();
+        let filepath = self.storage_dir.join(&filename);
+
+        // Mark this recording as active
+        self.mark_recording_active(&filename);
+
+        // First, write the file header using the sync FrameWriter
+        let header = FileHeader::new();
+        {
+            // Create a temporary sync file handle for header writing
+            let sync_file = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&filepath)?;
+            let mut frame_writer = FrameWriter::new(sync_file);
+            frame_writer.write_header(&header)?;
+            frame_writer.flush()?;
+        }
+
+        // Reopen the file in append mode for async operations
+        let mut output_file = tokio::fs::OpenOptions::new()
+            .append(true)
+            .open(&filepath)
+            .await?;
+
+        // Copy raw frame bytes directly after the header - no frame processing
+        let bytes_copied = tokio::io::copy(&mut source, &mut output_file).await?;
+
+        info!(
+            "📁 Raw copy completed: {} bytes written to {} (plus header)",
+            bytes_copied, filename
+        );
+
+        // Mark this recording as completed
+        self.mark_recording_completed(&filename);
+
+        Ok(filename)
     }
 
     /// Stream and validate frames from an AsyncRead source (frame data only, no header), writing them to a file

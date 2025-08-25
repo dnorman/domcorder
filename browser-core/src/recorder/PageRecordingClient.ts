@@ -20,8 +20,8 @@ export class PageRecordingClient {
 
   constructor(recorder: PageRecorder, serverUrl: string, options: PageRecordingClientOptions = {}) {
     this.recorder = recorder;
-    this.serverUrl = serverUrl; 
-    this.ws = null;    
+    this.serverUrl = serverUrl;
+    this.ws = null;
     this.frameQueue = [];
     this.options = options;
     this.isProcessingQueue = false;
@@ -30,7 +30,7 @@ export class PageRecordingClient {
     this.frameHandler = async (frame: Frame) => {
       // Always add to queue to maintain order
       this.frameQueue.push(frame);
-      
+
       // Process queue if not already processing
       if (!this.isProcessingQueue) {
         await this.processFrameQueue();
@@ -48,10 +48,23 @@ export class PageRecordingClient {
     this.ws?.close();
   }
 
+  public getWebSocket(): WebSocket | null {
+    return this.ws;
+  }
+
   private createFrameChunkWriter(): FrameChunkWriter {
     return new FrameChunkWriter({
       next: (chunk: Uint8Array) => {
+        const beforeBuffer = this.ws?.bufferedAmount || 0;
+        console.log(`📤 Sending binary chunk to server: ${chunk.length} bytes, buffered before: ${beforeBuffer} bytes`);
         this.ws?.send(chunk);
+        const afterBuffer = this.ws?.bufferedAmount || 0;
+        console.log(`📊 WebSocket buffer after send: ${afterBuffer} bytes (delta: +${afterBuffer - beforeBuffer})`);
+
+        // Log if buffer is getting large (potential bottleneck)
+        if (afterBuffer > 1024 * 1024) { // 1MB threshold
+          console.warn(`⚠️ WebSocket buffer is large: ${(afterBuffer / 1024 / 1024).toFixed(2)}MB - network may be slow`);
+        }
       },
       error: (error: Error) => {
         console.error('Error writing frame chunk:', error);
@@ -60,7 +73,7 @@ export class PageRecordingClient {
         console.error('Frame chunk writer cancelled:', reason);
       },
       done: () => {
-        
+
       }
     }, {
       chunkSize: this.options.chunkSize ?? 512 * 1024
@@ -90,17 +103,17 @@ export class PageRecordingClient {
       this.isProcessingQueue = false;
     }
   }
-  
+
   private connectToServer(): void {
     console.debug('🔌 Connecting to WebSocket server...');
     try {
-      this.ws = this.options.webSocketFactory ? 
-        this.options.webSocketFactory(this.serverUrl) : 
+      this.ws = this.options.webSocketFactory ?
+        this.options.webSocketFactory(this.serverUrl) :
         new WebSocket(this.serverUrl);
 
       this.ws.onopen = async () => {
         console.debug('🔌 WebSocket connected');
-        
+
         // Start processing any queued frames
         if (this.frameQueue.length > 0 && !this.isProcessingQueue) {
           await this.processFrameQueue();

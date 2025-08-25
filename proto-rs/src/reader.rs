@@ -108,21 +108,41 @@ impl<R: AsyncRead + Unpin> FrameReader<R> {
     }
 
     async fn try_read_frame(&mut self) -> io::Result<Option<Frame>> {
+        // TODO: PERFORMANCE OPTIMIZATION - Add frame length prefix to protocol
+        // Current approach tries to deserialize on every 4KB chunk, causing O(n²) complexity
+        // for large frames. Should prefix each frame with its byte length (u32/u64) so we can:
+        // 1. Read the length first (4-8 bytes)
+        // 2. Read exactly that many bytes for the frame
+        // 3. Deserialize once with complete data
+        // This would eliminate the exponential parse attempts for large assets.
+
         let config = bincode::DefaultOptions::new()
             .with_big_endian()
             .with_fixint_encoding();
 
         // Read chunks until we can deserialize a complete frame
         let mut temp_buf = [0u8; 4096];
+        let mut parse_attempts = 0;
 
         loop {
             // Try to deserialize from current buffer
             if !self.buffer.is_empty() {
+                parse_attempts += 1;
+                println!(
+                    "🔍 Parse attempt #{}: buffer size {} bytes",
+                    parse_attempts,
+                    self.buffer.len()
+                );
+
                 let mut cursor = std::io::Cursor::new(&self.buffer);
                 match config.deserialize_from(&mut cursor) {
                     Ok(frame) => {
                         // Success! Remove consumed bytes from buffer
                         let consumed = cursor.position() as usize;
+                        println!(
+                            "✅ Frame parsed successfully after {} attempts, consumed {} bytes",
+                            parse_attempts, consumed
+                        );
                         self.buffer.drain(..consumed);
                         return Ok(Some(frame));
                     }

@@ -47,13 +47,13 @@ async fn main() {
                 .serve_connection_with_upgrades(
                     io,
                     hyper::service::service_fn(move |req| {
-                        debug!(
-                            "Incoming request: {} {} {:?}",
-                            req.method(),
-                            req.uri(),
-                            req.version()
-                        );
-                        debug!("Request headers: {:?}", req.headers());
+                        // debug!(
+                        //     "Incoming request: {} {} {:?}",
+                        //     req.method(),
+                        //     req.uri(),
+                        //     req.version()
+                        // );
+                        // debug!("Request headers: {:?}", req.headers());
                         app_clone.clone().call(req)
                     }),
                 )

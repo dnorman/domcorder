@@ -81,26 +81,42 @@ async fn handle_websocket_stream(socket: WebSocket, state: AppState) {
     }
 
     // Create a pipe to stream WebSocket data to the existing save method
-    let (pipe_writer, pipe_reader) = tokio::io::duplex(8192);
+    let (pipe_writer, pipe_reader) = tokio::io::duplex(8192); // Back to reasonable buffer size
     let mut pipe_writer = pipe_writer;
     let pipe_reader = pipe_reader;
 
     // Spawn a task to handle the streaming save
     let state_clone = state.clone();
-    let save_task = tokio::spawn(async move {
-        state_clone
-            .save_recording_stream_frames_only(pipe_reader)
-            .await
-    });
+    let save_task =
+        tokio::spawn(async move { state_clone.save_recording_stream_raw(pipe_reader).await });
 
     let mut total_bytes = 0;
+    let mut last_frame_time: Option<u128> = None;
     const MAX_RECORDING_SIZE: usize = 100 * 1024 * 1024; // 100MB limit
 
     // Process WebSocket messages and stream to pipe
     while let Some(msg) = receiver.next().await {
         match msg {
             Ok(Message::Binary(data)) => {
-                debug!("📦 Received {} bytes of binary data", data.len());
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis();
+
+                let time_since_last = match last_frame_time {
+                    Some(last) => format!("(+{}ms)", now - last),
+                    None => "(first frame)".to_string(),
+                };
+
+                info!(
+                    "📦 [{}ms] {} Received {} bytes of binary data (total: {} bytes)",
+                    now,
+                    time_since_last,
+                    data.len(),
+                    total_bytes + data.len()
+                );
+
+                last_frame_time = Some(now);
                 total_bytes += data.len();
 
                 // Safety check: prevent runaway recordings
