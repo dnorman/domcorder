@@ -26,7 +26,8 @@ import {
   WindowBlurred,
   type TextInsertOperationData,
   type TextRemoveOperationData,
-  type TextOperationData
+  type TextOperationData,
+  Timestamp
 } from "@domcorder/proto-ts";
 import { NodeIdBiMap } from "../common";
 import type { DomOperation } from "../common/DomOperation";
@@ -41,11 +42,12 @@ export class PageRecorder {
   private frameHandlers: FrameHandler[];
 
   private pendingAssets: boolean;
-  private operationQueue: DomOperation[];
+  private readonly operationQueue: DomOperation[];
   private changeDetector: DomChangeDetector | null;
   private styleSheetWatcher: StyleSheetWatcher | null;
   private userInteractionTracker: UserInteractionTracker | null;
   private sourceDocNodeIdMap: NodeIdBiMap | null;
+  private recordingEpoch: number;
 
   constructor(sourceDocument: Document) {
     this.sourceDocument = sourceDocument;
@@ -57,6 +59,7 @@ export class PageRecorder {
     this.styleSheetWatcher = null;
     this.userInteractionTracker = null;
     this.sourceDocNodeIdMap = null;
+    this.recordingEpoch = Date.now();
   }
 
   public addFrameHandler(handler: FrameHandler) {
@@ -67,7 +70,11 @@ export class PageRecorder {
     this.frameHandlers = this.frameHandlers.filter(h => h !== handler);
   }
 
-  private async emitFrame(frame: Frame) {
+  private async emitFrame(frame: Frame, timestamp: boolean = true) {
+    if (timestamp) {
+      this.emitTimestampFrame();
+    }
+
     for (const handler of this.frameHandlers) {
       try {
        await handler(frame);
@@ -78,6 +85,7 @@ export class PageRecorder {
   }
 
   start() {
+    this.recordingEpoch = Date.now();
     this.sourceDocNodeIdMap = new NodeIdBiMap();
     this.sourceDocNodeIdMap.assignNodeIdsToSubTree(this.sourceDocument);
 
@@ -95,11 +103,11 @@ export class PageRecorder {
 
     this.changeDetector = new DomChangeDetector(this.sourceDocument, this.sourceDocNodeIdMap, async (operations) => {
       for (const operation of operations) {
-        if (this.pendingAssets) {
-          this.operationQueue.push(operation);
-        } else {
-          await this.processOperation(operation, this.sourceDocNodeIdMap!);
-        }
+        this.operationQueue.push(operation);
+      }
+
+      if (!this.pendingAssets) {
+          this.processOperationQueue();
       }
     }, 500);
 
@@ -118,6 +126,23 @@ export class PageRecorder {
     this.styleSheetWatcher?.stop();
   }
 
+  private emitTimestampFrame() {
+    const relativeTime = Date.now() - this.recordingEpoch;
+    const frame = new Timestamp(relativeTime);
+    this.emitFrame(frame, false);
+  }
+
+  private async processOperationQueue() {
+    if (this.operationQueue.length > 0) {
+      this.emitTimestampFrame();
+
+      for (const operation of this.operationQueue) {
+        await this.processOperation(operation, this.sourceDocNodeIdMap!);
+      }
+      this.operationQueue.length = 0;
+    }
+  }
+
   private async processOperation(
     operation: DomOperation,
     nodeIdMap: NodeIdBiMap
@@ -128,11 +153,11 @@ export class PageRecorder {
           onInlineStarted: async (ev: InlineStartedEvent) => {
             this.pendingAssets = ev.assetCount > 0;
             const frame = new DomNodeAdded(operation.parentId, operation.index, ev.node, ev.assetCount);
-            await this.emitFrame(frame);
+            await this.emitFrame(frame, false);
           },
           onAsset: async (asset: InlinerAsset) => {
             const frame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
-            await this.emitFrame(frame);
+            await this.emitFrame(frame, false);
           },
           onInlineComplete: () => {
             this.pendingAssetsComplete();
@@ -142,17 +167,17 @@ export class PageRecorder {
 
       case "remove":
         const removeFrame = new DomNodeRemoved(operation.nodeId);
-        await this.emitFrame(removeFrame);
+        await this.emitFrame(removeFrame, false);
         break;
 
       case "updateAttribute":
         const updateAttrFrame = new DomAttributeChanged(operation.nodeId, operation.name, operation.value);
-        await this.emitFrame(updateAttrFrame);
+        await this.emitFrame(updateAttrFrame, false);
         break;
 
       case "removeAttribute":
         const removeAttrFrame = new DomAttributeRemoved(operation.nodeId, operation.name);
-        await this.emitFrame(removeAttrFrame);
+        await this.emitFrame(removeAttrFrame, false);
         break;
 
       case "updateText":
@@ -176,17 +201,14 @@ export class PageRecorder {
         });
 
         const textFrame = new DomTextChanged(operation.nodeId, operations);
-        await this.emitFrame(textFrame);
+        await this.emitFrame(textFrame, false);
         break;
     }
   }
 
-  pendingAssetsComplete() {
+  async pendingAssetsComplete() {
     this.pendingAssets = false;
-    for (const operation of this.operationQueue) {
-      this.processOperation(operation, this.sourceDocNodeIdMap!);
-    }
-    this.operationQueue = [];
+    await this.processOperationQueue();
   }
 
 
@@ -228,11 +250,11 @@ export class PageRecorder {
         const frame = new TextSelectionChanged(event.startNodeId, event.startOffset, event.endNodeId, event.endOffset);
         this.emitFrame(frame);
       },
-      onWindowFocus: (event) => {
+      onWindowFocus: (_) => {
         const frame = new WindowFocused();
         this.emitFrame(frame);
       },
-      onWindowBlur: (event) => {
+      onWindowBlur: (_) => {
         const frame = new WindowBlurred();
         this.emitFrame(frame);
       }
@@ -242,14 +264,14 @@ export class PageRecorder {
   private createKeyFrameHandler() {
     return {
       onKeyFrameStarted: async (ev: KeyFrameStartedEvent) => {
+        this.pendingAssets = ev.assetCount > 0;
+
         const keyframe = new Keyframe(ev.document, ev.assetCount, ev.viewportWidth, ev.viewportHeight);
         await this.emitFrame(keyframe);
-
-        this.pendingAssets = ev.assetCount > 0;
       },
       onAsset: async (asset: InlinerAsset) => {
         const assetFrame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
-        await this.emitFrame(assetFrame);
+        await this.emitFrame(assetFrame, false);
       },
       onKeyFrameComplete: () => {
         this.pendingAssetsComplete();
@@ -270,12 +292,13 @@ export class PageRecorder {
           await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, {
             onInlineStarted: (ev: InlineAdoptedStyleSheetEvent) => {
               this.pendingAssets = ev.assetCount > 0;
+
               const newStyleSheetFrame = new NewAdoptedStyleSheet(ev.styleSheet, ev.assetCount);
-              this.emitFrame(newStyleSheetFrame);
+              this.emitFrame(newStyleSheetFrame, false);
             },
             onAsset: (asset: InlinerAsset) => {
               const assetFrame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
-              this.emitFrame(assetFrame);
+              this.emitFrame(assetFrame, false);
             },
             onInlineComplete: () => { 
               this.pendingAssetsComplete();
