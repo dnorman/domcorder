@@ -45,20 +45,37 @@ export const BookmarkletButton: React.FC = () => {
 
     // Create the bookmarklet code that loads the injection script
     const bookmarkletCode = `javascript:(function(){
-    if(window.DomCorder){
-      console.log('DomCorder already loaded');
-      return;
-    }
-    const script=document.createElement('script');
-    script.src='http://localhost:5173/inject.js?t='+Date.now();
-    script.onload=function(){
-      console.log('DomCorder injection script loaded');
-    };
-    script.onerror=function(){
-      alert('Failed to load DomCorder. Make sure the player is running at localhost:5173');
-    };
-    document.head.appendChild(script);
-  })()`.replace(/\s+/g, ' ');
+if(window.DomCorder){
+console.log('DomCorder already loaded');
+return;
+}
+var script=document.createElement('script');
+var url='http://localhost:5173/inject.js?t='+Date.now();
+if(window.trustedTypes && window.trustedTypes.createPolicy){
+try{
+var policy=window.trustedTypes.createPolicy('domcorder-bookmarklet',{
+createScriptURL:function(url){return url;}
+});
+script.src=policy.createScriptURL(url);
+}catch(e){
+fetch(url).then(function(r){return r.text();}).then(function(code){
+var textScript=document.createElement('script');
+textScript.textContent=code;
+document.head.appendChild(textScript);
+}).catch(function(){alert('Failed to load DomCorder');});
+return;
+}
+}else{
+script.src=url;
+}
+script.onload=function(){
+console.log('DomCorder injection script loaded');
+};
+script.onerror=function(){
+alert('Failed to load DomCorder. Make sure the player is running at localhost:5173');
+};
+document.head.appendChild(script);
+})();`;
 
     // Set the href after component mounts to bypass React's security check
     useEffect(() => {
