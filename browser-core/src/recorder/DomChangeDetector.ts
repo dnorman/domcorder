@@ -99,6 +99,10 @@ export class DomChangeDetector {
   }
 
   private computeAndApplyOperations(liveNode: Node, snapshotNode: Node): DomOperation[] {
+    if (liveNode.nodeType !== snapshotNode.nodeType) {
+      throw new Error(`Node types do not match, live: ${liveNode.nodeType}, snapshot: ${snapshotNode.nodeType}`);
+    }
+
     const liveNodeId = this.liveNodeMap.getNodeId(liveNode)!;
 
     const ops: DomOperation[] = [];
@@ -264,7 +268,7 @@ export class DomChangeDetector {
       return ops;
     }
     
-    throw new Error('Unexpected change');
+    console.error('Unexpected change', liveNode, snapshotNode);
   }
 
   disconnect(): void {
