@@ -233,10 +233,17 @@ function snapElement(el: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap
     children.push(vChild);
   }
 
+  // TODO perhaps we should set a default at the document level, instead of
+  // assuming we know what the default is.
+  let ns: string | undefined;  
+  if (el.namespaceURI && el.namespaceURI !== 'http://www.w3.org/1999/xhtml') {
+    ns = el.namespaceURI;
+  }
+
   const node = new VElement(
     id,
     el.tagName.toLowerCase(),
-    el.namespaceURI || undefined,
+    ns,
     Object.keys(attrs).length ? attrs : {},
     children
   );
