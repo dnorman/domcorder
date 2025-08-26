@@ -19,18 +19,27 @@ export class PlaybackQueue {
 
   private playbackSpeed: number;
   private readonly playbackHandler: (event: PlayEvent) => void;
+  live: any;
 
-  constructor(playbackHandler: (event: PlayEvent) => void) {
+  constructor(live: boolean,playbackHandler: (event: PlayEvent) => void) {
     this.lastPlayedTimestamp = 0;
     this.frameQueue = [];
     this.playbackEpoch = Date.now();
     this.nextEventTimeout = null;
     this.playbackSpeed = 1;
     this.playbackHandler = playbackHandler;
+    this.live = live;
   }
 
   public enqueueFrame(frame: Frame) {
-    if (this.frameQueue.length === 0) {
+    if (this.live) { 
+      if (!(frame instanceof Timestamp)) {
+        this.playbackHandler({
+          timestamp: this.lastPlayedTimestamp,
+          frames: [frame],
+        });
+      }
+    } else if (this.frameQueue.length === 0) {
       if (frame instanceof Timestamp) {
         // We don't have anything queued, we are going to create a new bucket
         // for the timestamp.  However, since this is the bucket at the head
@@ -41,9 +50,9 @@ export class PlaybackQueue {
         // We have nothing queued, so we can just play the frame
         // because we are already playing the current time context.
         this.playbackHandler({
-            timestamp: this.lastPlayedTimestamp,
-            frames: [frame],
-          });
+          timestamp: this.lastPlayedTimestamp,
+          frames: [frame],
+        });
       }
     } else {
       if (frame instanceof Timestamp) {

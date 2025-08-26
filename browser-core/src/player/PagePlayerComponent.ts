@@ -20,7 +20,7 @@ export class PagePlayerComponent {
   private readonly readyPromise: Deferred<void>;
   keyboardContainer: HTMLDivElement;
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, live: boolean = false) {
     this.readyPromise = new Deferred<void>();
     this.container = container;
 
@@ -138,7 +138,13 @@ export class PagePlayerComponent {
     // because the player needs the iframe's contentDocument to be available
     // and the iframe's contentDocument is not available until the iframe has loaded.
     new Promise(res => this.iframe.addEventListener('load', res, { once: true })).then(() => {
-      this.player = new PagePlayer(this.iframe, this.overlayElement, this.keyboardContainer, this);
+      this.player = new PagePlayer(
+        this.iframe,
+         this.overlayElement, 
+         this.keyboardContainer, 
+         live,
+         this
+      );
 
       for (const frame of this.frameQueue) {
         this.player.queueFrame(frame);
@@ -158,7 +164,6 @@ export class PagePlayerComponent {
   }
 
   public handleFrame(frame: Frame): void {
-    console.log('handleFrame', frame);
     if (!this.player) {
       this.frameQueue.push(frame);
     } else {

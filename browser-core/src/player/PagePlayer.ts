@@ -88,6 +88,7 @@ export class PagePlayer {
     targetIframe: HTMLIFrameElement,
     overlayElement: HTMLElement,
     typingSimulatorElement: HTMLElement,
+    live: boolean,
     playerComponent?: any) {
     this.targetIframe = targetIframe;
     this.targetDocument = targetIframe.contentDocument!;
@@ -123,7 +124,7 @@ export class PagePlayer {
       }
     });
 
-    this.playbackQueue = new PlaybackQueue((event: PlayEvent) => {
+    this.playbackQueue = new PlaybackQueue(live, (event: PlayEvent) => {
       for (const frame of event.frames) {
         this.handleFrame(frame);
       }
