@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 
 const BookmarkletContainer = styled.div`
@@ -42,44 +42,51 @@ const Instructions = styled.span`
 
 export const BookmarkletButton: React.FC = () => {
     const linkRef = useRef<HTMLAnchorElement>(null);
+    const [injectionScript, setInjectionScript] = useState<string>('');
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Create the bookmarklet code that loads the injection script
-    const bookmarkletCode = `javascript:(function(){
+    // Load the injection script content (already minified at build time)
+    useEffect(() => {
+        fetch('/inject.js')
+            .then(response => response.text())
+            .then(scriptContent => {
+                console.log(`Injection script size: ${scriptContent.length} chars`);
+                setInjectionScript(scriptContent);
+                setIsLoading(false);
+            })
+            .catch(error => {
+                console.error('Failed to load injection script:', error);
+                setIsLoading(false);
+            });
+    }, []);
+
+    // Create the bookmarklet code with inlined script
+    const bookmarkletCode = injectionScript ? `javascript:(function(){
 if(window.DomCorder){
 console.log('DomCorder already loaded');
 return;
 }
-var script=document.createElement('script');
-var url='http://localhost:5173/inject.js?t='+Date.now();
-if(window.trustedTypes && window.trustedTypes.createPolicy){
 try{
-var policy=window.trustedTypes.createPolicy('domcorder-bookmarklet',{
-createScriptURL:function(url){return url;}
-});
-script.src=policy.createScriptURL(url);
+${injectionScript}
 }catch(e){
-fetch(url).then(function(r){return r.text();}).then(function(code){
-var textScript=document.createElement('script');
-textScript.textContent=code;
-document.head.appendChild(textScript);
-}).catch(function(){alert('Failed to load DomCorder');});
-return;
+console.error('DomCorder injection failed:',e);
+alert('Failed to load DomCorder: '+e.message);
 }
-}else{
-script.src=url;
-}
-script.onload=function(){
-console.log('DomCorder injection script loaded');
-};
-script.onerror=function(){
-alert('Failed to load DomCorder. Make sure the player is running at localhost:5173');
-};
-document.head.appendChild(script);
-})();`;
+})();` : '';
 
-    // Set the href after component mounts to bypass React's security check
+    // Log bookmarklet size for debugging
     useEffect(() => {
-        if (linkRef.current) {
+        if (bookmarkletCode) {
+            console.log(`Final bookmarklet size: ${bookmarkletCode.length} chars`);
+            if (bookmarkletCode.length > 124000) {
+                console.warn('⚠️ Bookmarklet may be too large for some browsers (>124k chars)');
+            }
+        }
+    }, [bookmarkletCode]);
+
+    // Set the href after component mounts and script is loaded
+    useEffect(() => {
+        if (linkRef.current && bookmarkletCode) {
             linkRef.current.href = bookmarkletCode;
         }
     }, [bookmarkletCode]);
@@ -88,13 +95,14 @@ document.head.appendChild(script);
         <BookmarkletContainer>
             <BookmarkletLink
                 ref={linkRef}
-                href="#" // Placeholder href to avoid React warning
-                title="Drag this to your bookmarks bar to record any page"
+                href={bookmarkletCode || "#"} // Use bookmarklet code or placeholder
+                title={isLoading ? "Loading injection script..." : "Drag this to your bookmarks bar to record any page"}
+                style={{ opacity: isLoading ? 0.5 : 1, pointerEvents: isLoading ? 'none' : 'auto' }}
             >
-                🎬 Record this page
+                {isLoading ? '⏳ Loading...' : '🎬 Record this page'}
             </BookmarkletLink>
             <Instructions>
-                ← Drag to bookmarks bar
+                {isLoading ? 'Loading injection script...' : '← Drag to bookmarks bar'}
             </Instructions>
         </BookmarkletContainer>
     );
