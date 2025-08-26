@@ -269,6 +269,7 @@ export class DomChangeDetector {
     }
     
     console.error('Unexpected change', liveNode, snapshotNode);
+    return [];
   }
 
   disconnect(): void {
