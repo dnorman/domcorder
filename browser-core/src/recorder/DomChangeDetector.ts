@@ -107,8 +107,9 @@ export class DomChangeDetector {
 
     const ops: DomOperation[] = [];
   
-    // Handle text nodes (we know the types are the same)
-    if (liveNode.nodeType === Node.TEXT_NODE) {
+    if (liveNode.nodeType === Node.TEXT_NODE || 
+        liveNode.nodeType === Node.COMMENT_NODE ||
+        liveNode.nodeType === Node.CDATA_SECTION_NODE) {
       if (snapshotNode.textContent !== liveNode.textContent) {
         const changes = computeMinimalChanges(snapshotNode.textContent || '', liveNode.textContent || '');
         ops.push({
@@ -121,9 +122,7 @@ export class DomChangeDetector {
       snapshotNode.textContent = liveNode.textContent;
 
       return ops;
-    }
-
-    if (liveNode.nodeType === Node.ELEMENT_NODE) {
+    } else if (liveNode.nodeType === Node.ELEMENT_NODE) {
       const snapshotEl = snapshotNode as Element;
       const liveEl = liveNode as Element;      
       
@@ -268,7 +267,7 @@ export class DomChangeDetector {
       return ops;
     }
     
-    console.error('Unexpected change', liveNode, snapshotNode);
+    console.debug('Unexpected change', liveNode, snapshotNode);
     return [];
   }
 

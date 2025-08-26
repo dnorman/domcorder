@@ -297,11 +297,6 @@ export class PagePlayer {
       return;
     }
 
-    if (node.nodeType !== Node.TEXT_NODE) {
-      console.error('Node is not a text node, type:', node.nodeType);
-      return;
-    }
-
     const ops: StringMutationOperation[] = textChangedData.operations.map(op => {
       switch (op.op) {
         case 'insert':
