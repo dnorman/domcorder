@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import { RecordingsList } from './components/RecordingsList';
 import { PlayerWrapper } from './components/PlayerWrapper';
+import { BookmarkletButton } from './components/BookmarkletButton';
 
 interface Recording {
   id: string;
   filename: string;
   size: number;
   created: string;
+  is_active: boolean;
 }
 
 const GlobalStyle = createGlobalStyle`
@@ -124,6 +126,7 @@ function App() {
         <AppHeader>
           <h1>🎬 DomCorder Player</h1>
           <p>Select a recording to play it back</p>
+          <BookmarkletButton />
         </AppHeader>
 
         <AppMain>

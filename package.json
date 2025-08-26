@@ -7,15 +7,18 @@
   "workspaces": [
     "proto-ts",
     "browser-core",
-    "player"
+    "player",
+    "injection"
   ],
   "scripts": {
     "dev": "cd player && bun run dev",
     "build": "cd player && bun run build",
+    "build:injection": "cd injection && bun run build",
+    "dev:injection": "cd injection && bun run dev",
     "test:proto-ts": "cd proto-ts && bun run test",
     "test:proto-rs": "cd proto-rs && cargo test",
     "test:all": "bun run test:proto-ts && bun run test:proto-rs",
-    "clean": "rm -rf player/node_modules proto-ts/node_modules browser-core/node_modules node_modules && rm -rf proto-rs/target"
+    "clean": "rm -rf player/node_modules proto-ts/node_modules browser-core/node_modules injection/node_modules node_modules && rm -rf proto-rs/target"
   },
   "keywords": [
     "dom",

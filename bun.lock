@@ -1,5 +1,5 @@
 {
-  "lockfileVersion": 0,
+  "lockfileVersion": 1,
   "workspaces": {
     "": {
       "name": "domcorder-workspace",
@@ -10,7 +10,7 @@
     "browser-core": {
       "name": "@domcorder/browser-core",
       "dependencies": {
-        "@domcorder/proto-ts": "proto-ts",
+        "@domcorder/proto-ts": "workspace:*",
         "jsdom": "^26.1.0",
       },
       "devDependencies": {
@@ -23,12 +23,24 @@
         "typescript": "^5.0.0",
       },
     },
+    "injection": {
+      "name": "@domcorder/injection",
+      "version": "0.1.0",
+      "dependencies": {
+        "@domcorder/browser-core": "workspace:*",
+        "@domcorder/proto-ts": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.0.0",
+      },
+    },
     "player": {
       "name": "domcorder-player",
       "version": "0.0.0",
       "dependencies": {
-        "@domcorder/browser-core": "browser-core",
-        "@domcorder/proto-ts": "proto-ts",
+        "@domcorder/browser-core": "workspace:*",
+        "@domcorder/proto-ts": "workspace:*",
         "@types/styled-components": "^5.1.34",
         "react": "^19.1.1",
         "react-dom": "^19.1.1",
@@ -109,9 +121,11 @@
 
     "@csstools/css-tokenizer": ["@csstools/css-tokenizer@3.0.4", "", {}, "sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw=="],
 
-    "@domcorder/browser-core": ["@domcorder/browser-core@workspace:browser-core", { "dependencies": { "@domcorder/proto-ts": "proto-ts", "jsdom": "^26.1.0" }, "devDependencies": { "@types/bun": "latest", "@types/jsdom": "^21.1.7", "express": "^5.1.0", "global-jsdom": "^26.0.0" }, "peerDependencies": { "typescript": "^5.0.0" } }],
+    "@domcorder/browser-core": ["@domcorder/browser-core@workspace:browser-core"],
 
-    "@domcorder/proto-ts": ["@domcorder/proto-ts@workspace:proto-ts", { "devDependencies": { "jsdom": "^22.1.0" } }],
+    "@domcorder/injection": ["@domcorder/injection@workspace:injection"],
+
+    "@domcorder/proto-ts": ["@domcorder/proto-ts@workspace:proto-ts"],
 
     "@emotion/is-prop-valid": ["@emotion/is-prop-valid@1.2.2", "", { "dependencies": { "@emotion/memoize": "^0.8.1" } }, "sha512-uNsoYd37AFmaCdXlg6EYD1KaPOaRWRByMCYzbKUX4+hhMfrxdVSelShywL4JVaAeM/eHUOSprYBQls+/neX3pw=="],
 
@@ -391,7 +405,7 @@
 
     "depd": ["depd@2.0.0", "", {}, "sha512-g7nH6P6dyDioJogAAGprGpCtVImJhpPk/roCzdb3fIh61/s/nPsfR6onyMwkCAR/OlC3yBC0lESvUoQEAssIrw=="],
 
-    "domcorder-player": ["domcorder-player@workspace:player", { "dependencies": { "@domcorder/browser-core": "browser-core", "@domcorder/proto-ts": "proto-ts", "@types/styled-components": "^5.1.34", "react": "^19.1.1", "react-dom": "^19.1.1", "styled-components": "^6.1.19" }, "devDependencies": { "@eslint/js": "^9.33.0", "@types/react": "^19.1.10", "@types/react-dom": "^19.1.7", "@vitejs/plugin-react": "^5.0.0", "eslint": "^9.33.0", "eslint-plugin-react-hooks": "^5.2.0", "eslint-plugin-react-refresh": "^0.4.20", "globals": "^16.3.0", "typescript": "~5.8.3", "typescript-eslint": "^8.39.1", "vite": "^7.1.2" } }],
+    "domcorder-player": ["domcorder-player@workspace:player"],
 
     "domexception": ["domexception@4.0.0", "", { "dependencies": { "webidl-conversions": "^7.0.0" } }, "sha512-A2is4PLG+eeSfoTMA95/s4pvAoSo2mKtiM5jlHkAVewmiO8ISFTFKZjH7UAM1Atli/OT/7JHOrJRJiMKUZKYBw=="],
 

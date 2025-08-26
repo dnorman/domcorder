@@ -1,0 +1,19 @@
+{
+  "name": "@domcorder/injection",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target browser --format esm",
+    "build:watch": "bun build src/index.ts --outdir dist --target browser --format esm --watch",
+    "dev": "bun run build:watch",
+    "link": "ln -sf $(pwd)/dist/index.js ../player/public/inject.js"
+  },
+  "dependencies": {
+    "@domcorder/browser-core": "workspace:*",
+    "@domcorder/proto-ts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  }
+}
