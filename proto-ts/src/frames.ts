@@ -123,17 +123,6 @@ export class Keyframe extends Frame {
         w.u32(this.viewportHeight);
         await w.endFrame();
     }
-
-    // Streaming async - can yield during DOM recursion
-    async encodeStreaming(w: Writer): Promise<void> {
-        w.u32(FrameType.Keyframe);
-        // Encode the VDocument with streaming
-        await this.vdocument.encodeStreaming(w);
-        w.u32(this.assetCount);
-        w.u32(this.viewportWidth);
-        w.u32(this.viewportHeight);
-        await w.endFrame();
-    }
 }
 
 export class Asset extends Frame {
@@ -368,16 +357,6 @@ export class DomNodeAdded extends Frame {
         w.u32(this.parentNodeId);
         w.u32(this.index);
         this.vnode.encode(w);            // Encode the VNode synchronously
-        w.u32(this.assetCount);
-        await w.endFrame();
-    }
-
-    // Streaming async - can yield during node encoding
-    async encodeStreaming(w: Writer): Promise<void> {
-        w.u32(FrameType.DomNodeAdded);
-        w.u32(this.parentNodeId);
-        w.u32(this.index);
-        await this.vnode.encodeStreaming(w);  // Encode the VNode with streaming
         w.u32(this.assetCount);
         await w.endFrame();
     }

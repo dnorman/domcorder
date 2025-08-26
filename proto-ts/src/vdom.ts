@@ -31,7 +31,6 @@ export abstract class VNode {
 
   // Abstract methods that subclasses must implement
   abstract encode(w: Writer): void;
-  abstract encodeStreaming(w: Writer): Promise<void>;
 
   // Static decode method dispatcher
   static decode(r: BufferReader): VNode {
@@ -75,12 +74,6 @@ export class VTextNode extends VNode {
     w.strUtf8(this.text);
   }
 
-  async encodeStreaming(w: Writer): Promise<void> {
-    // Yield at start of each node
-    await w.streamWait();
-    this.encode(w);
-  }
-
   static decode(r: BufferReader): VTextNode {
     // Read node ID
     const id = r.readU32();
@@ -108,12 +101,6 @@ export class VCDATASection extends VNode {
     w.strUtf8(this.data);
   }
 
-  async encodeStreaming(w: Writer): Promise<void> {
-    // Yield at start of each node
-    await w.streamWait();
-    this.encode(w);
-  }
-
   static decode(r: BufferReader): VCDATASection {
     // Read node ID
     const id = r.readU32();
@@ -139,12 +126,6 @@ export class VComment extends VNode {
     w.u32(this.id);
     // Write comment content
     w.strUtf8(this.data);
-  }
-
-  async encodeStreaming(w: Writer): Promise<void> {
-    // Yield at start of each node
-    await w.streamWait();
-    this.encode(w);
   }
 
   static decode(r: BufferReader): VComment {
@@ -175,12 +156,6 @@ export class VProcessingInstruction extends VNode {
     // Write target and data
     w.strUtf8(this.target);
     w.strUtf8(this.data);
-  }
-
-  async encodeStreaming(w: Writer): Promise<void> {
-    // Yield at start of each node
-    await w.streamWait();
-    this.encode(w);
   }
 
   static decode(r: BufferReader): VProcessingInstruction {
@@ -229,12 +204,6 @@ export class VDocumentType extends VNode {
     } else {
       w.byte(0); // None
     }
-  }
-
-  async encodeStreaming(w: Writer): Promise<void> {
-    // Yield at start of each node
-    await w.streamWait();
-    this.encode(w);
   }
 
   static decode(r: BufferReader): VDocumentType {
@@ -286,6 +255,14 @@ export class VElement extends VNode {
     // Write tag name
     w.strUtf8(this.tag.toLowerCase());
 
+    // Write namespace (optional) - bincode format: 1 byte for None, 1+string for Some
+    if (this.ns) {
+      w.byte(1); // Some
+      w.strUtf8(this.ns);
+    } else {
+      w.byte(0); // None
+    }
+
     // Encode attributes as Vec<(String, String)> - name/value pairs
     const attrs = this.attrs || {};
     const attrEntries = Object.entries(attrs);
@@ -303,37 +280,18 @@ export class VElement extends VNode {
     }
   }
 
-  async encodeStreaming(w: Writer): Promise<void> {
-    // Yield at start of each node
-    await w.streamWait();
-
-    // Write enum variant index
-    w.u32(DomNodeType.Element);
-    // Write tag name
-    w.strUtf8(this.tag.toLowerCase());
-
-    // Encode attributes as Vec<(String, String)> - name/value pairs
-    const attrs = this.attrs || {};
-    const attrEntries = Object.entries(attrs);
-    w.u64(BigInt(attrEntries.length));
-    for (const [name, value] of attrEntries) {
-      w.strUtf8(name);
-      w.strUtf8(value);
-    }
-
-    // Encode children as Vec<VNode> - this is where we yield during recursion
-    const children = this.children || [];
-    w.u64(BigInt(children.length));
-    for (const child of children) {
-      await child.encodeStreaming(w);
-    }
-  }
-
   static decode(r: BufferReader): VElement {
     // Read node ID
     const id = r.readU32();
     // Read tag name
     const tag = r.readString();
+
+    // Read optional namespace - bincode format: 1 byte for None/Some
+    const hasNamespace = r.readByte();
+    let ns: string | undefined;
+    if (hasNamespace === 1) {
+      ns = r.readString();
+    }
 
     // Read attributes (u64 count + pairs of strings)
     const attributeCount = Number(r.readU64());
@@ -351,7 +309,7 @@ export class VElement extends VNode {
       children.push(VNode.decode(r));
     }
 
-    return new VElement(id, tag, undefined, attrs, children);
+    return new VElement(id, tag, ns, attrs, children);
   }
 }
 
@@ -414,24 +372,6 @@ export class VDocument extends VNode {
     w.u64(BigInt(this.children.length));
     for (const child of this.children) {
       child.encode(w);
-    }
-  }
-
-  async encodeStreaming(w: Writer): Promise<void> {
-    // VDocument doesn't have a node type - it represents the document itself
-    // Write document ID
-    w.u32(this.id);
-
-    // Encode adopted stylesheets as Vec<VStyleSheet>
-    w.u64(BigInt(this.adoptedStyleSheets.length));
-    for (const sheet of this.adoptedStyleSheets) {
-      sheet.encode(w);
-    }
-
-    // Encode children as Vec<VNode> - this is where we yield during recursion
-    w.u64(BigInt(this.children.length));
-    for (const child of this.children) {
-      await child.encodeStreaming(w);
     }
   }
 

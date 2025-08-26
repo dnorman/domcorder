@@ -90,23 +90,5 @@ describe("Stream Observer Utility", () => {
         writer.close();
     });
 
-    test("should support streaming frame encoding analysis", async () => {
-        const [writer, stream] = Writer.create(32); // Small chunks to force streaming
-        const check = streamObserve(stream);
 
-        // Use streaming encoding
-        await new Keyframe(testVDocument, 0, 1920, 1080).encodeStreaming(writer);
-
-        const analysis = await check();
-
-        // Streaming should produce multiple chunks
-        expect(analysis.chunkCount).toBeGreaterThan(1);
-        expect(analysis.totalBytes).toBeGreaterThan(100);
-
-        // Log the analysis for debugging
-        console.log(`Streaming analysis: ${analysis.chunkCount} chunks, ${analysis.totalBytes} bytes`);
-        console.log(`Chunk sizes: ${analysis.chunks.map(c => c.size).join(', ')}`);
-
-        writer.close();
-    });
 });

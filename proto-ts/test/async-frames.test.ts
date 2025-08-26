@@ -38,28 +38,6 @@ describe("Async Frame Encoders", () => {
         expect(analysis.totalBytes).toBeGreaterThan(50); // Should be substantial
     });
 
-    test("should encode keyframe with streaming version", async () => {
-        const [writer, stream] = Writer.create(64); // Small chunks to force streaming
-        const check = streamObserve(stream);
-
-        // Encode keyframe (streaming version)
-        await new Keyframe(testVDocument, 0, 1920, 1080).encodeStreaming(writer);
-
-        writer.close();
-
-        // Check all data
-        const analysis = await check();
-
-        // Should have multiple chunks due to streaming
-        expect(analysis.chunkCount).toBeGreaterThan(1);
-        expect(analysis.totalBytes).toBeGreaterThan(100); // Should be substantial
-
-        // Verify chunk sizes respect limits
-        for (const chunk of analysis.chunks) {
-            expect(chunk.size).toBeLessThanOrEqual(64);
-        }
-    });
-
     test("should encode viewport resized frame", async () => {
         const [writer, stream] = Writer.create();
         const check = streamObserve(stream);

@@ -61,10 +61,14 @@ export const testVDocument = new VDocument(0, [], [
                     new VTextNode(26, "Click me")
                 ]),
                 new VTextNode(27, "\n        "),
-                new VComment(28, "[CDATA[This is CDATA content]]"),
-                new VTextNode(29, "\n    ")
+                new VElement(28, "svg", "http://www.w3.org/2000/svg", { "width": "100", "height": "100" }, [
+                    new VElement(29, "circle", "http://www.w3.org/2000/svg", { "cx": "50", "cy": "50", "r": "40", "fill": "red" }, [])
+                ]),
+                new VTextNode(30, "\n        "),
+                new VComment(31, "[CDATA[This is CDATA content]]"),
+                new VTextNode(32, "\n    ")
             ]),
-            new VTextNode(30, "\n\n\n")
+            new VTextNode(33, "\n\n\n")
         ])
     ])
 ]);

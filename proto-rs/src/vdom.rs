@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VElement {
     pub id: u32,
-    pub tag_name: String,                  // TODO: Rename to tag for TS parity
-    pub attributes: Vec<(String, String)>, // (name, value) pairs - TODO: Rename to attrs for TS parity
+    pub tag: String,
+    pub ns: Option<String>,
+    pub attrs: Vec<(String, String)>,
     pub children: Vec<VNode>,
 }
 

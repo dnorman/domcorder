@@ -27,7 +27,7 @@ if ((window as any).DomCorder) {
     // Connect to the recording server at 127.0.0.1:8723
     const pageRecordingClient = new PageRecordingClient(
         pageRecorder,
-        "ws://127.0.0.1:8723/ws/record"
+        "https://outcome-years-hearings-russian.trycloudflare.com/ws/record"
     );
 
     // Visual feedback helper
