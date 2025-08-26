@@ -7,36 +7,36 @@ pub fn sample_frames() -> Vec<Frame> {
             timestamp: 1722550000000, // Use a fixed timestamp to match frames-basic.bin
         }),
         Frame::Keyframe(KeyframeData {
-            document: HtmlDocument {
+            document: VDocument {
                 id: 0,                        // Document ID (matches TypeScript testVDocument)
                 adopted_style_sheets: vec![], // Empty for now
                 children: vec![
                     // Child 0: DOCTYPE node
-                    DomNode::DocType(DocTypeNode {
+                    VNode::DocType(VDocumentType {
                         id: 1,
                         name: "html".to_string(),
                         public_id: None,
                         system_id: None,
                     }),
                     // Child 1: HTML element
-                    DomNode::Element(ElementNode {
+                    VNode::Element(VElement {
                         id: 2,
                         tag_name: "html".to_string(),
                         attributes: vec![],
                         children: vec![
                             // Child 0: HEAD element
-                            DomNode::Element(ElementNode {
+                            VNode::Element(VElement {
                                 id: 3,
                                 tag_name: "head".to_string(),
                                 attributes: vec![],
                                 children: vec![
                                     // Child 0: whitespace text node
-                                    DomNode::Text(TextNode {
+                                    VNode::Text(VTextNode {
                                         id: 4,
                                         content: "\n    ".to_string(),
                                     }),
                                     // Child 1: META element
-                                    DomNode::Element(ElementNode {
+                                    VNode::Element(VElement {
                                         id: 5,
                                         tag_name: "meta".to_string(),
                                         attributes: vec![(
@@ -46,132 +46,132 @@ pub fn sample_frames() -> Vec<Frame> {
                                         children: vec![],
                                     }),
                                     // Child 2: whitespace text node
-                                    DomNode::Text(TextNode {
+                                    VNode::Text(VTextNode {
                                         id: 6,
                                         content: "\n    ".to_string(),
                                     }),
                                     // Child 3: TITLE element
-                                    DomNode::Element(ElementNode {
+                                    VNode::Element(VElement {
                                         id: 7,
                                         tag_name: "title".to_string(),
                                         attributes: vec![],
-                                        children: vec![DomNode::Text(TextNode {
+                                        children: vec![VNode::Text(VTextNode {
                                             id: 8,
                                             content: "Test Document".to_string(),
                                         })],
                                     }),
                                     // Child 4: whitespace text node
-                                    DomNode::Text(TextNode {
+                                    VNode::Text(VTextNode {
                                         id: 9,
                                         content: "\n    ".to_string(),
                                     }),
                                     // Child 5: comment node
-                                    DomNode::Comment(CommentNode {
+                                    VNode::Comment(VComment {
                                         id: 10,
                                         content:
                                             "?xml-stylesheet type=\"text/css\" href=\"style.css\"?"
                                                 .to_string(),
                                     }),
                                     // Child 6: whitespace text node
-                                    DomNode::Text(TextNode {
+                                    VNode::Text(VTextNode {
                                         id: 11,
                                         content: "\n".to_string(),
                                     }),
                                 ],
                             }),
                             // Child 1: whitespace text node
-                            DomNode::Text(TextNode {
+                            VNode::Text(VTextNode {
                                 id: 12,
                                 content: "\n".to_string(),
                             }),
                             // Child 2: BODY element
-                            DomNode::Element(ElementNode {
+                            VNode::Element(VElement {
                                 id: 13,
                                 tag_name: "body".to_string(),
                                 attributes: vec![],
                                 children: vec![
                                     // Child 0: whitespace text node
-                                    DomNode::Text(TextNode {
+                                    VNode::Text(VTextNode {
                                         id: 14,
                                         content: "\n    ".to_string(),
                                     }),
                                     // Child 1: comment node
-                                    DomNode::Comment(CommentNode {
+                                    VNode::Comment(VComment {
                                         id: 15,
                                         content: " This is a comment ".to_string(),
                                     }),
                                     // Child 2: whitespace text node
-                                    DomNode::Text(TextNode {
+                                    VNode::Text(VTextNode {
                                         id: 16,
                                         content: "\n    ".to_string(),
                                     }),
                                     // Child 3: DIV element
-                                    DomNode::Element(ElementNode {
+                                    VNode::Element(VElement {
                                         id: 17,
                                         tag_name: "div".to_string(),
                                         attributes: vec![("id".to_string(), "root".to_string())],
                                         children: vec![
-                                            DomNode::Text(TextNode {
+                                            VNode::Text(VTextNode {
                                                 id: 18,
                                                 content: "\n        ".to_string(),
                                             }),
-                                            DomNode::Element(ElementNode {
+                                            VNode::Element(VElement {
                                                 id: 19,
                                                 tag_name: "h1".to_string(),
                                                 attributes: vec![],
-                                                children: vec![DomNode::Text(TextNode {
+                                                children: vec![VNode::Text(VTextNode {
                                                     id: 20,
                                                     content: "Hello World".to_string(),
                                                 })],
                                             }),
-                                            DomNode::Text(TextNode {
+                                            VNode::Text(VTextNode {
                                                 id: 21,
                                                 content: "\n        ".to_string(),
                                             }),
-                                            DomNode::Element(ElementNode {
+                                            VNode::Element(VElement {
                                                 id: 22,
                                                 tag_name: "p".to_string(),
                                                 attributes: vec![],
-                                                children: vec![DomNode::Text(TextNode {
+                                                children: vec![VNode::Text(VTextNode {
                                                     id: 23,
                                                     content: "This is a test paragraph."
                                                         .to_string(),
                                                 })],
                                             }),
-                                            DomNode::Text(TextNode {
+                                            VNode::Text(VTextNode {
                                                 id: 24,
                                                 content: "\n        ".to_string(),
                                             }),
-                                            DomNode::Element(ElementNode {
+                                            VNode::Element(VElement {
                                                 id: 25,
                                                 tag_name: "button".to_string(),
                                                 attributes: vec![(
                                                     "onclick".to_string(),
                                                     "alert('clicked')".to_string(),
                                                 )],
-                                                children: vec![DomNode::Text(TextNode {
+                                                children: vec![VNode::Text(VTextNode {
                                                     id: 26,
                                                     content: "Click me".to_string(),
                                                 })],
                                             }),
                                             // Child 6: whitespace text node
-                                            DomNode::Text(TextNode {
+                                            VNode::Text(VTextNode {
                                                 id: 27,
                                                 content: "\n        ".to_string(),
                                             }),
-                                            DomNode::Comment(CommentNode {
+                                            VNode::Comment(VComment {
                                                 id: 28,
                                                 content: "[CDATA[This is CDATA content]]"
                                                     .to_string(),
                                             }),
-                                            DomNode::Text(TextNode {
+                                            VNode::Text(VTextNode {
                                                 id: 29,
                                                 content: "\n    ".to_string(),
                                             }),
                                         ],
                                     }),
                                     // Child 4: whitespace text node
-                                    DomNode::Text(TextNode {
+                                    VNode::Text(VTextNode {
                                         id: 30,
                                         content: "\n\n\n".to_string(),
                                     }),
@@ -225,11 +225,11 @@ pub fn sample_frames() -> Vec<Frame> {
         Frame::DomNodeAdded(DomNodeAddedData {
             parent_node_id: 1,
             index: 0,
-            node: DomNode::Element(ElementNode {
+            node: VNode::Element(VElement {
                 id: 99,
                 tag_name: "span".to_string(),
                 attributes: vec![("class".to_string(), "new-element".to_string())],
-                children: vec![DomNode::Text(TextNode {
+                children: vec![VNode::Text(VTextNode {
                     id: 100,
                     content: "New content".to_string(),
                 })],

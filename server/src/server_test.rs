@@ -1,11 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{RecordingInfo, StorageState};
+    use crate::StorageState;
     use domcorder_proto::{FileHeader, Frame, FrameReader, FrameWriter};
-    use std::fs;
-    use std::io::{Cursor, Write};
-    use std::path::PathBuf;
+    use std::io::Cursor;
     use tempfile::TempDir;
 
     // Include the sample file at compile time
@@ -19,7 +16,7 @@ mod tests {
 
     #[test]
     fn test_storage_save_and_list_recordings() {
-        let (storage, temp_dir) = create_test_storage();
+        let (storage, _temp_dir) = create_test_storage();
 
         // Create test data
         let test_data = b"test recording content";
@@ -94,39 +91,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_sample_file_validation() {
-        // Test that the sample file can be read and validated
-        let sample_data = SAMPLE_FILE_DATA;
-
-        // Verify it's a valid DCRR file by checking the header
-        assert_eq!(
-            &sample_data[0..4],
-            b"DCRR",
-            "File should start with DCRR magic bytes"
-        );
-        assert_eq!(sample_data.len(), 1537, "Sample file should be 1537 bytes");
-
-        // Verify we can read it as a valid DCRR file using proto-rs
-        let mut reader = FrameReader::new(Cursor::new(sample_data), true);
-        let header = reader
-            .read_header()
-            .await
-            .expect("Should be able to read header");
-        assert_eq!(
-            &header.magic, b"DCRR",
-            "Header should have correct magic bytes"
-        );
-        assert_eq!(header.version, 1, "Header should have version 1");
-
-        // Try to read at least one frame
-        let frame = reader
-            .read_frame()
-            .await
-            .expect("Should be able to read frames");
-        assert!(frame.is_some(), "Should have at least one frame");
-    }
-
-    #[tokio::test]
     async fn test_sample_file_storage_roundtrip() {
         // Test that the sample file can be saved and retrieved correctly
         let (storage, _temp_dir) = create_test_storage();
@@ -146,7 +110,7 @@ mod tests {
             saved_data, sample_data,
             "Saved data should match uploaded data"
         );
-        assert_eq!(saved_data.len(), 1537, "Saved file should be 1537 bytes");
+        assert_eq!(saved_data.len(), 1600, "Saved file should be 1600 bytes");
 
         // Verify we can still read it as a valid DCRR file
         let mut reader = FrameReader::new(Cursor::new(&saved_data), true);

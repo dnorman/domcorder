@@ -6,7 +6,7 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use tokio::io::AsyncRead;
 use tokio_stream::StreamExt;
-use tracing::{error, info};
+use tracing::info;
 use uuid::Uuid;
 
 impl StorageState {

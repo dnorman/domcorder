@@ -1,3 +1,4 @@
+use crate::vdom::{VDocument, VNode, VStyleSheet};
 use serde::{Deserialize, Serialize};
 
 /// Frame types - each frame is its own struct
@@ -31,85 +32,6 @@ pub enum Frame {
     WindowBlurred(WindowBlurredData) = 22,
 }
 
-/// Element node representation
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ElementNode {
-    pub id: u32,
-    pub tag_name: String,
-    pub attributes: Vec<(String, String)>, // (name, value) pairs
-    pub children: Vec<DomNode>,
-}
-
-/// Text node representation
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TextNode {
-    pub id: u32,
-    pub content: String,
-}
-
-/// CDATA section representation
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CDataNode {
-    pub id: u32,
-    pub content: String,
-}
-
-/// Comment node representation
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CommentNode {
-    pub id: u32,
-    pub content: String,
-}
-
-/// Document node representation
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DocumentNode {
-    pub children: Vec<DomNode>,
-}
-
-/// DocType node representation
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DocTypeNode {
-    pub id: u32,
-    pub name: String,
-    pub public_id: Option<String>,
-    pub system_id: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProcessingInstructionNode {
-    pub id: u32,
-    pub target: String,
-    pub data: String,
-}
-
-/// DOM Node - tagged union of all node types
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DomNode {
-    Element(ElementNode),                             // 0
-    Text(TextNode),                                   // 1
-    CData(CDataNode),                                 // 2
-    Comment(CommentNode),                             // 3
-    DocType(DocTypeNode),                             // 4
-    ProcessingInstruction(ProcessingInstructionNode), // 5
-}
-
-/// VStyleSheet representation - matches TypeScript VStyleSheet
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VStyleSheet {
-    pub id: u32,
-    pub text: String,
-    pub media: Option<String>,
-}
-
-/// HTML Document representation - matches TypeScript VDocument
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HtmlDocument {
-    pub id: u32,
-    pub adopted_style_sheets: Vec<VStyleSheet>,
-    pub children: Vec<DomNode>, // Array of children (typically DOCTYPE + HTML element)
-}
-
 /// Frame data structures corresponding to TypeScript frame data types
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimestampData {
@@ -118,7 +40,7 @@ pub struct TimestampData {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeyframeData {
-    pub document: HtmlDocument, // Contains the full document structure
+    pub document: VDocument, // Contains the full document structure
     pub asset_count: u32,
     pub viewport_width: u32,
     pub viewport_height: u32,
@@ -176,7 +98,7 @@ pub struct TextSelectionChangedData {
 pub struct DomNodeAddedData {
     pub parent_node_id: u32,
     pub index: u32,
-    pub node: DomNode,
+    pub node: VNode,
     pub asset_count: u32,
 }
 
