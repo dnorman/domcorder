@@ -115,13 +115,12 @@ const KEYBOARD_LAYOUT: KeyDefinition[] = [
   { code: 'ShiftRight', label: '⇧', row: 4, col: 11, width: 3, expand: true },
 
   // Row 5 - Bottom row with inverted T arrow cluster (15 units total for proper width)
-  { code: 'ControlLeft', label: 'fn', row: 5, col: 0, width: 1.1 },
-  { code: 'MetaLeft', label: '⌃', row: 5, col: 1, width: 1.1 },
+  { code: 'ControlLeft', label: '⌃', row: 5, col: 1, width: 1.1 },
   { code: 'AltLeft', label: '⌥', row: 5, col: 2, width: 1.1 },
-  { code: 'MetaRight', label: '⌘', row: 5, col: 3, width: 1.1 },
+  { code: 'MetaLeft', label: '⌘', row: 5, col: 3, width: 1.1 },
   { code: 'Space', label: '', row: 5, col: 4, width: 6.75, expand: true },
-  { code: 'AltRight', label: '⌘', row: 5, col: 5, width: 1.1 },
-  { code: 'ControlRight', label: '⌥', row: 5, col: 6, width: 1.1 },
+  { code: 'MetaRight', label: '⌘', row: 5, col: 5, width: 1.1 },
+  { code: 'AltRight', label: '⌥', row: 5, col: 6, width: 1.1 },
   // Arrow cluster: All same size (1 unit each)
   { code: 'ArrowLeft', label: '←', row: 5, col: 7, width: 1, arrowType: 'left' },
   { code: 'ArrowUp', label: '↑', row: 5, col: 8, width: 1, arrowType: 'up' },
@@ -151,6 +150,7 @@ export class TypingSimulator {
    * Simulate a key press by highlighting the corresponding key
    */
   public simulateKeyPress(keyData: KeyPressed): void {
+    console.log('simulateKeyPress', keyData);
     // Show keyboard if hidden
     if (!this.isVisible) {
       this.show();
@@ -163,17 +163,16 @@ export class TypingSimulator {
     this.highlightKey(keyData.code);
 
     // Highlight modifier keys
-    if (keyData.altKey) {
+    if (keyData.altKey && keyData.code !== 'AltRight') {
       this.highlightKey('AltLeft');
     }
-    if (keyData.ctrlKey) {
+    if (keyData.ctrlKey && keyData.code !== 'ControlRight') {
       this.highlightKey('ControlLeft');
     }
-    if (keyData.metaKey) {
-      // Meta key might be mapped differently on different platforms
+    if (keyData.metaKey && keyData.code !== 'MetaRight') {
       this.highlightKey('MetaLeft');
     }
-    if (keyData.shiftKey) {
+    if (keyData.shiftKey && keyData.code !== 'ShiftRight') {
       this.highlightKey('ShiftLeft');
     }
   }
@@ -548,6 +547,7 @@ export class TypingSimulator {
    * Highlight a specific key
    */
   private highlightKey(keyCode: string): void {
+    console.log('highlightKey', keyCode);
     const keyElement = this.keyElements.get(keyCode);
     if (!keyElement) return;
 

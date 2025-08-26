@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TypingSimulator Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .instructions {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .keyboard-container {
+            position: relative;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            min-height: 400px;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            background: #e8f5e8;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="instructions">
+            <h1>TypingSimulator Test Page</h1>
+            <p>This page demonstrates the TypingSimulator component. Press any key to see the virtual keyboard highlight the corresponding key.</p>
+            <ul>
+                <li>Press any letter, number, or punctuation key to see it highlighted</li>
+                <li>Hold Shift, Ctrl, Alt, or Cmd while pressing keys to see modifier keys highlighted</li>
+                <li>The keyboard will automatically hide after 3 seconds of inactivity</li>
+            </ul>
+        </div>
+        
+        <div class="keyboard-container" id="keyboardContainer">
+            <!-- TypingSimulator will be rendered here -->
+        </div>
+        
+        <div class="status" id="status">
+            Ready - Press any key to test the TypingSimulator
+        </div>
+    </div>
+
+    <script type="module">
+        import { TypingSimulator } from '../../dist/index.js';
+
+        // Get the container element
+        const keyboardContainer = document.getElementById('keyboardContainer');
+        const statusElement = document.getElementById('status');
+
+        // Create the TypingSimulator
+        const typingSimulator = new TypingSimulator(keyboardContainer, {
+            visibleTimeout: 30000, // Keep visible for 5 seconds
+            keyHighlightDuration: 200 // Highlight for 200ms
+        });
+
+        // Update status
+        function updateStatus(message) {
+            statusElement.textContent = message;
+        }
+
+        // Handle keydown events
+        document.addEventListener('keydown', (event) => {
+            event.preventDefault(); // Prevent default behavior
+            
+            // Create KeyPressed data
+            const keyData = {
+                code: event.code,
+                altKey: event.altKey,
+                ctrlKey: event.ctrlKey,
+                metaKey: event.metaKey,
+                shiftKey: event.shiftKey
+            };
+
+            // Simulate the key press
+            typingSimulator.simulateKeyPress(keyData);
+
+            // Update status
+            updateStatus(`Key pressed: ${event.code} (${event.key}) - Alt: ${event.altKey}, Ctrl: ${event.ctrlKey}, Meta: ${event.metaKey}, Shift: ${event.shiftKey}`);
+        });
+
+        // Handle keyup events (optional - for better UX)
+        document.addEventListener('keyup', (event) => {
+            // You could add keyup handling here if needed
+        });
+
+        // Show the keyboard initially
+        typingSimulator.show();
+        updateStatus('TypingSimulator loaded - Press any key to test');
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            typingSimulator.dispose();
+        });
+    </script>
+</body>
+</html>
