@@ -78,7 +78,7 @@ export class PageRecorder {
 
     for (const handler of this.frameHandlers) {
       try {
-       await handler(frame);
+        await handler(frame);
       } catch (error) {
         console.error("Error handling frame:", error);
       }
@@ -108,7 +108,7 @@ export class PageRecorder {
       }
 
       if (!this.pendingAssets) {
-          this.processOperationQueue();
+        this.processOperationQueue();
       }
     }, 500);
 
@@ -164,7 +164,7 @@ export class PageRecorder {
             if (this.pendingAssets) {
               this.pendingAssetsComplete();
             }
-           }
+          }
         });
         break;
 
@@ -304,7 +304,7 @@ export class PageRecorder {
               const assetFrame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
               this.emitFrame(assetFrame, false);
             },
-            onInlineComplete: () => { 
+            onInlineComplete: () => {
               if (this.pendingAssets) {
                 this.pendingAssetsComplete();
               }

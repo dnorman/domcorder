@@ -25,19 +25,33 @@ export async function fetchAssets(
   await Promise.all(
     pendingAssets.order.map((pa) =>
       sem.run(async () => {
-        const res = await fetchOriginalBytesAB(pa.url, inlineCrossOrigin);
-        // Even on failure we advance progress; consumers can reconcile missing assets by id
-        const i = ++index;
-        if (res.ok) {
+        const sendEmptyAsset = () => {
           assetHandler({
             id: pa.id,
             url: pa.url,
             assetType: pa.type,
-            mime: res.mime,
-            buf: res.buf
+            mime: undefined,
+            buf: new ArrayBuffer(0) // Empty buffer for failed assets
           });
-        } else {
-          // Optionally emit a separate failure event type; keeping it simple per ask
+        };
+
+        try {
+          const res = await fetchOriginalBytesAB(pa.url, inlineCrossOrigin);
+          // Even on failure we advance progress; consumers can reconcile missing assets by id
+          const i = ++index;
+          if (res.ok) {
+            assetHandler({
+              id: pa.id,
+              url: pa.url,
+              assetType: pa.type,
+              mime: res.mime,
+              buf: res.buf
+            });
+          } else {
+            sendEmptyAsset();
+          }
+        } catch (error) {
+          sendEmptyAsset();
         }
       })
     )

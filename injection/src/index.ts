@@ -22,20 +22,7 @@ if ((window as any).DomCorder) {
 } else {
     console.log("🎬 DomCorder: Initializing...");
 
-    // Initialize the recorder (same as test page)
     const pageRecorder = new PageRecorder(document);
-
-    const frameChunkWriter = new FrameChunkWriter({
-        next: (chunk) => {
-            // In the test page this goes to parent window, but we don't have that
-            // The PageRecordingClient will handle sending to server
-            console.log("Frame chunk written:", chunk.byteLength, "bytes");
-        },
-    });
-
-    pageRecorder.addFrameHandler((frame) => {
-        return frameChunkWriter.write(frame);
-    });
 
     // Connect to the recording server at 127.0.0.1:8723
     const pageRecordingClient = new PageRecordingClient(
@@ -158,7 +145,7 @@ if ((window as any).DomCorder) {
             }
         },
         isRecording: () => {
-            return pageRecordingClient.isRecording();
+            return pageRecordingClient.getWebSocket() !== null;
         },
         recorder: pageRecorder,
         client: pageRecordingClient,
