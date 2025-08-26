@@ -12,17 +12,17 @@ This directory contains the recorder and player for web page recording and playb
 ## TODOs
 
   - [ ] Allow for onDemand KeyFrames after the initial keyframe.
-  - [ ] Integrate StyleSheet Change Detector into the recorder.
-  - [ ] Design StyleSheet Change frames.
-  - [ ] Add interaction recording such as viewport size, scrolling, focus, etc.
+  - [X] Integrate StyleSheet Change Detector into the recorder.
+  - [X] Design StyleSheet Change frames.
+  - [X] Add interaction recording such as viewport size, scrolling, focus, etc.
   - [ ] Consider contextually / automatically adjusting diff interval based on user interactions (e.g. more frequent diffs during typing) .
-  - [ ] Emit binary frames from recorder instead of current JSON objects.
+  - [X] Emit binary frames from recorder instead of current JSON objects.
   - [ ] Consider how the recorder acts when page navigation (think SPA) happens, to include potentially sending a new keyframe rather than a series of deltas.
-  - [ ] Reduce translation between internal API objects of the various components.
+  - [X] Reduce translation between internal API objects of the various components.
   - [ ] Consider how we might reduce sending assets we have already sent within the lifetime of the Recorder.
   - [ ] Consider how we might reduce sending assets we have already to the server at some point before (requires server to inform recorder of what is cached relative to the page the recorder is on).
   - [ ] Consider some sort of "navigation" frame where the recorder can inform the server that it is where and what "page" it is on to facilitate asset caching.
-  - [ ] Start using / sending Timestamp Frames.
+  - [X] Start using / sending Timestamp Frames.
 
 
 ## Installation
