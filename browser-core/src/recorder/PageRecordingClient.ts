@@ -56,10 +56,10 @@ export class PageRecordingClient {
     return new FrameChunkWriter({
       next: (chunk: Uint8Array) => {
         const beforeBuffer = this.ws?.bufferedAmount || 0;
-        console.log(`📤 Sending binary chunk to server: ${chunk.length} bytes, buffered before: ${beforeBuffer} bytes`);
+        console.debug(`📤 Sending binary chunk to server: ${chunk.length} bytes, buffered before: ${beforeBuffer} bytes`);
         this.ws?.send(chunk);
         const afterBuffer = this.ws?.bufferedAmount || 0;
-        console.log(`📊 WebSocket buffer after send: ${afterBuffer} bytes (delta: +${afterBuffer - beforeBuffer})`);
+        console.debug(`📊 WebSocket buffer after send: ${afterBuffer} bytes (delta: +${afterBuffer - beforeBuffer})`);
 
         // Log if buffer is getting large (potential bottleneck)
         if (afterBuffer > 1024 * 1024) { // 1MB threshold

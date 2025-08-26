@@ -25,14 +25,11 @@ export async function fetchAssets(
   await Promise.all(
     pendingAssets.order.map((pa) =>
       sem.run(async () => {
-        const sendEmptyAsset = () => {
-          assetHandler({
-            id: pa.id,
-            url: pa.url,
-            assetType: pa.type,
-            mime: undefined,
-            buf: new ArrayBuffer(0) // Empty buffer for failed assets
-          });
+        const partialAsset: Partial<Asset> = {
+          id: pa.id,
+          url: pa.url,
+          assetType: pa.type,
+          mime: undefined,
         };
 
         try {
@@ -40,19 +37,18 @@ export async function fetchAssets(
           // Even on failure we advance progress; consumers can reconcile missing assets by id
           const i = ++index;
           if (res.ok) {
-            assetHandler({
-              id: pa.id,
-              url: pa.url,
-              assetType: pa.type,
-              mime: res.mime,
-              buf: res.buf
-            });
-          } else {
-            sendEmptyAsset();
-          }
+            partialAsset.mime = res.mime;
+            partialAsset.buf = res.buf;  
+          } 
         } catch (error) {
-          sendEmptyAsset();
+          console.error('Error fetching asset:', error);
         }
+
+        if (!partialAsset.buf) {
+          partialAsset.buf = new ArrayBuffer(0);
+        }
+
+        assetHandler(partialAsset as Asset);
       })
     )
   );

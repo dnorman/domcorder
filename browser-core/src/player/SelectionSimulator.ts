@@ -67,7 +67,12 @@ export class SelectionSimulator {
   private scrollableRegistry: ScrollableElementRegistry;
   private scrollableTracker: ScrollableElementTracker;
 
-  constructor(overlayElement: HTMLElement, nodeIdBiMap: NodeIdBiMap, targetDocument: Document, config: SelectionOverlayConfig = {}) {
+  constructor(
+    overlayElement: HTMLElement,
+    nodeIdBiMap: NodeIdBiMap,
+    targetDocument: Document,
+    config: SelectionOverlayConfig = {}
+  ) {
     this.overlayElement = overlayElement;
     this.nodeIdBiMap = nodeIdBiMap;
     this.targetDocument = targetDocument;
@@ -392,19 +397,13 @@ export class SelectionSimulator {
         const elementRange = document.createRange();
         elementRange.selectNodeContents(scrollableElement);
         
-
-        
         // Find the intersection of the original range with the scrollable element
         const compareStart = range.compareBoundaryPoints(Range.START_TO_START, elementRange);
         const compareEnd = range.compareBoundaryPoints(Range.END_TO_END, elementRange);
         
-
-        
         // Check if the range actually intersects the element's content, not just touches its boundary
         const rangeIntersectsContent = range.intersectsNode(scrollableElement) && 
           (compareEnd > 0 || (compareEnd === 0 && range.endOffset > 0));
-        
-
         
         if (rangeIntersectsContent) {
           if (compareStart <= 0) {
@@ -426,8 +425,6 @@ export class SelectionSimulator {
           // Range doesn't actually go into the element content
           insideRange.collapse(true); // Make it collapsed so it gets skipped
         }
-        
-
         
         if (!insideRange.collapsed && insideRange.toString().trim()) {
           const insideContainer = this.scrollableRegistry.findOrCreateScrollableContainer(scrollableElement);
@@ -457,8 +454,6 @@ export class SelectionSimulator {
         }
       }
     }
-    
-
     
     return segments.length > 0 ? segments : [{ 
       range: range.cloneRange(), 
@@ -495,31 +490,6 @@ export class SelectionSimulator {
     }
     
     return scrollableElements;
-  }
-
-  /**
-   * Get the previous text node within the range
-   */
-  private getPreviousTextNode(currentNode: Node, range: Range): Node | null {
-    const walker = range.commonAncestorContainer.ownerDocument!.createTreeWalker(
-      range.commonAncestorContainer,
-      NodeFilter.SHOW_TEXT,
-      {
-        acceptNode: (node) => {
-          return range.intersectsNode(node) && node !== currentNode ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
-        }
-      }
-    );
-    
-    let previousNode: Node | null = null;
-    let node = walker.nextNode();
-    
-    while (node && node !== currentNode) {
-      previousNode = node;
-      node = walker.nextNode();
-    }
-    
-    return previousNode;
   }
 
   /**

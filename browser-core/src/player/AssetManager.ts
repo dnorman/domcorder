@@ -1,8 +1,9 @@
 import type { Asset } from "@domcorder/proto-ts";
 
 interface AssetEntry {
-  blob: Blob;
-  url: string;
+  sourceUrl: string;
+  blob?: Blob;
+  objectUrl?: string;
   referenceCount: number;
   elements: Set<Element>;
   adoptedStyleSheets: Set<CSSStyleSheet>;
@@ -66,12 +67,18 @@ export class AssetManager {
       return;
     }
 
-    const blob = new Blob([asset.buf], { type: asset.mime || 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
+    let blob: Blob | undefined;
+    let objectUrl: string | undefined;
+
+    if (asset.buf.byteLength > 0) {
+      blob = new Blob([asset.buf], { type: asset.mime || 'application/octet-stream' });
+      objectUrl = URL.createObjectURL(blob);
+    }
 
     this.assets.set(asset.asset_id, {
+      sourceUrl: asset.url,
       blob,
-      url,
+      objectUrl,
       referenceCount: 0,
       elements: new Set(),
       adoptedStyleSheets: new Set()
@@ -105,7 +112,7 @@ export class AssetManager {
     // Set up event listeners to detect when element no longer needs the asset
     this.setupElementCleanup(assetId, element);
 
-    return asset.url;
+    return asset.objectUrl || asset.sourceUrl;
   }
 
   /**
@@ -132,7 +139,7 @@ export class AssetManager {
     }
     styleSheetAssets.add(assetId);
 
-    return asset.url;
+    return asset.objectUrl || asset.sourceUrl;
   }
 
   /**
@@ -249,7 +256,9 @@ export class AssetManager {
       }
     });
 
-    URL.revokeObjectURL(asset.url);
+    if (asset.objectUrl) {
+      URL.revokeObjectURL(asset.objectUrl);
+    }
     this.assets.delete(assetId);
   }
 
@@ -287,8 +296,10 @@ export class AssetManager {
     this.mutationObserver.disconnect();
 
     // Clean up all assets
-    for (const [_, asset] of this.assets) {
-      URL.revokeObjectURL(asset.url);
+    for (const [_, asset] of this.assets) {  
+      if (asset.objectUrl) {
+        URL.revokeObjectURL(asset.objectUrl);
+      }
     }
     this.assets.clear();
 
