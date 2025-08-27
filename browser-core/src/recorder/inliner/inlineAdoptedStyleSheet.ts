@@ -1,6 +1,6 @@
 import { VStyleSheet } from "@domcorder/proto-ts";
 import { collectCssUrlsAssign, fetchAssets, rewriteStyleSheetsToPendingIds } from "./inline";
-import { PendingAssets } from "./PendingAssets";
+import { AssetsTracker } from "./AssetTracker";
 import type { Asset } from "./Asset";
 
 export interface InlineAdoptedStyleSheetEvent {
@@ -17,10 +17,10 @@ export interface InlineSubTreeHandler {
 export async function inlineAdoptedStyleSheet(
   sheet: CSSStyleSheet,
   baseURI: string,
+  pendingAssets: AssetsTracker,
   handler: InlineSubTreeHandler,
   concurrency: number = 6,
   inlineCrossOrigin: boolean = false) {
-  const pendingAssets = new PendingAssets();
 
 
   try {
@@ -37,7 +37,7 @@ export async function inlineAdoptedStyleSheet(
 
     handler.onInlineStarted({
       styleSheet: updated,
-      assetCount: pendingAssets.order.length
+      assetCount: pendingAssets.count()
     });
 
     await fetchAssets(

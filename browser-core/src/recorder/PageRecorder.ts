@@ -33,6 +33,7 @@ import { NodeIdBiMap } from "../common";
 import type { DomOperation } from "../common/DomOperation";
 import { getStyleSheetId, StyleSheetWatcher, type StyleSheetWatcherEvent } from "./StyleSheetWatcher";
 import { inlineAdoptedStyleSheet, type InlineAdoptedStyleSheetEvent } from "./inliner/inlineAdoptedStyleSheet";
+import { AssetsTracker } from "./inliner/AssetTracker";
 
 export type FrameHandler = (frame: Frame) => Promise<void>;
 
@@ -48,6 +49,7 @@ export class PageRecorder {
   private userInteractionTracker: UserInteractionTracker | null;
   private sourceDocNodeIdMap: NodeIdBiMap | null;
   private recordingEpoch: number;
+  private readonly assetsTracker: AssetsTracker;
 
   constructor(sourceDocument: Document) {
     this.sourceDocument = sourceDocument;
@@ -60,6 +62,7 @@ export class PageRecorder {
     this.userInteractionTracker = null;
     this.sourceDocNodeIdMap = null;
     this.recordingEpoch = Date.now();
+    this.assetsTracker = new AssetsTracker();
   }
 
   public addFrameHandler(handler: FrameHandler) {
@@ -98,7 +101,10 @@ export class PageRecorder {
     this.userInteractionTracker.start();
 
     generateKeyFrame(
-      this.sourceDocument, this.sourceDocNodeIdMap, this.createKeyFrameHandler()
+      this.sourceDocument,
+      this.sourceDocNodeIdMap, 
+      this.createKeyFrameHandler(),
+      this.assetsTracker
     );
 
     this.changeDetector = new DomChangeDetector(this.sourceDocument, this.sourceDocNodeIdMap, async (operations) => {
@@ -149,7 +155,7 @@ export class PageRecorder {
   ): Promise<void> {
     switch (operation.op) {
       case "insert":
-        inlineSubTree(operation.node, nodeIdMap, {
+        inlineSubTree(operation.node, nodeIdMap, this.assetsTracker, {
           onInlineStarted: async (ev: InlineStartedEvent) => {
             this.pendingAssets = ev.assetCount > 0;
             const frame = new DomNodeAdded(operation.parentId, operation.index, ev.node, ev.assetCount);
@@ -292,7 +298,7 @@ export class PageRecorder {
         await this.emitFrame(frame);
 
         for (const sheet of event.added) {
-          await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, {
+          await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, this.assetsTracker, {
             onInlineStarted: (ev: InlineAdoptedStyleSheetEvent) => {
               this.pendingAssets = ev.assetCount > 0;
 

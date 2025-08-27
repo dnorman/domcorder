@@ -1,5 +1,5 @@
 import type { NodeIdBiMap } from "../../common/NodeIdBiMap";
-import { PendingAssets } from "./PendingAssets";
+import { AssetsTracker } from "./AssetTracker";
 import { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
 import {
   collectCssUrlsAssign,
@@ -34,6 +34,7 @@ export async function generateKeyFrame(
   doc: Document = document,
   nodeIdMap: NodeIdBiMap,
   handler: KeyFrameEventHandler,
+  pendingAssets: AssetsTracker,
   opts: KeyFrameGenerationOptions = {}
 ): Promise<void> {
 
@@ -44,7 +45,7 @@ export async function generateKeyFrame(
       await waitForQuietWindow(doc, opts.quietWindowMs);
     }
 
-    const pendingAssets = new PendingAssets();
+    
 
     // Phase 1: synchronous snapshot + assign ids + rewrite to asset:<id>
     const snap = snapshotVDomStreaming(doc, nodeIdMap, antiAnimationStylesheet);
@@ -57,7 +58,7 @@ export async function generateKeyFrame(
     // Emit the structural snapshot right away
     handler.onKeyFrameStarted({
       document: snap,
-      assetCount: pendingAssets.order.length,
+      assetCount: pendingAssets.count(),
       viewportWidth,
       viewportHeight
     });
@@ -105,7 +106,7 @@ async function waitForQuietWindow(doc: Document, ms: number): Promise<void> {
 }
 
 function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, antiAnimationStylesheet: CSSStyleSheet | null = null): VDocument {
-  const pending = new PendingAssets();
+  const pending = new AssetsTracker();
 
   const children = Array.from(doc.childNodes);
   const vChildren: VNode[] = [];

@@ -12,18 +12,18 @@ import {
 import type { NodeIdBiMap } from "../../common";
 import type { Asset } from "./Asset";
 import type { AssetType } from "./AssetType";
-import { PendingAssets } from "./PendingAssets";
+import { AssetsTracker } from "./AssetTracker";
 
 export async function fetchAssets(
   concurrency: number,
   inlineCrossOrigin: boolean,
-  pendingAssets: PendingAssets,
+  pendingAssets: AssetsTracker,
   assetHandler: (asset: Asset) => void): Promise<void> {
   const sem = makeSemaphore(concurrency);
 
   let index = 0;
   await Promise.all(
-    pendingAssets.order.map((pa) =>
+    pendingAssets.take().map((pa) =>
       sem.run(async () => {
         const partialAsset: Partial<Asset> = {
           id: pa.id,
@@ -54,7 +54,7 @@ export async function fetchAssets(
   );
 }
 
-export function snapshotNode(node: Node, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VNode {
+export function snapshotNode(node: Node, pending: AssetsTracker, nodeIdMap: NodeIdBiMap): VNode {
   switch (node.nodeType) {
     case Node.ELEMENT_NODE: {
       return snapElement(node as Element, pending, nodeIdMap);
@@ -125,7 +125,7 @@ export function snapshotNode(node: Node, pending: PendingAssets, nodeIdMap: Node
 // -------------------- Phase 1 (streaming variant) --------------------
 
 
-function snapshotScriptElement(el: HTMLScriptElement, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
+function snapshotScriptElement(el: HTMLScriptElement, pending: AssetsTracker, nodeIdMap: NodeIdBiMap): VElement {
   const children = Array.from(el.childNodes).map(c => snapshotNode(c, pending, nodeIdMap));
 
   // Clear text content from script children
@@ -144,7 +144,7 @@ function snapshotScriptElement(el: HTMLScriptElement, pending: PendingAssets, no
   );
 }
 
-function snapshotStyleElement(styleElement: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
+function snapshotStyleElement(styleElement: Element, pending: AssetsTracker, nodeIdMap: NodeIdBiMap): VElement {
   const children = Array.from(styleElement.childNodes).map(c => snapshotNode(c, pending, nodeIdMap));
 
   const originalText = readStyleText(styleElement as HTMLStyleElement);
@@ -167,7 +167,11 @@ function snapshotStyleElement(styleElement: Element, pending: PendingAssets, nod
   );
 }
 
-function snapshotLinkElement(linkElement: HTMLLinkElement, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
+function snapshotLinkElement(
+  linkElement: HTMLLinkElement,
+  pending: AssetsTracker,
+  nodeIdMap: NodeIdBiMap
+): VElement {
   // Convert link element to style element with processed CSS
   let cssText: string | undefined;
   try {
@@ -197,7 +201,7 @@ function snapshotLinkElement(linkElement: HTMLLinkElement, pending: PendingAsset
   );
 }
 
-function snapElement(el: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VElement {
+function snapElement(el: Element, pending: AssetsTracker, nodeIdMap: NodeIdBiMap): VElement {
   // Handling of special element types
   if (el instanceof HTMLScriptElement) {
     return snapshotScriptElement(el, pending, nodeIdMap);
@@ -254,7 +258,7 @@ function snapElement(el: Element, pending: PendingAssets, nodeIdMap: NodeIdBiMap
   return node;
 }
 
-function snapShadow(sr: ShadowRoot, pending: PendingAssets, nodeIdMap: NodeIdBiMap): VNode[] {
+function snapShadow(sr: ShadowRoot, pending: AssetsTracker, nodeIdMap: NodeIdBiMap): VNode[] {
   const out: VNode[] = [];
   for (const n of Array.from(sr.childNodes)) {
     if (n.nodeType === Node.TEXT_NODE) out.push({ id: nodeIdMap.getNodeId(n)!, nodeType: "text", text: n.nodeValue ?? "" } as VTextNode);
@@ -263,7 +267,7 @@ function snapShadow(sr: ShadowRoot, pending: PendingAssets, nodeIdMap: NodeIdBiM
   return out;
 }
 
-export function rewriteStyleSheetsToPendingIds(stylesheet: VStyleSheet, baseURI: string, pending: PendingAssets) {
+export function rewriteStyleSheetsToPendingIds(stylesheet: VStyleSheet, baseURI: string, pending: AssetsTracker) {
   if (!("text" in stylesheet) || !stylesheet.text) return stylesheet;
   const text = stylesheet.text.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m: string, q: string, raw: string) => {
     const id = idForUrl(raw, baseURI, pending);
@@ -274,7 +278,7 @@ export function rewriteStyleSheetsToPendingIds(stylesheet: VStyleSheet, baseURI:
 }
 
 // Rewrite using provisional ids (before fetch)
-export function rewriteAllRefsToPendingIds(snap: VDocument, baseURI: string, pending: PendingAssets) {
+export function rewriteAllRefsToPendingIds(snap: VDocument, baseURI: string, pending: AssetsTracker) {
   // CSS - process adopted stylesheets
   snap.adoptedStyleSheets = snap.adoptedStyleSheets.map((s) => {
     return rewriteStyleSheetsToPendingIds(s, baseURI, pending);
@@ -288,7 +292,7 @@ export function rewriteAllRefsToPendingIds(snap: VDocument, baseURI: string, pen
   }
 }
 
-export function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: PendingAssets): void {
+export function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: AssetsTracker): void {
   if (!(node instanceof VElement)) return;
 
   // Handle style elements specifically
@@ -326,7 +330,7 @@ export function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: 
   node.shadow?.forEach((c) => rewriteTreeUrlsToPendingIds(c, base, pending));
 }
 
-function rewriteSrcsetToPending(srcset: string, base: string, pending: PendingAssets): string {
+function rewriteSrcsetToPending(srcset: string, base: string, pending: AssetsTracker): string {
   const parts = srcset.split(",").map((s) => s.trim()).filter(Boolean);
   return parts
     .map((part) => {
@@ -338,17 +342,17 @@ function rewriteSrcsetToPending(srcset: string, base: string, pending: PendingAs
     .join(", ");
 }
 
-function rewriteInlineStyleToPending(css: string, base: string, pending: PendingAssets): string {
+function rewriteInlineStyleToPending(css: string, base: string, pending: AssetsTracker): string {
   return css.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m, q, raw) => {
     const id = idForUrl(raw, base, pending);
     return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
   });
 }
 
-function idForUrl(raw: string, base: string, pending: PendingAssets): number | null {
+function idForUrl(raw: string, base: string, pending: AssetsTracker): number | null {
   if (/^(data:|asset:)/i.test(raw)) return null;
   const abs = safeAbs(raw, base);
-  const pa = pending.byUrl.get(abs) || pending.assign(abs, guessType(abs));
+  const pa = pending.get(abs) || pending.assign(abs, guessType(abs));
   return pa.id;
 }
 
@@ -401,7 +405,7 @@ function cssRulesToText(sheet: CSSStyleSheet): string {
   return Array.from(sheet.cssRules).map((r) => r.cssText).join("\n");
 }
 
-export function collectCssUrlsAssign(css: string, base: string, pending: PendingAssets) {
+export function collectCssUrlsAssign(css: string, base: string, pending: AssetsTracker) {
   const re = /url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(css))) {
@@ -412,7 +416,7 @@ export function collectCssUrlsAssign(css: string, base: string, pending: Pending
   }
 }
 
-function assignSrcsetUrls(srcset: string, base: string, pending: PendingAssets) {
+function assignSrcsetUrls(srcset: string, base: string, pending: AssetsTracker) {
   const parts = srcset.split(",").map((s) => s.trim()).filter(Boolean);
   for (const part of parts) {
     const [url] = part.split(/\s+/);
