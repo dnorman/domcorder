@@ -17,13 +17,13 @@ import { AssetsTracker } from "./AssetTracker";
 export async function fetchAssets(
   concurrency: number,
   inlineCrossOrigin: boolean,
-  pendingAssets: AssetsTracker,
+  assetTracker: AssetsTracker,
   assetHandler: (asset: Asset) => void): Promise<void> {
   const sem = makeSemaphore(concurrency);
 
   let index = 0;
   await Promise.all(
-    pendingAssets.take().map((pa) =>
+    assetTracker.take().map((pa) =>
       sem.run(async () => {
         const partialAsset: Partial<Asset> = {
           id: pa.id,
@@ -54,10 +54,10 @@ export async function fetchAssets(
   );
 }
 
-export function snapshotNode(node: Node, pending: AssetsTracker, nodeIdMap: NodeIdBiMap): VNode {
+export function snapshotNode(node: Node, assetTracker: AssetsTracker, nodeIdMap: NodeIdBiMap): VNode {
   switch (node.nodeType) {
     case Node.ELEMENT_NODE: {
-      return snapElement(node as Element, pending, nodeIdMap);
+      return snapElement(node as Element, assetTracker, nodeIdMap);
     }
 
     case Node.TEXT_NODE: {
@@ -125,8 +125,8 @@ export function snapshotNode(node: Node, pending: AssetsTracker, nodeIdMap: Node
 // -------------------- Phase 1 (streaming variant) --------------------
 
 
-function snapshotScriptElement(el: HTMLScriptElement, pending: AssetsTracker, nodeIdMap: NodeIdBiMap): VElement {
-  const children = Array.from(el.childNodes).map(c => snapshotNode(c, pending, nodeIdMap));
+function snapshotScriptElement(el: HTMLScriptElement, assetTracker: AssetsTracker, nodeIdMap: NodeIdBiMap): VElement {
+  const children = Array.from(el.childNodes).map(c => snapshotNode(c, assetTracker, nodeIdMap));
 
   // Clear text content from script children
   for (const c of children) {
@@ -144,12 +144,12 @@ function snapshotScriptElement(el: HTMLScriptElement, pending: AssetsTracker, no
   );
 }
 
-function snapshotStyleElement(styleElement: Element, pending: AssetsTracker, nodeIdMap: NodeIdBiMap): VElement {
-  const children = Array.from(styleElement.childNodes).map(c => snapshotNode(c, pending, nodeIdMap));
+function snapshotStyleElement(styleElement: Element, assetTracker: AssetsTracker, nodeIdMap: NodeIdBiMap): VElement {
+  const children = Array.from(styleElement.childNodes).map(c => snapshotNode(c, assetTracker, nodeIdMap));
 
   const originalText = readStyleText(styleElement as HTMLStyleElement);
   if (originalText) {
-    collectCssUrlsAssign(originalText, styleElement.baseURI || document.baseURI, pending);
+    collectCssUrlsAssign(originalText, styleElement.baseURI || document.baseURI, assetTracker);
     // Replace the text content with processed CSS
     for (const c of children) {
       if (c.nodeType === "text") {
@@ -169,7 +169,7 @@ function snapshotStyleElement(styleElement: Element, pending: AssetsTracker, nod
 
 function snapshotLinkElement(
   linkElement: HTMLLinkElement,
-  pending: AssetsTracker,
+  assetTracker: AssetsTracker,
   nodeIdMap: NodeIdBiMap
 ): VElement {
   // Convert link element to style element with processed CSS
@@ -179,7 +179,7 @@ function snapshotLinkElement(
     if (sheet) {
       cssText = cssRulesToText(sheet);
       if (cssText) {
-        collectCssUrlsAssign(cssText, linkElement.baseURI || document.baseURI, pending);
+        collectCssUrlsAssign(cssText, linkElement.baseURI || document.baseURI, assetTracker);
       }
     }
   } catch (error) {
@@ -201,14 +201,14 @@ function snapshotLinkElement(
   );
 }
 
-function snapElement(el: Element, pending: AssetsTracker, nodeIdMap: NodeIdBiMap): VElement {
+function snapElement(el: Element, assetTracker: AssetsTracker, nodeIdMap: NodeIdBiMap): VElement {
   // Handling of special element types
   if (el instanceof HTMLScriptElement) {
-    return snapshotScriptElement(el, pending, nodeIdMap);
+    return snapshotScriptElement(el, assetTracker, nodeIdMap);
   } else if (el instanceof HTMLStyleElement) {
-    return snapshotStyleElement(el, pending, nodeIdMap);
+    return snapshotStyleElement(el, assetTracker, nodeIdMap);
   } else if (el instanceof HTMLLinkElement && el.rel === "stylesheet") {
-    return snapshotLinkElement(el, pending, nodeIdMap);
+    return snapshotLinkElement(el, assetTracker, nodeIdMap);
   }
 
   const attrs: Record<string, string> = {};
@@ -217,23 +217,23 @@ function snapElement(el: Element, pending: AssetsTracker, nodeIdMap: NodeIdBiMap
   // Queue asset-like attributes
   if (el instanceof HTMLImageElement) {
     const u = el.currentSrc || el.src;
-    if (u) pending.assign(resolve(el, u), "image");
-    if (attrs["srcset"]) assignSrcsetUrls(attrs["srcset"], el.baseURI || document.baseURI, pending);
+    if (u) assetTracker.assign(resolve(el, u), "image");
+    if (attrs["srcset"]) assignSrcsetUrls(attrs["srcset"], el.baseURI || document.baseURI, assetTracker);
   } else if (el instanceof HTMLLinkElement && /(^|\s)(icon|apple-touch-icon)(\s|$)/i.test(el.rel)) {
-    if (el.href) pending.assign(resolve(el, el.href), "image");
+    if (el.href) assetTracker.assign(resolve(el, el.href), "image");
   } else if (el instanceof HTMLVideoElement && el.poster) {
-    pending.assign(resolve(el, el.poster), "image");
+    assetTracker.assign(resolve(el, el.poster), "image");
   }
 
   if (attrs["style"]) {
-    collectCssUrlsAssign(attrs["style"], el.baseURI || document.baseURI, pending);
+    collectCssUrlsAssign(attrs["style"], el.baseURI || document.baseURI, assetTracker);
   }
 
   const id = nodeIdMap.getNodeId(el)!;
   const children: VNode[] = [];
 
   for (const child of Array.from(el.childNodes)) {
-    const vChild = snapshotNode(child, pending, nodeIdMap);
+    const vChild = snapshotNode(child, assetTracker, nodeIdMap);
     children.push(vChild);
   }
 
@@ -253,24 +253,24 @@ function snapElement(el: Element, pending: AssetsTracker, nodeIdMap: NodeIdBiMap
   );
 
   const sr = (el as HTMLElement).shadowRoot;
-  if (sr) node.shadow = snapShadow(sr, pending, nodeIdMap);
+  if (sr) node.shadow = snapShadow(sr, assetTracker, nodeIdMap);
 
   return node;
 }
 
-function snapShadow(sr: ShadowRoot, pending: AssetsTracker, nodeIdMap: NodeIdBiMap): VNode[] {
+function snapShadow(sr: ShadowRoot, assetTracker: AssetsTracker, nodeIdMap: NodeIdBiMap): VNode[] {
   const out: VNode[] = [];
   for (const n of Array.from(sr.childNodes)) {
     if (n.nodeType === Node.TEXT_NODE) out.push({ id: nodeIdMap.getNodeId(n)!, nodeType: "text", text: n.nodeValue ?? "" } as VTextNode);
-    else if (n.nodeType === Node.ELEMENT_NODE) out.push(snapElement(n as Element, pending, nodeIdMap));
+    else if (n.nodeType === Node.ELEMENT_NODE) out.push(snapElement(n as Element, assetTracker, nodeIdMap));
   }
   return out;
 }
 
-export function rewriteStyleSheetsToPendingIds(stylesheet: VStyleSheet, baseURI: string, pending: AssetsTracker) {
+export function rewriteStyleSheetsToAssetIds(stylesheet: VStyleSheet, baseURI: string, assetTracker: AssetsTracker) {
   if (!("text" in stylesheet) || !stylesheet.text) return stylesheet;
   const text = stylesheet.text.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m: string, q: string, raw: string) => {
-    const id = idForUrl(raw, baseURI, pending);
+    const id = idForUrl(raw, baseURI, assetTracker);
     return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
   });
   return new VStyleSheet(stylesheet.id, text, stylesheet.media);
@@ -278,21 +278,21 @@ export function rewriteStyleSheetsToPendingIds(stylesheet: VStyleSheet, baseURI:
 }
 
 // Rewrite using provisional ids (before fetch)
-export function rewriteAllRefsToPendingIds(snap: VDocument, baseURI: string, pending: AssetsTracker) {
+export function rewriteAllRefsToAssetIds(snap: VDocument, baseURI: string, assetTracker: AssetsTracker) {
   // CSS - process adopted stylesheets
   snap.adoptedStyleSheets = snap.adoptedStyleSheets.map((s) => {
-    return rewriteStyleSheetsToPendingIds(s, baseURI, pending);
+    return rewriteStyleSheetsToAssetIds(s, baseURI, assetTracker);
   });
 
   // Process all document children to rewrite URLs in style elements
   for (const child of snap.children) {
     if (child.nodeType === "element") {
-      rewriteTreeUrlsToPendingIds(child, baseURI, pending);
+      rewriteTreeUrlsToAssetIds(child, baseURI, assetTracker);
     }
   }
 }
 
-export function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: AssetsTracker): void {
+export function rewriteTreeUrlsToAssetIds(node: VNode, base: string, assetTracker: AssetsTracker): void {
   if (!(node instanceof VElement)) return;
 
   // Handle style elements specifically
@@ -302,7 +302,7 @@ export function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: 
       for (const child of node.children) {
         if (child instanceof VTextNode && child.text) {
           child.text = child.text.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m: string, q: string, raw: string) => {
-            const id = idForUrl(raw, base, pending);
+            const id = idForUrl(raw, base, assetTracker);
             return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
           });
         }
@@ -314,7 +314,7 @@ export function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: 
     for (const key of ["src", "poster", "href", "xlink:href", "data-src"]) {
       const v = node.attrs[key];
       if (!v) continue;
-      const id = idForUrl(v, base, pending);
+      const id = idForUrl(v, base, assetTracker);
       if (id) {
         // Store original URL in data attribute for img elements
         if (key === "src" && node.tag === "img") {
@@ -323,36 +323,36 @@ export function rewriteTreeUrlsToPendingIds(node: VNode, base: string, pending: 
         node.attrs[key] = `asset:${id}`;
       }
     }
-    if (node.attrs["srcset"]) node.attrs["srcset"] = rewriteSrcsetToPending(node.attrs["srcset"], base, pending);
-    if (node.attrs["style"]) node.attrs["style"] = rewriteInlineStyleToPending(node.attrs["style"], base, pending);
+    if (node.attrs["srcset"]) node.attrs["srcset"] = rewriteSrcsetToAsset(node.attrs["srcset"], base, assetTracker);
+    if (node.attrs["style"]) node.attrs["style"] = rewriteInlineStyleToAsset(node.attrs["style"], base, assetTracker);
   }
-  node.children?.forEach((c) => rewriteTreeUrlsToPendingIds(c, base, pending));
-  node.shadow?.forEach((c) => rewriteTreeUrlsToPendingIds(c, base, pending));
+  node.children?.forEach((c) => rewriteTreeUrlsToAssetIds(c, base, assetTracker));
+  node.shadow?.forEach((c) => rewriteTreeUrlsToAssetIds(c, base, assetTracker));
 }
 
-function rewriteSrcsetToPending(srcset: string, base: string, pending: AssetsTracker): string {
+function rewriteSrcsetToAsset(srcset: string, base: string, assetTracker: AssetsTracker): string {
   const parts = srcset.split(",").map((s) => s.trim()).filter(Boolean);
   return parts
     .map((part) => {
       const [url, ...desc] = part.split(/\s+/);
-      const id = idForUrl(url, base, pending);
+      const id = idForUrl(url, base, assetTracker);
       const u = id ? `asset:${id}` : url;
       return desc.length ? [u, ...desc].join(" ") : u;
     })
     .join(", ");
 }
 
-function rewriteInlineStyleToPending(css: string, base: string, pending: AssetsTracker): string {
+function rewriteInlineStyleToAsset(css: string, base: string, assetTracker: AssetsTracker): string {
   return css.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m, q, raw) => {
-    const id = idForUrl(raw, base, pending);
+    const id = idForUrl(raw, base, assetTracker);
     return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
   });
 }
 
-function idForUrl(raw: string, base: string, pending: AssetsTracker): number | null {
+function idForUrl(raw: string, base: string, assetTracker: AssetsTracker): number | null {
   if (/^(data:|asset:)/i.test(raw)) return null;
   const abs = safeAbs(raw, base);
-  const pa = pending.get(abs) || pending.assign(abs, guessType(abs));
+  const pa = assetTracker.get(abs) || assetTracker.assign(abs, guessType(abs));
   return pa.id;
 }
 
@@ -405,22 +405,22 @@ function cssRulesToText(sheet: CSSStyleSheet): string {
   return Array.from(sheet.cssRules).map((r) => r.cssText).join("\n");
 }
 
-export function collectCssUrlsAssign(css: string, base: string, pending: AssetsTracker) {
+export function collectCssUrlsAssign(css: string, base: string, assetTracker: AssetsTracker) {
   const re = /url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(css))) {
     const raw = m[2].trim();
     if (/^(data:|asset:)/i.test(raw)) continue;
     const abs = safeAbs(raw, base);
-    pending.assign(abs, guessType(abs));
+    assetTracker.assign(abs, guessType(abs));
   }
 }
 
-function assignSrcsetUrls(srcset: string, base: string, pending: AssetsTracker) {
+function assignSrcsetUrls(srcset: string, base: string, assetTracker: AssetsTracker) {
   const parts = srcset.split(",").map((s) => s.trim()).filter(Boolean);
   for (const part of parts) {
     const [url] = part.split(/\s+/);
-    pending.assign(safeAbs(url, base), "image");
+    assetTracker.assign(safeAbs(url, base), "image");
   }
 }
 

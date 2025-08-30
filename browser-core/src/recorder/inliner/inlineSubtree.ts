@@ -1,7 +1,7 @@
 import type { VNode } from "@domcorder/proto-ts";
 import type { NodeIdBiMap } from "../../common";
 import type { Asset } from "./Asset";
-import { fetchAssets, rewriteTreeUrlsToPendingIds, snapshotNode } from "./inline";
+import { fetchAssets, rewriteTreeUrlsToAssetIds, snapshotNode } from "./inline";
 import { AssetsTracker } from "./AssetTracker";
 
 export interface InlineStartedEvent {
@@ -24,7 +24,7 @@ export async function inlineSubTree(
   inlineCrossOrigin: boolean = false
 ) {
   const vNode = snapshotNode(node, pendingAssets, nodeIdMap);
-  rewriteTreeUrlsToPendingIds(vNode, node.baseURI, pendingAssets);
+  rewriteTreeUrlsToAssetIds(vNode, node.baseURI, pendingAssets);
 
   handler.onInlineStarted({
     node: vNode,

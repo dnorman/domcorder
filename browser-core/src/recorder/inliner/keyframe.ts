@@ -4,7 +4,7 @@ import { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
 import {
   collectCssUrlsAssign,
   fetchAssets,
-  rewriteAllRefsToPendingIds,
+  rewriteAllRefsToAssetIds,
   snapshotNode
 } from "./inline";
 import type { Asset } from "./Asset";
@@ -49,7 +49,7 @@ export async function generateKeyFrame(
 
     // Phase 1: synchronous snapshot + assign ids + rewrite to asset:<id>
     const snap = snapshotVDomStreaming(doc, nodeIdMap, antiAnimationStylesheet);
-    rewriteAllRefsToPendingIds(snap, doc.baseURI, pendingAssets); // proactive rewrite
+    rewriteAllRefsToAssetIds(snap, doc.baseURI, pendingAssets); // proactive rewrite
 
     // Capture viewport dimensions
     const viewportWidth = doc.defaultView?.innerWidth || 600;

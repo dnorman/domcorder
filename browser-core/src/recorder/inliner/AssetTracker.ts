@@ -14,7 +14,9 @@ export class AssetsTracker {
   public assign(url: string, type: AssetType): PendingAsset {
     const existing = this.byUrl.get(url);
     
-    if (existing) return existing;
+    if (existing) {
+      return existing;
+    }
     
     const pa = { id: this.nextId++, url, type };
     this.byUrl.set(url, pa);
@@ -35,7 +37,6 @@ export class AssetsTracker {
     const current = this.order.splice(0);
     
     this.order.length = 0;
-    this.byUrl.clear();
 
     return current;
   }

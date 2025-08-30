@@ -197,9 +197,10 @@ export class AssetManager {
       }
     }
 
-    if (asset.referenceCount <= 0) {
-      this.releaseAssetById(assetId);
-    }
+    // For now, we are skipping this.
+    // if (asset.referenceCount <= 0) {
+    //   this.releaseAssetById(assetId);
+    // }
   }
 
   /**
