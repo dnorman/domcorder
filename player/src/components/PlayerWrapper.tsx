@@ -1,13 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { FrameChunkReader, PagePlayerComponent } from '@domcorder/browser-core';
+import { type Recording } from '../App';
 
-interface Recording {
-    id: string;
-    filename: string;
-    size: number;
-    created: string;
-}
 
 interface PlayerWrapperProps {
     recording: Recording | null;
@@ -156,7 +151,7 @@ export const PlayerWrapper: React.FC<PlayerWrapperProps> = ({ recording }) => {
                 containerRef.current.appendChild(playerDiv);
 
                 // Initialize the PagePlayerComponent with the fresh div
-                playerRef.current = new PagePlayerComponent(playerDiv);
+                playerRef.current = new PagePlayerComponent(playerDiv, recording.is_active);
 
                 // Load the recording once the player is ready
                 loadAndPlayRecording(recording);

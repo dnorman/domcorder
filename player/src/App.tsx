@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import { RecordingsList } from './components/RecordingsList';
 import { PlayerWrapper } from './components/PlayerWrapper';
 import { BookmarkletButton } from './components/BookmarkletButton';
 
-interface Recording {
+export interface Recording {
   id: string;
   filename: string;
   size: number;
