@@ -28,10 +28,20 @@
       if (!document.adoptedStyleSheets.includes(addedStyleSheet)) {
         document.adoptedStyleSheets = [...document.adoptedStyleSheets, addedStyleSheet];
       }
+      const addButton = document.getElementById('add-style-sheet-button');
+      addButton.disabled = true;
+
+      const removeButton = document.getElementById('remove-style-sheet-button');
+      removeButton.disabled = false;
     }
 
     function removeStyleSheet() {
       document.adoptedStyleSheets = document.adoptedStyleSheets.filter(sheet => sheet !== addedStyleSheet);
+      const addButton = document.getElementById('add-style-sheet-button');
+      addButton.disabled = false;
+
+      const removeButton = document.getElementById('remove-style-sheet-button');
+      removeButton.disabled = true;
     }
   </script>
 
@@ -41,10 +51,11 @@
     <h1>Style Sheets</h1>
     <div class="red">This text should be red with a pink background (Set via CSS Variables)</div>
     <div class="adopted-style-sheet">This element has a background color set via an adopted stylesheet.</div>
+    <div class="adopted-style-sheet-img"></div>
     
     <div style="margin-top: 20px;">
-      <button onclick="addStyleSheet()">Add Style Sheet</button>
-      <button onclick="removeStyleSheet()">Remove Style Sheet</button>
+      <button id="add-style-sheet-button" onclick="addStyleSheet()">Add Style Sheet</button>
+      <button id="remove-style-sheet-button" onclick="removeStyleSheet()" disabled>Remove Style Sheet</button>
       <div class="added-style-sheet">
         <span>Styled via added adopted stylesheet.</span>
         <div></div>

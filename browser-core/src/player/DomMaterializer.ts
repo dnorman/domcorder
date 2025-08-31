@@ -185,8 +185,16 @@ export class DomMaterializer {
       if (!sheet.text) continue;
 
       // Create a new stylesheet using CSSOM API
-      const win = this.document.defaultView!;
-      const stylesheet = DomMaterializer.createStyleSheet(sheet, this.assetManager, win);
+      const targetWindow = this.document.defaultView!;
+      const stylesheet = new targetWindow.CSSStyleSheet();
+      setStyleSheetId(stylesheet, sheet.id);
+
+      this.assetManager.bindAssetsToStyleSheet(stylesheet, sheet.text);
+      
+      // Set media if specified
+      if (sheet.media) {
+        stylesheet.media.mediaText = sheet.media;
+      } 
 
       // Add the stylesheet to the document's stylesheet collection
       this.document.adoptedStyleSheets = [
@@ -194,27 +202,6 @@ export class DomMaterializer {
         stylesheet
       ];
     }
-  }
-
-  public static createStyleSheet(
-    sheet: VStyleSheet, 
-    assetManager: AssetManager,
-    targetWindow: Window & typeof globalThis): CSSStyleSheet {
-    
-    const stylesheet = new targetWindow.CSSStyleSheet();
-    
-    // const processedText = DomMaterializer.processCssText(sheet.text, assetManager, targetWindow, stylesheet);
-    // FIXME
-    stylesheet.replaceSync(sheet.text);
-
-    setStyleSheetId(stylesheet, sheet.id);
-    
-    // Set media if specified
-    if (sheet.media) {
-      stylesheet.media.mediaText = sheet.media;
-    }
-
-    return stylesheet;
   }
 
   /**

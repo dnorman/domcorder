@@ -92,6 +92,11 @@ export class AssetManager {
       });
       assetEntry.assetRequestors.clear();
     }
+
+    if (assetEntry.pendingBlobUrl) {
+      URL.revokeObjectURL(assetEntry.pendingBlobUrl!);
+      assetEntry.pendingBlobUrl = undefined;
+    }
   }
 
   private getOrCreateAssetEntry(assetId: number): AssetEntry {

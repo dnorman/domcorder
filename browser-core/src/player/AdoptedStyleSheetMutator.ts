@@ -32,6 +32,9 @@ export class AdoptedStyleSheetMutator {
     const targetSheet = this.targetDocument.adoptedStyleSheets.find(sheet => getStyleSheetId(sheet) === styleSheet.id);
     if (targetSheet) {
       this.assetManager.bindAssetsToStyleSheet(targetSheet, styleSheet.text);
+      if (styleSheet.media) {
+        targetSheet.media.mediaText = styleSheet.media;
+      }
     } 
   }
 }

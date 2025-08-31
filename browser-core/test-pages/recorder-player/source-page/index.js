@@ -11,6 +11,13 @@ stylesheet.replaceSync(`
     background-color: green;
     color: white;
   }
+
+  .adopted-style-sheet-img {
+    background-image: url(images/x-wing.png);
+    background-size: 75px;
+    height: 75px;
+    width: 75px;
+  }
 `);
 document.adoptedStyleSheets = [stylesheet];
 
