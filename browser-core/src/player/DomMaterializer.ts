@@ -3,6 +3,8 @@ import type { VDocument, VNode, VElement, VTextNode, VCDATASection, VComment, VP
 import { AssetManager } from './AssetManager';
 import { setStyleSheetId } from '../recorder/StyleSheetWatcher';
 
+const ASSET_CONTAINING_ATTRIBUTES = ['src', 'href', 'poster', 'xlink:href', 'data-src', 'srcset', 'style'];
+
 /**
  * DomMaterializer recreates an HTML document from a VDocument and associated assets.
  * 
@@ -24,7 +26,7 @@ import { setStyleSheetId } from '../recorder/StyleSheetWatcher';
 export class DomMaterializer {
   private document: Document;
   private assetManager: AssetManager;
-  private currentStyleElement: Element | null = null;
+  private currentStyleElement: HTMLStyleElement | null = null;
   private targetWindow: (Window & typeof globalThis);
 
   constructor(document: Document, assetManager: AssetManager) {
@@ -70,6 +72,8 @@ export class DomMaterializer {
     }
   }
 
+  
+
   /**
    * Recursively creates a DOM element from a VElement
    */
@@ -78,17 +82,13 @@ export class DomMaterializer {
 
     // Set attributes
     if (vElement.attrs) {
-      for (const [key, value] of Object.entries(vElement.attrs)) {
-        // Handle "asset:" URLs in attributes
-        const processedValue = this.processAttributeValue(key, value, element);
-        element.setAttribute(key, processedValue);
-      }
-    }
+      for (const [property, value] of Object.entries(vElement.attrs)) {
+        element.setAttribute(property, value);
 
-    // Track if we're entering a style element
-    const previousStyleElement = this.currentStyleElement;
-    if (vElement.tag === 'style') {
-      this.currentStyleElement = element;
+        if (ASSET_CONTAINING_ATTRIBUTES.includes(property)) {
+          this.assetManager.findAndBindAssetToElementProperty(element, property);
+        }
+      }
     }
 
     // Process children
@@ -101,8 +101,9 @@ export class DomMaterializer {
       }
     }
 
-    // Restore previous state
-    this.currentStyleElement = previousStyleElement;
+    if (element instanceof this.targetWindow.HTMLStyleElement) {
+      this.assetManager.bindAssetsToStyleElement(element);
+    }
 
     // Handle shadow DOM
     if (vElement.shadow) {
@@ -118,62 +119,7 @@ export class DomMaterializer {
     return element;
   }
 
-  /**
-   * Processes attribute values to handle "asset:" URLs
-   */
-  private processAttributeValue(key: string, value: string, element: Element): string {
-    // Handle attributes that commonly contain URLs
-    const urlAttributes = ['src', 'href', 'poster', 'xlink:href', 'data-src'];
-    if (urlAttributes.includes(key)) {
-      const assetMatch = value.match(/^asset:(\d+)$/);
-      if (assetMatch) {
-        const assetId = parseInt(assetMatch[1], 10);
-        try {
-          return this.assetManager.useAssetInElement(assetId, element);
-        } catch (error) {
-          console.warn(`Asset ${assetId} not found in AssetManager`);
-          return value; // Return original value if asset not found
-        }
-      }
-    }
-
-    // Handle srcset attribute (multiple URLs)
-    if (key === 'srcset') {
-      return this.processSrcsetValue(value, element);
-    }
-
-    // Handle style attribute (inline CSS)
-    if (key === 'style') {
-      return DomMaterializer.processCssText(value, this.assetManager, this.targetWindow, element);
-    }
-
-    return value;
-  }
-
-  /**
-   * Processes srcset attribute to handle "asset:" URLs
-   */
-  private processSrcsetValue(srcset: string, element: Element): string {
-    const parts = srcset.split(',').map(s => s.trim()).filter(Boolean);
-    return parts
-      .map(part => {
-        const [url, ...desc] = part.split(/\s+/);
-        const assetMatch = url.match(/^asset:(\d+)$/);
-        if (assetMatch) {
-          const assetId = parseInt(assetMatch[1], 10);
-          try {
-            const blobUrl = this.assetManager.useAssetInElement(assetId, element);
-            return desc.length ? [blobUrl, ...desc].join(' ') : blobUrl;
-          } catch (error) {
-            console.warn(`Asset ${assetId} not found in AssetManager for srcset`);
-            return part; // Keep original if asset not found
-          }
-        }
-        return part; // Keep original if asset not found
-      })
-      .join(', ');
-  }
-
+ 
   /**
    * Processes all document children and adds them to the document
    */
@@ -192,13 +138,7 @@ export class DomMaterializer {
    * Creates a text node, processing CSS if inside a style element
    */
   private createTextNode(vnode: VTextNode): Node {
-    if (this.currentStyleElement) {
-      // Process CSS content to replace asset URLs using the current style element as context
-      const processedText = DomMaterializer.processCssText(vnode.text, this.assetManager, this.targetWindow, this.currentStyleElement);
-      return this.document.createTextNode(processedText);
-    } else {
-      return this.document.createTextNode(vnode.text);
-    }
+    return this.document.createTextNode(vnode.text);
   }
 
   /**
@@ -263,8 +203,9 @@ export class DomMaterializer {
     
     const stylesheet = new targetWindow.CSSStyleSheet();
     
-    const processedText = DomMaterializer.processCssText(sheet.text, assetManager, targetWindow, stylesheet);
-    stylesheet.replaceSync(processedText);
+    // const processedText = DomMaterializer.processCssText(sheet.text, assetManager, targetWindow, stylesheet);
+    // FIXME
+    stylesheet.replaceSync(sheet.text);
 
     setStyleSheetId(stylesheet, sheet.id);
     
@@ -274,47 +215,6 @@ export class DomMaterializer {
     }
 
     return stylesheet;
-  }
-
-  /**
-   * Processes CSS text to replace asset URLs with blob URLs
-   * @param cssText The CSS text to process
-   * @param consumer Optional element or adopted stylesheet context for asset reference tracking
-   */
-  private static processCssText(
-    cssText: string,
-    assetManager: AssetManager,
-    targetWindow: Window & typeof globalThis,
-    consumer?: Element | CSSStyleSheet): string {
-    // This is a simplified implementation - in practice, you might want to use a CSS parser
-    // to properly handle all URL references in CSS
-
-    // Look for url() references and replace them with blob URLs if the asset exists
-    return cssText.replace(/url\(['"]?([^'"]+)['"]?\)/g, (match, url) => {
-      // Handle "asset:<id>" format
-      const assetMatch = url.match(/^asset:(\d+)$/);
-      if (assetMatch) {
-        const assetId = parseInt(assetMatch[1], 10);
-        try {
-          if (consumer) {
-            // Use the appropriate method based on the consumer type
-            if (consumer instanceof targetWindow.Element) {
-              const blobUrl = assetManager.useAssetInElement(assetId, consumer);
-              return `url(${blobUrl})`;
-            } else if (consumer instanceof targetWindow.CSSStyleSheet) {
-              const blobUrl = assetManager.useAssetInStyleSheet(assetId, consumer);
-              return `url(${blobUrl})`;
-            }
-          }
-          // If no consumer provided, skip asset processing
-          return match;
-        } catch (error) {
-          console.warn(`Asset ${assetId} not found in AssetManager for CSS`);
-          return match; // Keep original if asset not found
-        }
-      }
-      return match; // Keep original if asset not found
-    });
   }
 
   /**

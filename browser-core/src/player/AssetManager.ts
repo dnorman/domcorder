@@ -1,10 +1,14 @@
 import type { Asset } from "@domcorder/proto-ts";
 
+export type AssetLoadedHandler = (asset: AssetEntry) => void;
+
 interface AssetEntry {
-  sourceUrl: string;
+  sourceUrl?: string;
   blob?: Blob;
-  objectUrl?: string;
+  pendingBlobUrl?: string;
+  resolvedUrl?: string;
   referenceCount: number;
+  assetRequestors: Set<AssetLoadedHandler>;
   elements: Set<Element>;
   adoptedStyleSheets: Set<CSSStyleSheet>;
 }
@@ -61,27 +65,153 @@ export class AssetManager {
   /**
    * Adds an asset to the manager, creating a blob and object URL
    */
-  public addAsset(asset: Asset): void {
-    if (this.assets.has(asset.asset_id)) {
-      // Asset already exists, don't recreate
-      return;
+  public receiveAsset(asset: Asset): void {
+    let assetEntry = this.assets.get(asset.asset_id);
+    if (!assetEntry) {
+      assetEntry = this.addAssetEntry(asset.asset_id, asset.url);
     }
 
-    let blob: Blob | undefined;
-    let objectUrl: string | undefined;
+    if (!assetEntry.resolvedUrl) {
+      let blob: Blob | undefined;
+      let objectUrl: string | undefined;
 
-    if (asset.buf.byteLength > 0) {
-      blob = new Blob([asset.buf], { type: asset.mime || 'application/octet-stream' });
-      objectUrl = URL.createObjectURL(blob);
+      if (asset.buf.byteLength > 0) {
+        blob = new Blob([asset.buf], { type: asset.mime || 'application/octet-stream' });
+        objectUrl = URL.createObjectURL(blob);
+      } else {
+        objectUrl = asset.url;
+      }
+
+      assetEntry.blob = blob;
+      assetEntry.resolvedUrl = objectUrl;
     }
 
-    this.assets.set(asset.asset_id, {
-      sourceUrl: asset.url,
-      blob,
-      objectUrl,
+    if (assetEntry.assetRequestors.size > 0) {
+      assetEntry.assetRequestors.forEach(requestor => {
+        requestor(assetEntry);
+      });
+      assetEntry.assetRequestors.clear();
+    }
+  }
+
+  private getOrCreateAssetEntry(assetId: number): AssetEntry {
+    let assetEntry = this.assets.get(assetId);
+    if (!assetEntry) {
+      assetEntry = this.addAssetEntry(assetId);
+    }
+    return assetEntry;
+  }
+
+  private addAssetEntry(assetId: number, sourceUrl?: string): AssetEntry {
+    const pendingBlobUrl = URL.createObjectURL(new Blob([]));
+
+    const assetEntry: AssetEntry = {
+      sourceUrl,
+      pendingBlobUrl,      
+      blob: undefined,
+      resolvedUrl: undefined,
       referenceCount: 0,
-      elements: new Set(),
+      elements: new Set<Element>(),
+      assetRequestors: new Set<AssetLoadedHandler>(),
       adoptedStyleSheets: new Set()
+    };
+    this.assets.set(assetId, assetEntry);
+    return assetEntry;
+  }
+
+  public findAndBindAssetToElementProperty(
+    element: Element,
+    property: string
+  ): void {
+    const value = element.getAttribute(property);
+    if (!value) return;
+
+    const detectedAssetIds = new Set<number>();
+    const assetMatch = value.matchAll(/asset:(?<assetId>\d+)/g);
+    
+    for (const match of assetMatch) {
+      const assetId = match.groups!.assetId ? parseInt(match.groups!.assetId, 10) : undefined;
+      if (!assetId || detectedAssetIds.has(assetId)) continue;
+
+      detectedAssetIds.add(assetId);
+      this.bindAssetToElementProperty(assetId, element, property);
+    }
+  }
+
+  private bindAssetToElementProperty(
+    assetId: number,
+    element: Element,
+    property: string
+  ): void {
+    const asset = this.getOrCreateAssetEntry(assetId);
+    const pendingBlobUrl = asset.pendingBlobUrl!;
+    
+    const value = element.getAttribute(property);
+    if (!value) return;
+
+    if (property === 'srcset') {
+      const parts = value.split(',').map(s => s.trim()).filter(Boolean);
+      const processedParts = parts
+        .map(part => {
+          const [url, ...desc] = part.split(/\s+/);
+          const assetMatch = url.match(/^asset:(\d+)$/);
+          if (assetMatch) {
+            const matchedAssetId = parseInt(assetMatch[1], 10);
+            if (matchedAssetId === assetId) {
+              // This part matched the asset id so fill in the asset url.
+              return desc.length ? [pendingBlobUrl, ...desc].join(' ') : pendingBlobUrl;
+            } 
+          }
+          // Keep original if asset not found
+          return part; 
+        })
+        .join(', ');
+        element.setAttribute(property, processedParts);
+    } else if (property === 'style') {
+      const processedCssText = this.replaceAssetInCssText(value, assetId, pendingBlobUrl);
+      element.setAttribute(property, processedCssText);
+    } else {
+      element.setAttribute(property, pendingBlobUrl);
+    }
+
+    this.useAssetInElement(assetId, element, (asset) => {
+      const resolvedUrl = asset.resolvedUrl!;
+      const currentValue = element.getAttribute(property);
+        if (currentValue) {
+          const newValue = currentValue.replaceAll(asset.pendingBlobUrl!, resolvedUrl);
+          element.setAttribute(property, newValue);
+        } 
+    });
+  }
+
+  public bindAssetsToStyleSheet(styleSheet: CSSStyleSheet, cssText: string) {
+    const processedCssText = this.processAssetsInCssText(cssText, (assetId, asset) => {
+      this.useAssetInStyleSheet(assetId, styleSheet, () => {
+        const resolvedUrl = asset.resolvedUrl!;
+        const currentValue = Array.from(styleSheet.cssRules).map(rule => rule.cssText).join("\n");
+        if (currentValue) {
+          const newValue = currentValue.replaceAll(asset.pendingBlobUrl!, resolvedUrl);
+          styleSheet.replaceSync(newValue);
+        }
+      });
+    });
+
+    styleSheet.replaceSync(processedCssText);
+  }
+
+  private replaceAssetInCssText(cssText: string, assetId: number, newUrl: string): string {
+    return cssText.replace(/url\(['"]?([^'"]+)['"]?\)/g, (_, url) => {
+      const assetMatch = url.match(/^asset:(\d+)$/);
+      if (assetMatch) {
+        const matchedAssetId = parseInt(assetMatch[1], 10);
+        if (matchedAssetId === assetId) {
+          return `url(${newUrl})`;
+        } else {
+          return `url(${url})`;
+        }
+      } else {
+        return `url(${url})`;
+      }
     });
   }
 
@@ -91,11 +221,12 @@ export class AssetManager {
    * @param element The element that will use this asset
    * @returns The blob URL for the asset
    */
-  public useAssetInElement(assetId: number, element: Element): string {
-    const asset = this.assets.get(assetId);
-    if (!asset) {
-      throw new Error(`Asset with ID ${assetId} not found`);
-    }
+  public useAssetInElement(
+    assetId: number,
+    element: Element,
+    onAssetLoaded: AssetLoadedHandler
+  ): void {
+    const asset = this.getOrCreateAssetEntry(assetId);
 
     // Increment reference count and track element
     asset.referenceCount++;
@@ -112,7 +243,53 @@ export class AssetManager {
     // Set up event listeners to detect when element no longer needs the asset
     this.setupElementCleanup(assetId, element);
 
-    return asset.objectUrl || asset.sourceUrl;
+    if (asset.resolvedUrl) {
+      setTimeout(() => {
+        onAssetLoaded(asset);
+      }, 0);
+    } else {
+      asset.assetRequestors.add(onAssetLoaded);
+    }  
+  }
+
+  public bindAssetsToStyleElement(styleElement: HTMLStyleElement): void { 
+    const processedCssText = this.processAssetsInCssText(styleElement.textContent || "", (assetId, asset) => {
+      this.useAssetInElement(assetId, styleElement, () => {
+        const resolvedUrl = asset.resolvedUrl!;
+        const currentValue = styleElement.textContent;
+        if (currentValue) {
+          const newValue = currentValue.replaceAll(asset.pendingBlobUrl!, resolvedUrl);
+          styleElement.childNodes.item(0)!.textContent = newValue;
+        }
+      });
+    });
+
+    styleElement.childNodes.item(0)!.textContent = processedCssText;
+  }
+
+  private processAssetsInCssText(cssText: string, registrationCallback: (id: number, asset: AssetEntry) => void): string {
+    // FIXME update asset counts and references.
+    const detectedAssetIds = new Set<number>();
+
+    // Look for url() references and replace them with blob URLs if the asset exists
+    const processedCssText = cssText.replace(/url\(['"]?([^'"]+)['"]?\)/g, (match, url) => {
+      const assetMatch = url.match(/^asset:(\d+)$/);
+      if (assetMatch) {
+        const assetId = parseInt(assetMatch[1], 10);
+        if (!detectedAssetIds.has(assetId)) {
+          detectedAssetIds.add(assetId);
+          const asset = this.getOrCreateAssetEntry(assetId);
+          const pendingBlobUrl = asset.pendingBlobUrl!;
+          registrationCallback(assetId, asset);
+          return `url(${pendingBlobUrl})`;
+        } else {
+          return match;
+        }
+      }
+      return match;
+    });
+
+    return processedCssText;
   }
 
   /**
@@ -121,11 +298,12 @@ export class AssetManager {
    * @param adoptedStyleSheet The adopted stylesheet that will use this asset
    * @returns The blob URL for the asset
    */
-  public useAssetInStyleSheet(assetId: number, adoptedStyleSheet: CSSStyleSheet): string {
-    const asset = this.assets.get(assetId);
-    if (!asset) {
-      throw new Error(`Asset with ID ${assetId} not found`);
-    }
+  public useAssetInStyleSheet(
+    assetId: number,
+    adoptedStyleSheet: CSSStyleSheet,
+    onAssetLoaded: AssetLoadedHandler
+  ): void {
+    const asset = this.getOrCreateAssetEntry(assetId);
 
     // Increment reference count and track adopted stylesheet
     asset.referenceCount++;
@@ -139,7 +317,13 @@ export class AssetManager {
     }
     styleSheetAssets.add(assetId);
 
-    return asset.objectUrl || asset.sourceUrl;
+    if (asset.resolvedUrl) {
+      setTimeout(() => {
+        onAssetLoaded(asset);
+      }, 0);
+    } else {
+      asset.assetRequestors.add(onAssetLoaded);
+    } 
   }
 
   /**
@@ -257,8 +441,8 @@ export class AssetManager {
       }
     });
 
-    if (asset.objectUrl) {
-      URL.revokeObjectURL(asset.objectUrl);
+    if (asset.resolvedUrl) {
+      URL.revokeObjectURL(asset.resolvedUrl);
     }
     this.assets.delete(assetId);
   }
@@ -298,8 +482,8 @@ export class AssetManager {
 
     // Clean up all assets
     for (const [_, asset] of this.assets) {  
-      if (asset.objectUrl) {
-        URL.revokeObjectURL(asset.objectUrl);
+      if (asset.resolvedUrl) {
+        URL.revokeObjectURL(asset.resolvedUrl);
       }
     }
     this.assets.clear();

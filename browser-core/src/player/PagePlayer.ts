@@ -28,7 +28,7 @@ import {
   WindowBlurred
 } from "@domcorder/proto-ts";
 import type { StringMutationOperation } from "../common/StringMutationOperation";
-import type { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
+import type { VStyleSheet } from "@domcorder/proto-ts";
 import { StyleSheetWatcher, type StyleSheetWatcherEvent } from "../recorder/StyleSheetWatcher";
 import { AdoptedStyleSheetMutator } from "./AdoptedStyleSheetMutator";
 import { MouseSimulator } from "./MouseSimulator";
@@ -36,29 +36,6 @@ import { SelectionSimulator } from "./SelectionSimulator";
 import { TypingSimulator } from "./TypingSimulator";
 import { PlaybackQueue, PlayEvent } from "./PlaybackQueue";
 
-export type OpenFrame = {
-  type: 'keyframe',
-  document: VDocument,
-  assetCount: number;
-  receivedAssets: Set<number>;
-} | {
-  type: 'add-node',
-  parentId: number,
-  index: number,
-  node: VNode,
-  assetCount: number;
-  receivedAssets: Set<number>;
-} | {
-  type: 'adopted-style-sheets-changed',
-  stylesheets: number[],
-  addedCount: number;
-  receivedSheets: Set<VStyleSheet>;
-} | {
-  type: 'adopted-style-sheet-added',
-  stylesheet: VStyleSheet,
-  assetCount: number;
-  receivedAssets: Set<number>;
-}
 
 export class PagePlayer {
   private readonly targetDocument: Document;
@@ -69,8 +46,6 @@ export class PagePlayer {
   private readonly mouseSimulator: MouseSimulator;
   private readonly typingSimulator: TypingSimulator;
   private selectionSimulator: SelectionSimulator | null;
-
-  private readonly openFrameStack: OpenFrame[];
 
   private mutator: DomMutator | null;
   private readonly styleSheetWatcher: StyleSheetWatcher;
@@ -98,7 +73,7 @@ export class PagePlayer {
     this.typingSimulatorElement = typingSimulatorElement;
     this.mouseSimulator = new MouseSimulator(overlayElement);
     this.typingSimulator = new TypingSimulator(typingSimulatorElement);
-    this.openFrameStack = [];
+  
     this.mutator = null;
     this.playerComponent = playerComponent;
 
@@ -201,29 +176,11 @@ export class PagePlayer {
   }
 
   private _handleAdoptedStyleSheetAddedFrame(frame: NewAdoptedStyleSheet) {
-    this.openFrameStack.push({
-      type: 'adopted-style-sheet-added',
-      stylesheet: frame.styleSheet,
-      assetCount: frame.assetCount,
-      receivedAssets: new Set(),
-    });
-
-    if (frame.assetCount === 0) {
-      this._applyAdoptedStyleSheetAdded();
-    }
+    this.adoptedStyleSheetMutator.receiveAdoptedStyleSheet(frame.styleSheet);
   }
 
   private _handleAdoptedStyleSheetsChangedFrame(frame: AdoptedStyleSheetsChanged) {
-    this.openFrameStack.push({
-      type: 'adopted-style-sheets-changed',
-      stylesheets: frame.styleSheetIds,
-      addedCount: frame.addedCount,
-      receivedSheets: new Set(),
-    });
-
-    if (frame.addedCount === 0) {
-      this._applyAdoptedStyleSheets();
-    }
+    this.adoptedStyleSheetMutator.updateAdoptedStyleSheets(frame.styleSheetIds);
   }
 
   private _handleKeyFrame(keyframeData: Keyframe) {
@@ -232,34 +189,26 @@ export class PagePlayer {
     this.viewportHeight = keyframeData.viewportHeight;
     this._updateIframeSize();
 
-    const activeKeyFrame: OpenFrame = {
-      type: 'keyframe',
-      document: keyframeData.vdocument,
-      assetCount: keyframeData.assetCount,
-      receivedAssets: new Set(),
-    };
+    this.materializer.materializeDocument(keyframeData.vdocument);
 
-    this.openFrameStack.push(activeKeyFrame);
+    const targetDocNodeIdMap = new NodeIdBiMap();
+    targetDocNodeIdMap.adoptNodesFromSubTree(this.targetDocument);
 
-    if (keyframeData.assetCount === 0) {
-      this._applyKeyFrame();
-    }
+    this.mutator = new DomMutator(targetDocNodeIdMap);
+
+    // Update the SelectionSimulator with the new NodeIdBiMap
+    this.selectionSimulator = new SelectionSimulator(this.overlayElement, targetDocNodeIdMap, this.targetDocument);
   }
 
   private _handleNodeAddedFrame(domNodeAddedData: DomNodeAdded) {
-    const activeAddNode: OpenFrame = {
-      type: 'add-node',
-      parentId: domNodeAddedData.parentNodeId,
-      index: domNodeAddedData.index,
-      node: domNodeAddedData.vnode,
-      assetCount: domNodeAddedData.assetCount,
-      receivedAssets: new Set(),
-    };
-    this.openFrameStack.push(activeAddNode);
+    const materializedNode = this.materializer.materializeNode(domNodeAddedData.vnode);
 
-    if (domNodeAddedData.assetCount === 0) {
-      this._applyAddNode();
-    }
+    this.mutator!.applyOps([{
+      op: 'insert',
+      node: materializedNode,
+      index: domNodeAddedData.index,
+      parentId: domNodeAddedData.parentNodeId,
+    }]);
   }
 
   private _handleNodeRemovedFrame(domNodeRemovedData: DomNodeRemoved) {
@@ -323,94 +272,8 @@ export class PagePlayer {
 
   private _handleAssetFrame(frame: Asset) {
     // Add the asset to the AssetManager
-    this.assetManager.addAsset(frame);
-
-    const activeFrame = this.openFrameStack[this.openFrameStack.length - 1];
-
-    if (activeFrame?.type === 'keyframe') {
-      activeFrame.receivedAssets.add(frame.asset_id);
-      if (activeFrame.receivedAssets.size === activeFrame.assetCount) {
-        this._applyKeyFrame();
-      }
-    } else if (activeFrame?.type === 'add-node') {
-      activeFrame.receivedAssets.add(frame.asset_id);
-      if (activeFrame.receivedAssets.size === activeFrame.assetCount) {
-        this._applyAddNode();
-      }
-    } else if (activeFrame?.type === 'adopted-style-sheet-added') {
-      activeFrame.receivedAssets.add(frame.asset_id);
-      if (activeFrame.receivedAssets.size === activeFrame.assetCount) {
-        this._applyAdoptedStyleSheetAdded();
-      }
-    } else {
-      throw new Error("Expected keyframe, add-node, or added-style-sheet frame");
-    }
-  }
-
-  private _applyAdoptedStyleSheetAdded() {
-    const activeAddNode = this.openFrameStack.pop();
-    if (activeAddNode?.type !== 'adopted-style-sheet-added') {
-      throw new Error("Expected adopted-style-sheet-added frame");
-    }
-
-    const activeFrame = this.openFrameStack[this.openFrameStack.length - 1];
-    if (activeFrame?.type !== 'adopted-style-sheets-changed') {
-      throw new Error("Expected adopted-style-sheets frame");
-    }
-
-    activeFrame.receivedSheets.add(activeAddNode.stylesheet);
-    if (activeFrame.receivedSheets.size === activeFrame.addedCount) {
-      this._applyAdoptedStyleSheets();
-    }
-  }
-
-  private _applyAdoptedStyleSheets() {
-    const activeFrame = this.openFrameStack.pop();
-    if (activeFrame?.type !== 'adopted-style-sheets-changed') {
-      throw new Error("Expected adopted-style-sheets-changed frame");
-    }
-
-    const { stylesheets } = activeFrame;
-
-    this.adoptedStyleSheetMutator.updateAdoptedStyleSheets(stylesheets, activeFrame.receivedSheets);
-  }
-
-  private _applyAddNode() {
-    const activeAddNode = this.openFrameStack.pop();
-
-    if (activeAddNode?.type !== 'add-node') {
-      throw new Error("Expected add-node frame");
-    }
-
-    const { parentId, index, node } = activeAddNode;
-    const materializedNode = this.materializer.materializeNode(node);
-
-    this.mutator!.applyOps([{
-      op: 'insert',
-      node: materializedNode,
-      index,
-      parentId,
-    }]);
-  }
-
-  private _applyKeyFrame() {
-    const activeKeyFrame = this.openFrameStack.pop();
-    if (activeKeyFrame?.type !== 'keyframe') {
-      throw new Error("Expected keyframe frame");
-    }
-
-    const vdoc = activeKeyFrame.document;
-
-    this.materializer.materializeDocument(vdoc);
-
-    const targetDocNodeIdMap = new NodeIdBiMap();
-    targetDocNodeIdMap.adoptNodesFromSubTree(this.targetDocument);
-
-    this.mutator = new DomMutator(targetDocNodeIdMap);
-
-    // Update the SelectionSimulator with the new NodeIdBiMap
-    this.selectionSimulator = new SelectionSimulator(this.overlayElement, targetDocNodeIdMap, this.targetDocument);
-  }
+    this.assetManager.receiveAsset(frame);
+  } 
 
   /**
    * Clean up the AssetManager when the player is disposed
