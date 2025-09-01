@@ -79,21 +79,9 @@ export class AssetManager {
 
     let blob: Blob | undefined;
     let objectUrl: string | undefined;
-
-    if (asset.buf.byteLength > 0) {
-      blob = new Blob([asset.buf], { type: asset.mime || 'application/octet-stream' });
-      objectUrl = URL.createObjectURL(blob);
-    } else {
-      objectUrl = asset.url;
-    }
     
-    assetEntry.resolvedUrl = objectUrl;
-    
-
-    // FIXME: let's optimize this so that we don't create the blob / object url above.
-
     // Special handling for CSS assets which may have references to other assets.
-    if (asset.mime === 'text/css') {
+    if (asset.buf.byteLength > 0 && asset.mime === 'text/css') {
       const originalCssText = new TextDecoder().decode(asset.buf);
 
       const processedCssText = this.processAssetsInCssText(originalCssText, (assetId, subAssetEntry) => {
@@ -123,8 +111,15 @@ export class AssetManager {
       assetEntry.buf = processedCssArrayBuffer;
 
       const blob = new Blob([processedCssArrayBuffer], { type: 'text/css' });
-      assetEntry.resolvedUrl = URL.createObjectURL(blob);
+      objectUrl = URL.createObjectURL(blob);
+    } else if (asset.buf.byteLength > 0) {
+      blob = new Blob([asset.buf], { type: asset.mime || 'application/octet-stream' });
+      objectUrl = URL.createObjectURL(blob);
+    } else {
+      objectUrl = asset.url;
     }
+
+    assetEntry.resolvedUrl = objectUrl;
 
     if (assetEntry.assetRequestors.size > 0) {
       assetEntry.assetRequestors.forEach(requestor => {
