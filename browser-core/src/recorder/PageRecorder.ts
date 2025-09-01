@@ -132,6 +132,7 @@ export class PageRecorder {
       observeDom: true,
       includeDocuments: [this.sourceDocument],
       shadowRoots: [],
+      processIntervalMs: 500,
     });
     this.canvasTracker.watch();
   }

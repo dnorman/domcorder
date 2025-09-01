@@ -166,7 +166,6 @@ export class PagePlayer {
   }
   
   private _handleCanvasChangedFrame(frame: CanvasChanged) {
-    console.log('Canvas changed:', frame.nodeId, frame.mimeType, frame.data);
     this.mutator?.updateCanvas(frame.nodeId, frame.mimeType, frame.data);
   }
 

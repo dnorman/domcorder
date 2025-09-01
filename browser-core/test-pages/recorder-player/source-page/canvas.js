@@ -80,5 +80,5 @@ window.onload = function () {
     const color = colors[colorIndex];
     drawSmileyOnCanvas('canvas', color);
     colorIndex = (colorIndex + 1) % colors.length;
-  }, 10000);
+  }, 5000);
 };
