@@ -1,6 +1,6 @@
 import { VStyleSheet } from "@domcorder/proto-ts";
 import { collectCssUrlsAssign, fetchAssets, rewriteStyleSheetsToAssetIds } from "./inline";
-import { AssetsTracker } from "./AssetTracker";
+import { AssetTracker } from "./AssetTracker";
 import type { Asset } from "./Asset";
 
 export interface InlineAdoptedStyleSheetEvent {
@@ -15,7 +15,7 @@ export interface InlineSubTreeHandler {
 export async function inlineAdoptedStyleSheet(
   sheet: CSSStyleSheet,
   baseURI: string,
-  assetTracker: AssetsTracker,
+  assetTracker: AssetTracker,
   handler: InlineSubTreeHandler,
   concurrency: number = 6,
   inlineCrossOrigin: boolean = false) {

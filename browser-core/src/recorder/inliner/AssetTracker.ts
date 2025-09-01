@@ -1,26 +1,27 @@
-import type { AssetType } from "./AssetType";
-
 export type PendingAsset = { 
   id: number;
   url: string;
-  type: AssetType
+  mime?: string,
+  data?: ArrayBuffer
 };
 
-export class AssetsTracker {
+export class AssetTracker {
   private nextId = 1;
   private byUrl = new Map<string, PendingAsset>();
   private order: PendingAsset[] = [];
   
-  public assign(url: string, type: AssetType): PendingAsset {
+  public assign(url: string, data?: ArrayBuffer, mime?: string): PendingAsset {
     const existing = this.byUrl.get(url);
     
     if (existing) {
       return existing;
     }
     
-    const pa = { id: this.nextId++, url, type };
+    const pa = { id: this.nextId++, url, data, mime };
     this.byUrl.set(url, pa);
     this.order.push(pa);
+
+    console.log('assign', pa);
     
     return pa;
   }

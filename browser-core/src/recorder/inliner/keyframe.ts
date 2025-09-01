@@ -1,5 +1,5 @@
 import type { NodeIdBiMap } from "../../common/NodeIdBiMap";
-import { AssetsTracker } from "./AssetTracker";
+import { AssetTracker } from "./AssetTracker";
 import { VDocument, VNode, VStyleSheet } from "@domcorder/proto-ts";
 import {
   collectCssUrlsAssign,
@@ -32,7 +32,7 @@ export async function generateKeyFrame(
   doc: Document = document,
   nodeIdMap: NodeIdBiMap,
   handler: KeyFrameEventHandler,
-  assetTracker: AssetsTracker,
+  assetTracker: AssetTracker,
   opts: KeyFrameGenerationOptions = {}
 ): Promise<void> {
 
@@ -44,7 +44,7 @@ export async function generateKeyFrame(
     }
 
     // Phase 1: synchronous snapshot + assign ids + rewrite to asset:<id>
-    const snap = snapshotVDomStreaming(doc, nodeIdMap, antiAnimationStylesheet);
+    const snap = snapshotVDomStreaming(doc, nodeIdMap, assetTracker, antiAnimationStylesheet);
     rewriteAllRefsToAssetIds(snap, doc.baseURI, assetTracker); // proactive rewrite
 
     // Capture viewport dimensions
@@ -96,13 +96,12 @@ async function waitForQuietWindow(doc: Document, ms: number): Promise<void> {
   });
 }
 
-function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, antiAnimationStylesheet: CSSStyleSheet | null = null): VDocument {
-  const pending = new AssetsTracker();
-
+function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, assetTracker: AssetTracker, antiAnimationStylesheet: CSSStyleSheet | null = null): VDocument {
+  
   const children = Array.from(doc.childNodes);
   const vChildren: VNode[] = [];
   for (const child of children) {
-    vChildren.push(snapshotNode(child, pending, nodeIdMap));
+    vChildren.push(snapshotNode(child, assetTracker, nodeIdMap));
   }
 
   // Handle adopted stylesheets (excluding anti-animation stylesheet)
@@ -125,7 +124,7 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, antiAnimat
           text,
           sheet.media.mediaText || undefined
         ));
-        collectCssUrlsAssign(text, doc.baseURI, pending);
+        collectCssUrlsAssign(text, doc.baseURI, assetTracker);
       } catch (error) {
         console.warn('Failed to process adopted stylesheet:', error);
       }

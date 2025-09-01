@@ -11,13 +11,12 @@ import {
 } from "@domcorder/proto-ts";
 import type { NodeIdBiMap } from "../../common";
 import type { Asset } from "./Asset";
-import type { AssetType } from "./AssetType";
-import { AssetsTracker } from "./AssetTracker";
+import { AssetTracker } from "./AssetTracker";
 
 export async function fetchAssets(
   concurrency: number,
   inlineCrossOrigin: boolean,
-  assetTracker: AssetsTracker,
+  assetTracker: AssetTracker,
   assetHandler: (asset: Asset) => void): Promise<void> {
   const sem = makeSemaphore(concurrency);
 
@@ -28,24 +27,26 @@ export async function fetchAssets(
         const partialAsset: Partial<Asset> = {
           id: pa.id,
           url: pa.url,
-          assetType: pa.type,
-          mime: undefined,
+          mime: pa.mime,
+          buf: pa.data,
         };
 
-        try {
-          const res = await fetchOriginalBytesAB(pa.url, inlineCrossOrigin);
-          // Even on failure we advance progress; consumers can reconcile missing assets by id
-          const i = ++index;
-          if (res.ok) {
-            partialAsset.mime = res.mime;
-            partialAsset.buf = res.buf;  
-          } 
-        } catch (error) {
-          console.error('Error fetching asset:', error);
-        }
-
         if (!partialAsset.buf) {
-          partialAsset.buf = new ArrayBuffer(0);
+          try {
+            const res = await fetchOriginalBytesAB(pa.url, inlineCrossOrigin);
+            // Even on failure we advance progress; consumers can reconcile missing assets by id
+            const i = ++index;
+            if (res.ok) {
+              partialAsset.mime = res.mime;
+              partialAsset.buf = res.buf;  
+            } 
+          } catch (error) {
+            console.error('Error fetching asset:', error);
+          }
+
+          if (!partialAsset.buf) {
+            partialAsset.buf = new ArrayBuffer(0);
+          }
         }
 
         assetHandler(partialAsset as Asset);
@@ -54,7 +55,7 @@ export async function fetchAssets(
   );
 }
 
-export function snapshotNode(node: Node, assetTracker: AssetsTracker, nodeIdMap: NodeIdBiMap): VNode {
+export function snapshotNode(node: Node, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap): VNode {
   switch (node.nodeType) {
     case Node.ELEMENT_NODE: {
       return snapElement(node as Element, assetTracker, nodeIdMap);
@@ -125,7 +126,7 @@ export function snapshotNode(node: Node, assetTracker: AssetsTracker, nodeIdMap:
 // -------------------- Phase 1 (streaming variant) --------------------
 
 
-function snapshotScriptElement(el: HTMLScriptElement, assetTracker: AssetsTracker, nodeIdMap: NodeIdBiMap): VElement {
+function snapshotScriptElement(el: HTMLScriptElement, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap): VElement {
   const children = Array.from(el.childNodes).map(c => snapshotNode(c, assetTracker, nodeIdMap));
 
   // Clear text content from script children
@@ -144,7 +145,7 @@ function snapshotScriptElement(el: HTMLScriptElement, assetTracker: AssetsTracke
   );
 }
 
-function snapshotStyleElement(styleElement: Element, assetTracker: AssetsTracker, nodeIdMap: NodeIdBiMap): VElement {
+function snapshotStyleElement(styleElement: Element, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap): VElement {
   const children = Array.from(styleElement.childNodes).map(c => snapshotNode(c, assetTracker, nodeIdMap));
 
   const originalText = readStyleText(styleElement as HTMLStyleElement);
@@ -169,9 +170,15 @@ function snapshotStyleElement(styleElement: Element, assetTracker: AssetsTracker
 
 function snapshotLinkElement(
   linkElement: HTMLLinkElement,
-  assetTracker: AssetsTracker,
+  assetTracker: AssetTracker,
   nodeIdMap: NodeIdBiMap
 ): VElement {
+  
+  const attrs: Record<string, string> = {};
+  for (const attr of linkElement.attributes as NamedNodeMap){
+    attrs[attr.name] = attr.value;
+  }
+
   // Convert link element to style element with processed CSS
   let cssText: string | undefined;
   try {
@@ -186,22 +193,29 @@ function snapshotLinkElement(
     console.warn('Failed to process stylesheet from link:', error);
   }
 
-  // Create a style element instead of link
-  const children = cssText ? [new VTextNode(-1, cssText)] : [];
+
+  let data: ArrayBuffer | undefined;
+  if (cssText) {
+    cssText = rewriteUrlsInCssText(cssText, linkElement.baseURI || document.baseURI, assetTracker);
+    data = cssText ? new TextEncoder().encode(cssText).buffer as ArrayBuffer : undefined;
+  }
+  
+  const asset = assetTracker.assign(linkElement.href, data, "text/css");
 
   return new VElement(
     nodeIdMap.getNodeId(linkElement)!,
-    "style",
+    "link",
     undefined,
     {
+      ...attrs,
+      "href": `asset:${asset.id}`,
       "data-link-href": linkElement.href,
-      ...(linkElement.media ? { media: linkElement.media } : {})
     },
-    children
+    []
   );
 }
 
-function snapElement(el: Element, assetTracker: AssetsTracker, nodeIdMap: NodeIdBiMap): VElement {
+function snapElement(el: Element, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap): VElement {
   // Handling of special element types
   if (el instanceof HTMLScriptElement) {
     return snapshotScriptElement(el, assetTracker, nodeIdMap);
@@ -217,12 +231,12 @@ function snapElement(el: Element, assetTracker: AssetsTracker, nodeIdMap: NodeId
   // Queue asset-like attributes
   if (el instanceof HTMLImageElement) {
     const u = el.currentSrc || el.src;
-    if (u) assetTracker.assign(resolve(el, u), "image");
+    if (u) assetTracker.assign(resolve(el, u));
     if (attrs["srcset"]) assignSrcsetUrls(attrs["srcset"], el.baseURI || document.baseURI, assetTracker);
   } else if (el instanceof HTMLLinkElement && /(^|\s)(icon|apple-touch-icon)(\s|$)/i.test(el.rel)) {
-    if (el.href) assetTracker.assign(resolve(el, el.href), "image");
+    if (el.href) assetTracker.assign(resolve(el, el.href));
   } else if (el instanceof HTMLVideoElement && el.poster) {
-    assetTracker.assign(resolve(el, el.poster), "image");
+    assetTracker.assign(resolve(el, el.poster));
   }
 
   if (attrs["style"]) {
@@ -258,7 +272,7 @@ function snapElement(el: Element, assetTracker: AssetsTracker, nodeIdMap: NodeId
   return node;
 }
 
-function snapShadow(sr: ShadowRoot, assetTracker: AssetsTracker, nodeIdMap: NodeIdBiMap): VNode[] {
+function snapShadow(sr: ShadowRoot, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap): VNode[] {
   const out: VNode[] = [];
   for (const n of Array.from(sr.childNodes)) {
     if (n.nodeType === Node.TEXT_NODE) out.push({ id: nodeIdMap.getNodeId(n)!, nodeType: "text", text: n.nodeValue ?? "" } as VTextNode);
@@ -267,18 +281,23 @@ function snapShadow(sr: ShadowRoot, assetTracker: AssetsTracker, nodeIdMap: Node
   return out;
 }
 
-export function rewriteStyleSheetsToAssetIds(stylesheet: VStyleSheet, baseURI: string, assetTracker: AssetsTracker) {
-  if (!("text" in stylesheet) || !stylesheet.text) return stylesheet;
-  const text = stylesheet.text.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m: string, q: string, raw: string) => {
+function rewriteUrlsInCssText(cssText: string, baseURI: string, assetTracker: AssetTracker) {
+  return cssText.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m: string, q: string, raw: string) => {
     const id = idForUrl(raw, baseURI, assetTracker);
     return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
   });
-  return new VStyleSheet(stylesheet.id, text, stylesheet.media);
+}
 
+export function rewriteStyleSheetsToAssetIds(stylesheet: VStyleSheet, baseURI: string, assetTracker: AssetTracker) {
+  if (!("text" in stylesheet) || !stylesheet.text) return stylesheet;
+    
+  const text = rewriteUrlsInCssText(stylesheet.text, baseURI, assetTracker);
+
+  return new VStyleSheet(stylesheet.id, text, stylesheet.media);
 }
 
 // Rewrite using provisional ids (before fetch)
-export function rewriteAllRefsToAssetIds(snap: VDocument, baseURI: string, assetTracker: AssetsTracker) {
+export function rewriteAllRefsToAssetIds(snap: VDocument, baseURI: string, assetTracker: AssetTracker) {
   // CSS - process adopted stylesheets
   snap.adoptedStyleSheets = snap.adoptedStyleSheets.map((s) => {
     return rewriteStyleSheetsToAssetIds(s, baseURI, assetTracker);
@@ -292,7 +311,7 @@ export function rewriteAllRefsToAssetIds(snap: VDocument, baseURI: string, asset
   }
 }
 
-export function rewriteTreeUrlsToAssetIds(node: VNode, base: string, assetTracker: AssetsTracker): void {
+export function rewriteTreeUrlsToAssetIds(node: VNode, base: string, assetTracker: AssetTracker): void {
   if (!(node instanceof VElement)) return;
 
   // Handle style elements specifically
@@ -301,10 +320,7 @@ export function rewriteTreeUrlsToAssetIds(node: VNode, base: string, assetTracke
     if (node.children) {
       for (const child of node.children) {
         if (child instanceof VTextNode && child.text) {
-          child.text = child.text.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m: string, q: string, raw: string) => {
-            const id = idForUrl(raw, base, assetTracker);
-            return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
-          });
+          child.text = rewriteUrlsInCssText(child.text, base, assetTracker);
         }
       }
     }
@@ -330,7 +346,7 @@ export function rewriteTreeUrlsToAssetIds(node: VNode, base: string, assetTracke
   node.shadow?.forEach((c) => rewriteTreeUrlsToAssetIds(c, base, assetTracker));
 }
 
-function rewriteSrcsetToAsset(srcset: string, base: string, assetTracker: AssetsTracker): string {
+function rewriteSrcsetToAsset(srcset: string, base: string, assetTracker: AssetTracker): string {
   const parts = srcset.split(",").map((s) => s.trim()).filter(Boolean);
   return parts
     .map((part) => {
@@ -342,24 +358,18 @@ function rewriteSrcsetToAsset(srcset: string, base: string, assetTracker: Assets
     .join(", ");
 }
 
-function rewriteInlineStyleToAsset(css: string, base: string, assetTracker: AssetsTracker): string {
+function rewriteInlineStyleToAsset(css: string, base: string, assetTracker: AssetTracker): string {
   return css.replace(/url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g, (_m, q, raw) => {
     const id = idForUrl(raw, base, assetTracker);
     return id ? `url(${q}asset:${id}${q})` : `url(${q}${raw}${q})`;
   });
 }
 
-function idForUrl(raw: string, base: string, assetTracker: AssetsTracker): number | null {
+function idForUrl(raw: string, base: string, assetTracker: AssetTracker): number | null {
   if (/^(data:|asset:)/i.test(raw)) return null;
   const abs = safeAbs(raw, base);
-  const pa = assetTracker.get(abs) || assetTracker.assign(abs, guessType(abs));
+  const pa = assetTracker.get(abs) || assetTracker.assign(abs);
   return pa.id;
-}
-
-function guessType(url: string): AssetType {
-  if (/\.woff2?$/.test(url)) return "font";
-  if (/\.(png|jpe?g|gif|webp|avif|svg)(\?|#|$)/i.test(url)) return "image";
-  return "binary";
 }
 
 // -------------------- Fetch (cache-first) --------------------
@@ -405,22 +415,22 @@ function cssRulesToText(sheet: CSSStyleSheet): string {
   return Array.from(sheet.cssRules).map((r) => r.cssText).join("\n");
 }
 
-export function collectCssUrlsAssign(css: string, base: string, assetTracker: AssetsTracker) {
+export function collectCssUrlsAssign(css: string, base: string, assetTracker: AssetTracker) {
   const re = /url\(\s*(['"]?)([^'"\)]+)\1\s*\)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(css))) {
     const raw = m[2].trim();
     if (/^(data:|asset:)/i.test(raw)) continue;
     const abs = safeAbs(raw, base);
-    assetTracker.assign(abs, guessType(abs));
+    assetTracker.assign(abs);
   }
 }
 
-function assignSrcsetUrls(srcset: string, base: string, assetTracker: AssetsTracker) {
+function assignSrcsetUrls(srcset: string, base: string, assetTracker: AssetTracker) {
   const parts = srcset.split(",").map((s) => s.trim()).filter(Boolean);
   for (const part of parts) {
     const [url] = part.split(/\s+/);
-    assetTracker.assign(safeAbs(url, base), "image");
+    assetTracker.assign(safeAbs(url, base));
   }
 }
 

@@ -1,1 +1,0 @@
-export type AssetType = "image" | "font" | "binary";

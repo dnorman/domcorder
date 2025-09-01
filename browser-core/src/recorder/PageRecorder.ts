@@ -34,7 +34,7 @@ import { NodeIdBiMap } from "../common";
 import type { DomOperation } from "../common/DomOperation";
 import { getStyleSheetId, StyleSheetWatcher, type StyleSheetWatcherEvent } from "./StyleSheetWatcher";
 import { inlineAdoptedStyleSheet, type InlineAdoptedStyleSheetEvent } from "./inliner/inlineAdoptedStyleSheet";
-import { AssetsTracker } from "./inliner/AssetTracker";
+import { AssetTracker } from "./inliner/AssetTracker";
 
 export type FrameHandler = (frame: Frame) => Promise<void>;
 
@@ -48,7 +48,7 @@ export class PageRecorder {
   private userInteractionTracker: UserInteractionTracker | null;
   private sourceDocNodeIdMap: NodeIdBiMap | null;
   private recordingEpoch: number;
-  private readonly assetsTracker: AssetsTracker;
+  private readonly assetTracker: AssetTracker;
 
   constructor(sourceDocument: Document) {
     this.sourceDocument = sourceDocument;
@@ -59,7 +59,7 @@ export class PageRecorder {
     this.userInteractionTracker = null;
     this.sourceDocNodeIdMap = null;
     this.recordingEpoch = Date.now();
-    this.assetsTracker = new AssetsTracker();
+    this.assetTracker = new AssetTracker();
   }
 
   public addFrameHandler(handler: FrameHandler) {
@@ -101,7 +101,7 @@ export class PageRecorder {
       this.sourceDocument,
       this.sourceDocNodeIdMap, 
       this.createKeyFrameHandler(),
-      this.assetsTracker
+      this.assetTracker
     );
 
     this.changeDetector = new DomChangeDetector(this.sourceDocument, this.sourceDocNodeIdMap, async (operations) => {
@@ -141,7 +141,7 @@ export class PageRecorder {
   ): Promise<void> {
     switch (operation.op) {
       case "insert":
-        inlineSubTree(operation.node, nodeIdMap, this.assetsTracker, {
+        inlineSubTree(operation.node, nodeIdMap, this.assetTracker, {
           onInlineStarted: async (ev: InlineStartedEvent) => {
             const frame = new DomNodeAdded(operation.parentId, operation.index, ev.node);
             await this.emitFrame(frame, false);
@@ -271,7 +271,7 @@ export class PageRecorder {
         await this.emitFrame(frame);
 
         for (const sheet of event.added) {
-          await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, this.assetsTracker, {
+          await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, this.assetTracker, {
             onInlineStarted: (ev: InlineAdoptedStyleSheetEvent) => {
               const newStyleSheetFrame = new NewAdoptedStyleSheet(ev.styleSheet);
               this.emitFrame(newStyleSheetFrame, false);

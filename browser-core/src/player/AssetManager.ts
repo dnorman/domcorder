@@ -66,6 +66,7 @@ export class AssetManager {
    * Adds an asset to the manager, creating a blob and object URL
    */
   public receiveAsset(asset: Asset): void {
+    console.log('receiveAsset', asset);
     let assetEntry = this.assets.get(asset.asset_id);
     if (!assetEntry) {
       assetEntry = this.addAssetEntry(asset.asset_id, asset.url);
