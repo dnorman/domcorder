@@ -22,8 +22,7 @@ export enum FrameType {
     DomAttributeRemoved = 12,
     DomTextChanged = 13,
     DomNodeResized = 14,
-
-    // StyleSheetChanged = 15, // REMOVED - leaving gap for compatibility
+    DomNodePropertyChanged = 15,
 
     Asset = 16,
 
@@ -523,8 +522,32 @@ export class DomNodeResized extends Frame {
     }
 }
 
+// FIXME remove the JSON encoding step
+export class DomNodePropertyChanged extends Frame {
+    constructor(
+        public nodeId: number,
+        public propertyName: string,
+        public propertyValue: string | boolean | number | null
+    ) {
+        super();
+    }
 
+    static decode(reader: BufferReader): DomNodePropertyChanged {
+        if (reader.readU32() !== FrameType.DomNodePropertyChanged) throw new Error(`Expected DomNodePropertyChanged frame type`);
+        const nodeId = reader.readU32();
+        const propertyName = reader.readString();
+        const propertyValue = JSON.parse(reader.readString());
+        return new DomNodePropertyChanged(nodeId, propertyName, propertyValue);
+    }
 
+    async encode(w: Writer): Promise<void> {
+        w.u32(FrameType.DomNodePropertyChanged);
+        w.u32(this.nodeId);
+        w.strUtf8(this.propertyName);
+        w.strUtf8(JSON.stringify(this.propertyValue));
+        await w.endFrame();
+    }
+}
 
 export class AdoptedStyleSheetsChanged extends Frame {
     constructor(
@@ -748,6 +771,7 @@ DECODERS[FrameType.DomAttributeChanged] = DomAttributeChanged.decode;
 DECODERS[FrameType.DomAttributeRemoved] = DomAttributeRemoved.decode;
 DECODERS[FrameType.DomTextChanged] = DomTextChanged.decode;
 DECODERS[FrameType.DomNodeResized] = DomNodeResized.decode;
+DECODERS[FrameType.DomNodePropertyChanged] = DomNodePropertyChanged.decode;
 DECODERS[FrameType.AdoptedStyleSheetsChanged] = AdoptedStyleSheetsChanged.decode;
 DECODERS[FrameType.NewAdoptedStyleSheet] = NewAdoptedStyleSheet.decode;
 DECODERS[FrameType.ElementScrolled] = ElementScrolled.decode;

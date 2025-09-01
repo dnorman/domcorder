@@ -47,64 +47,102 @@
 
 </head>
 <body>
-  <div style="float: left">
-    <h1>Style Sheets</h1>
-    <div class="red">This text should be red with a pink background (Set via CSS Variables)</div>
-    <div class="adopted-style-sheet">This element has a background color set via an adopted stylesheet.</div>
-    <div class="adopted-style-sheet-img"></div>
-    
-    <div style="margin-top: 20px;">
+  
+  <h1>Style Sheets</h1>
+  <h2>CSS Variables</h2>
+  <div class="red">This text should be red with a pink background (Set via CSS Variables)</div>
+  
+  <h2>Static Adopted Stylesheet</h2>
+  <div class="adopted-style-sheet">This element has a background color set via an adopted stylesheet.</div>
+  <div class="adopted-style-sheet-img"></div>
+  
+  <h2>Dynamic Adopted Stylesheet</h2>
+  <div style="margin-top: 20px;">
+    <div style="margin-bottom: 10px;">
       <button id="add-style-sheet-button" onclick="addStyleSheet()">Add Style Sheet</button>
       <button id="remove-style-sheet-button" onclick="removeStyleSheet()" disabled>Remove Style Sheet</button>
-      <div class="added-style-sheet">
-        <span>Styled via added adopted stylesheet.</span>
-        <div></div>
-      </div>
     </div>
-
-    <h2>Fonts and Unicode</h2>
-    <div style="font-size: 30px; margin-bottom: 20px;">
-      <i style="font-family: Material Design Icons" class="mdi-home"></i> 
-      <span class="unicode"></span> 
+    <div class="added-style-sheet">
+      <span>Add the additional adopted stylesheet to style this element.</span>
+      <div></div>
     </div>
-
-    <h2>Content Editable Text Editor</h2>
-    <div class="editor" contenteditable="true">
-      <p>Rich text editor with <strong>Styled</strong> text</p>
-      <p>
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam lobortis efficitur turpis eget sollicitudin. Duis consequat, turpis non tincidunt blandit, nulla mauris auctor ipsum, commodo ultrices lacus lectus et sem. Proin massa leo, viverra a nisi eu, mollis aliquet sapien. Ut id neque lorem. Sed eu augue eu augue auctor congue. Sed mollis ac metus ac tempus. Vivamus risus dui, egestas ut malesuada sed, feugiat sit amet leo. Ut at ipsum quis lorem luctus semper. Pellentesque feugiat convallis risus id laoreet. Mauris at velit sed massa vestibulum ultricies. Donec vel metus laoreet, mattis libero et, commodo turpis. Etiam vitae ultricies nibh. Integer porta pretium urna a rhoncus. Donec suscipit orci quis accumsan pulvinar. Curabitur nec diam non justo imperdiet pellentesque. Aliquam placerat hendrerit nunc et finibus.
-      </p>
-      <p><br /></p>
-    </div>
-
-    <h2>Image Over CORS</h2>
-    <div>
-      <img src="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png" height="75"/> 
-    </div>
-    
-    <div>
-      <h2>Regular Image Tags</h2>
-      <img src="images/death_star.png" height="75"/> 
-      Some Text
-      <img src="images/death_star.png" height="75"/> 
-    </div>
-    
-    <div class="bg-image-container">
-      <h2>Background Image Set in CSS</h2>
-      <div class="bg-image"></div>
-      <h2>Background Image Set in CSS w/ Media Query</h2>
-      <div class="r2d2"></div>
-      <h2>Background Image Set in Inline Style</h2>
-      <div style="background-image: url('images/millennium_falcon.png'); background-size: 75px; width: 75px; height: 45px;"></div> 
-    </div>
-
-    <h2>SVG</h2>
-    <svg style="width: 75px; height: 75px;" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path fill-rule="evenodd" clip-rule="evenodd" d="M8 16L3.54223 12.3383C1.93278 11.0162 1 9.04287 1 6.96005C1 3.11612 4.15607 0 8 0C11.8439 0 15 3.11612 15 6.96005C15 9.04287 14.0672 11.0162 12.4578 12.3383L8 16ZM3 6H5C6.10457 6 7 6.89543 7 8V9L3 7.5V6ZM11 6C9.89543 6 9 6.89543 9 8V9L13 7.5V6H11Z" fill="#000000"></path> </g></svg>
-
-    <!-- Comment Node -->
-    <div><![CDATA[ Some CDATA ]]></div>
-    
   </div>
+
+  <h1>Fonts and Unicode</h1>
+  <div style="font-size: 30px; margin-bottom: 20px;">
+    <i style="font-family: Material Design Icons" class="mdi-home"></i> 
+    <span class="unicode"></span> 
+  </div>
+
+  <h1>Content Editable Text Editor</h1>
+  <div class="editor" contenteditable="true">
+    <p>Rich text editor with <strong>Styled</strong> text</p>
+    <p>
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam lobortis efficitur turpis eget sollicitudin. Duis consequat, turpis non tincidunt blandit, nulla mauris auctor ipsum, commodo ultrices lacus lectus et sem. Proin massa leo, viverra a nisi eu, mollis aliquet sapien. Ut id neque lorem. Sed eu augue eu augue auctor congue. Sed mollis ac metus ac tempus. Vivamus risus dui, egestas ut malesuada sed, feugiat sit amet leo. Ut at ipsum quis lorem luctus semper. Pellentesque feugiat convallis risus id laoreet. Mauris at velit sed massa vestibulum ultricies. Donec vel metus laoreet, mattis libero et, commodo turpis. Etiam vitae ultricies nibh. Integer porta pretium urna a rhoncus. Donec suscipit orci quis accumsan pulvinar. Curabitur nec diam non justo imperdiet pellentesque. Aliquam placerat hendrerit nunc et finibus.
+    </p>
+    <p><br /></p>
+  </div>
+
+  <h1>Forms</h1>
+  <div class="form-container">
+    <label>Text</label>
+    <input type="text" />
+  
+    <label>Textarea</label>
+    <textarea rows="4"></textarea>
+  
+    <label>Checkbox</label>
+    <div><input type="checkbox" /></div>
+    
+    <label>Radio</label>
+    <div>
+      <label>On</label>
+      <input type="radio" name="radio" />
+      <label>Off</label>
+      <input type="radio" name="radio" />
+    </div>
+    
+    <label>Select</label>
+    <select>
+      <option value="1">One</option>
+      <option value="2">Two</option>
+      <option value="3">Three</option>
+    </select>
+  
+    <label>Number</label>
+    <input type="number" />
+  
+    <label>Datetime Local</label>
+    <input type="datetime-local" />
+  
+    <label>Color</label>
+    <input type="color" />
+  </div>
+  
+  <h1>Images</h1>
+  <div class="images-container">
+    <label>Image Over CORS</label>
+    <img src="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png" height="75"/> 
+
+    <label>Regular Image Tag</label>
+    <img src="images/death_star.png" height="75"/> 
+
+    <label>Background Image Set in CSS</label>
+    <div class="bg-image"></div>
+
+    <label>Background Image Set in CSS w/ Media Query</label>
+    <div class="r2d2"></div>
+
+    <label>Background Image Set in Inline Style</label>
+    <div style="background-image: url('images/millennium_falcon.png'); background-size: 75px; width: 75px; height: 45px;"></div>
+
+    <label>SVG</label>
+    <svg style="width: 75px; height: 75px;" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path fill-rule="evenodd" clip-rule="evenodd" d="M8 16L3.54223 12.3383C1.93278 11.0162 1 9.04287 1 6.96005C1 3.11612 4.15607 0 8 0C11.8439 0 15 3.11612 15 6.96005C15 9.04287 14.0672 11.0162 12.4578 12.3383L8 16ZM3 6H5C6.10457 6 7 6.89543 7 8V9L3 7.5V6ZM11 6C9.89543 6 9 6.89543 9 8V9L13 7.5V6H11Z" fill="#000000"></path> </g></svg>
+  </div>
+  
+  <!-- Comment Node -->
+  <div><![CDATA[ Some CDATA ]]></div>
+    
   <script src="index.js" type="module"></script>
 </body>
 </html>

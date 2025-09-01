@@ -150,7 +150,6 @@ export class TypingSimulator {
    * Simulate a key press by highlighting the corresponding key
    */
   public simulateKeyPress(keyData: KeyPressed): void {
-    console.log('simulateKeyPress', keyData);
     // Show keyboard if hidden
     if (!this.isVisible) {
       this.show();
@@ -547,7 +546,6 @@ export class TypingSimulator {
    * Highlight a specific key
    */
   private highlightKey(keyCode: string): void {
-    console.log('highlightKey', keyCode);
     const keyElement = this.keyElements.get(keyCode);
     if (!keyElement) return;
 

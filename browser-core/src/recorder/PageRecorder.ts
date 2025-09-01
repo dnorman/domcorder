@@ -27,7 +27,8 @@ import {
   type TextInsertOperationData,
   type TextRemoveOperationData,
   type TextOperationData,
-  Timestamp
+  Timestamp,
+  DomNodePropertyChanged
 } from "@domcorder/proto-ts";
 import { NodeIdBiMap } from "../common";
 import type { DomOperation } from "../common/DomOperation";
@@ -210,6 +211,11 @@ export class PageRecorder {
 
         const textFrame = new DomTextChanged(operation.nodeId, operations);
         await this.emitFrame(textFrame, false);
+        break;
+
+      case "propertyChanged":
+        const propertyFrame = new DomNodePropertyChanged(operation.nodeId, operation.property, operation.value);
+        await this.emitFrame(propertyFrame, false);
         break;
     }
   }

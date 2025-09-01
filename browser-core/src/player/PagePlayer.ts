@@ -25,7 +25,8 @@ import {
   ElementFocused,
   ElementBlurred,
   WindowFocused,
-  WindowBlurred
+  WindowBlurred,
+  DomNodePropertyChanged
 } from "@domcorder/proto-ts";
 import type { StringMutationOperation } from "../common/StringMutationOperation";
 import type { VStyleSheet } from "@domcorder/proto-ts";
@@ -141,6 +142,8 @@ export class PagePlayer {
       this._handleAttributeChangedFrame(frame);
     } else if (frame instanceof DomAttributeRemoved) {
       this._handleAttributeRemovedFrame(frame);
+    } else if (frame instanceof DomNodePropertyChanged) {
+      this._handleNodePropertyChangedFrame(frame);
     } else if (frame instanceof AdoptedStyleSheetsChanged) {
       this._handleAdoptedStyleSheetsChangedFrame(frame);
     } else if (frame instanceof NewAdoptedStyleSheet) {
@@ -267,6 +270,15 @@ export class PagePlayer {
       op: 'updateText',
       nodeId: textChangedData.nodeId,
       ops
+    }]);
+  }
+
+  private _handleNodePropertyChangedFrame(frame: DomNodePropertyChanged) {
+    this.mutator!.applyOps([{
+      op: 'propertyChanged',
+      nodeId: frame.nodeId,
+      property: frame.propertyName,
+      value: frame.propertyValue
     }]);
   }
 

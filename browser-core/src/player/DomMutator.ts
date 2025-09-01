@@ -77,6 +77,13 @@ export class DomMutator {
           }
           break;
         }
+        case 'propertyChanged': {
+          const node = this.nodeMap.getNodeById(op.nodeId)!;
+          if (node && node.nodeType === Node.ELEMENT_NODE) {
+            (node as any)[op.property] = op.value;
+          }
+          break;
+        }
       }
     }
   }

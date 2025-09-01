@@ -4,11 +4,19 @@
 }
 
 body {
-  background: lightblue;
+  background: rgb(232, 234, 235);
+}
+
+h1 {
+  font-size: 1.5em;
+  border-bottom: 1px solid black;
+  margin-bottom: 20px;
 }
 
 h2 {
   font-size: 1.25em;
+  margin-top: 10px;
+  margin-bottom: 5px;
 }
 
 .red {
@@ -46,6 +54,7 @@ span.unicode:after {
   overflow: auto;
   height: 150px;
   width: 400px;
+  background: white;
 }
 
 @media screen and (min-width: 20px) {
@@ -56,3 +65,30 @@ span.unicode:after {
       width: 75px;
   }
 }
+
+.form-container {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+
+  width: 400px;
+}
+
+.form-container label {
+  font-weight: bold;  
+}
+
+.images-container {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.images-container label {
+  font-weight: bold;
+}
+
+
+
