@@ -1,39 +1,55 @@
 import { NodeIdBiMap } from '../common';
-import type { DomOperation } from '../common/DomOperation';
 
-export type FormFieldChangedCallback = (ops: DomOperation[]) => void;
+export type DomNodePropertyChanged = {
+  nodeId: number;
+  propertyName: string;
+  propertyValue: string | boolean | number | null;
+};
+
+export type FormFieldChangedCallback = (ops: DomNodePropertyChanged[]) => void;
+
+export type FormFieldTrackerOptions = {
+  immediateMode?: boolean;     // If true, process changes immediately instead of batching
+  batchIntervalMs?: number;    // Interval for batch processing (ignored in immediate mode)
+};
 
 export class FormFieldTracker {
   private readonly liveDomRoot: Node;
   private readonly liveNodeMap: NodeIdBiMap;
-  private readonly snapshotNodeMap: NodeIdBiMap;
   private readonly callback: FormFieldChangedCallback;
+  private readonly options: Required<FormFieldTrackerOptions>;
+  private batchInterval: number | null = null;
+  private mutationObserver: MutationObserver | null = null;
 
   // Track form elements and their property changes
   private readonly formElementsMap = new Map<Element, { nodeId: number; boundEvents: Array<() => void> }>();
   private readonly formPropertyChanges = new Map<Element, Map<string, any>>();
   private readonly dirtyFormElements = new Set<Element>();
+  
+  // Store previous values for each form element by nodeId
+  private readonly previousValues = new Map<number, Map<string, any>>();
 
   constructor(
     liveDomRoot: Node,
     liveNodeMap: NodeIdBiMap,
-    snapshotNodeMap: NodeIdBiMap,
-    callback: FormFieldChangedCallback
+    callback: FormFieldChangedCallback,
+    options: FormFieldTrackerOptions = {}
   ) {
     this.liveDomRoot = liveDomRoot;
     this.liveNodeMap = liveNodeMap;
-    this.snapshotNodeMap = snapshotNodeMap;
     this.callback = callback;
-
-    // Scan for existing form elements and bind to them
-    this.scanAndBindToFormElements();
+    this.options = {
+      immediateMode: options.immediateMode ?? false,
+      batchIntervalMs: options.batchIntervalMs ?? 500,
+    };
   }
 
   /**
    * Scans the DOM for existing form elements and binds to them
    */
   private scanAndBindToFormElements(): void {
-    if (this.liveDomRoot.nodeType !== Node.ELEMENT_NODE) {
+    if (this.liveDomRoot.nodeType !== Node.ELEMENT_NODE && 
+        this.liveDomRoot.nodeType !== Node.DOCUMENT_NODE) {
       return; // Can't query non-element nodes
     }
     
@@ -127,19 +143,16 @@ export class FormFieldTracker {
     }
 
     const handlePropertyChange = () => {
-      // Mark this element as having property changes
-      if (!this.formPropertyChanges.has(element)) {
-        this.formPropertyChanges.set(element, new Map());
+      if (this.options.immediateMode) {
+        // Process immediately
+        const ops = this.computeFormElementOperations(element);
+        if (ops.length > 0) {
+          this.callback(ops);
+        }
+      } else {
+        // Mark the element as dirty for batch processing
+        this.dirtyFormElements.add(element);
       }
-      
-      // Track all relevant properties
-      for (const property of properties) {
-        const value = (element as any)[property];
-        this.formPropertyChanges.get(element)!.set(property, value);
-      }
-      
-      // Mark the element as dirty for processing
-      this.dirtyFormElements.add(element);
     };
 
     element.addEventListener(eventType, handlePropertyChange);
@@ -156,6 +169,24 @@ export class FormFieldTracker {
     }
 
     this.formElementsMap.set(element, { nodeId, boundEvents });
+    
+    // Store initial property values
+    this.storeCurrentValues(element, nodeId);
+  }
+
+  /**
+   * Stores the current property values for a form element
+   */
+  private storeCurrentValues(element: Element, nodeId: number): void {
+    const properties = this.getFormElementProperties(element);
+    const valueMap = new Map<string, any>();
+    
+    for (const property of properties) {
+      const value = (element as any)[property];
+      valueMap.set(property, value);
+    }
+    
+    this.previousValues.set(nodeId, valueMap);
   }
 
   /**
@@ -169,6 +200,9 @@ export class FormFieldTracker {
     for (const unbind of formElementInfo.boundEvents) {
       unbind();
     }
+
+    // Clean up stored values
+    this.previousValues.delete(formElementInfo.nodeId);
 
     this.formElementsMap.delete(element);
     this.formPropertyChanges.delete(element);
@@ -229,13 +263,83 @@ export class FormFieldTracker {
   }
 
   /**
-   * Processes all form elements to detect property changes and generates operations
+   * Starts the form field tracker
    */
-  public processFormElements(): DomOperation[] {
-    const allOps: DomOperation[] = [];
+  public start(): void {
+    // Scan for existing form elements and bind to them
+    this.scanAndBindToFormElements();
+
+    // Set up mutation observer for form element DOM changes
+    this.mutationObserver = new MutationObserver(this.handleMutations.bind(this));
+    this.mutationObserver.observe(this.liveDomRoot, {
+      childList: true,
+      subtree: true,
+    });
+
+    // Start batch processing interval only if not in immediate mode
+    if (!this.options.immediateMode) {
+      this.batchInterval = setInterval(() => {
+        this.processDirtyFormElements();
+      }, this.options.batchIntervalMs) as unknown as number;
+    }
+  }
+
+  /**
+   * Stops the form field tracker
+   */
+  public stop(): void {
+    if (this.batchInterval) {
+      clearInterval(this.batchInterval);
+      this.batchInterval = null;
+    }
+    
+    if (this.mutationObserver) {
+      this.mutationObserver.disconnect();
+      this.mutationObserver = null;
+    }
+    
+    this.cleanup();
+  }
+
+  /**
+   * Processes dirty form elements and generates operations
+   */
+  private processDirtyFormElements(): void {
+    if (this.dirtyFormElements.size === 0) return;
+
+    const allOps: DomNodePropertyChanged[] = [];
+    const elementsToProcess = Array.from(this.dirtyFormElements);
+    this.dirtyFormElements.clear();
+
+    for (const element of elementsToProcess) {
+      if (this.isFormElement(element)) {
+        const liveNodeId = this.liveNodeMap.getNodeId(element);
+        if (liveNodeId === undefined) {
+          // Keep element dirty if no node ID yet
+          this.dirtyFormElements.add(element);
+          continue;
+        }
+
+        const ops = this.computeFormElementOperations(element);
+        allOps.push(...ops);
+      }
+    }
+
+    // Emit operations if any were generated
+    if (allOps.length > 0) {
+      this.callback(allOps);
+    }
+  }
+
+  /**
+   * Processes all form elements to detect property changes and generates operations
+   * (This method can be called externally for immediate processing)
+   */
+  public processFormElements(): DomNodePropertyChanged[] {
+    const allOps: DomNodePropertyChanged[] = [];
 
     // Always scan for form elements with property changes
-    if (this.liveDomRoot.nodeType === Node.ELEMENT_NODE) {
+    if (this.liveDomRoot.nodeType === Node.ELEMENT_NODE || this.liveDomRoot.nodeType === Node.DOCUMENT_NODE) {
       const rootElement = this.liveDomRoot as Element;
       const formElements = rootElement.querySelectorAll('input, select, textarea');
       for (const element of Array.from(formElements)) {
@@ -243,10 +347,7 @@ export class FormFieldTracker {
           const liveNodeId = this.liveNodeMap.getNodeId(element);
           if (liveNodeId === undefined) continue;
 
-          const snapshotNode = this.snapshotNodeMap.getNodeById(liveNodeId);
-          if (snapshotNode === undefined) continue;
-
-          const ops = this.computeFormElementOperations(element, snapshotNode as Element);
+          const ops = this.computeFormElementOperations(element);
           allOps.push(...ops);
         }
       }
@@ -256,39 +357,36 @@ export class FormFieldTracker {
   }
 
   /**
-   * Computes operations for a specific form element by comparing with snapshot
+   * Computes operations for a specific form element by comparing with stored previous values
    */
-  private computeFormElementOperations(liveEl: Element, snapshotEl: Element): DomOperation[] {
-    const ops: DomOperation[] = [];
+  private computeFormElementOperations(liveEl: Element): DomNodePropertyChanged[] {
+    const ops: DomNodePropertyChanged[] = [];
     const liveNodeId = this.liveNodeMap.getNodeId(liveEl)!;
 
-    // Check for property changes by comparing current values with snapshot values
+    // Get stored previous values for this element
+    const previousValueMap = this.previousValues.get(liveNodeId);
+    if (!previousValueMap) {
+      // No previous values stored, store current values and return no ops
+      this.storeCurrentValues(liveEl, liveNodeId);
+      return ops;
+    }
+
+    // Check for property changes by comparing current values with stored previous values
     const properties = this.getFormElementProperties(liveEl);
     
     for (const property of properties) {
-      const liveValue = (liveEl as any)[property];
-      const snapshotValue = (snapshotEl as any)[property];
+      const currentValue = (liveEl as any)[property];
+      const previousValue = previousValueMap.get(property);
       
-      if (liveValue !== snapshotValue) {
+      if (currentValue !== previousValue) {
         ops.push({
-          op: 'propertyChanged',
           nodeId: liveNodeId,
-          property,
-          value: liveValue
+          propertyName: property,
+          propertyValue: currentValue
         });
         
-        // Update the snapshot DOM with the new property value
-        (snapshotEl as any)[property] = liveValue;
-        
-        // For select elements, also update the selectedIndex when value changes
-        if (liveEl.tagName.toLowerCase() === 'select' && property === 'value') {
-          const liveSelect = liveEl as HTMLSelectElement;
-          const snapshotSelect = snapshotEl as HTMLSelectElement;
-          const newSelectedIndex = liveSelect.selectedIndex;
-          if (snapshotSelect.selectedIndex !== newSelectedIndex) {
-            snapshotSelect.selectedIndex = newSelectedIndex;
-          }
-        }
+        // Update the stored previous value
+        previousValueMap.set(property, currentValue);
       }
     }
 
@@ -315,5 +413,6 @@ export class FormFieldTracker {
     this.formElementsMap.clear();
     this.formPropertyChanges.clear();
     this.dirtyFormElements.clear();
+    this.previousValues.clear();
   }
 }

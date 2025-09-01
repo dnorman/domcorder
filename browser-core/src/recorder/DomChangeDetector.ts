@@ -1,7 +1,6 @@
 import { NodeIdBiMap } from "../common/NodeIdBiMap";
 import type { DomOperation } from "../common/DomOperation";
 import { computeMinimalChanges } from "./StringChangeDetector";
-import { FormFieldTracker } from "./FormFieldTracker";
 
 export class DomChangeDetector {
   private readonly liveDomRoot: Node;
@@ -12,7 +11,6 @@ export class DomChangeDetector {
 
   private readonly liveDomObserver: MutationObserver;
   private readonly dirtySubtrees = new Set<Node>();
-  private readonly formFieldTracker: FormFieldTracker;
 
   private readonly callback: (ops: DomOperation[]) => void;
   private readonly batchIntervalMs: number;
@@ -27,13 +25,7 @@ export class DomChangeDetector {
     this.callback = callback;
     this.batchIntervalMs = batchIntervalMs;
 
-    // Initialize form field tracker
-    this.formFieldTracker = new FormFieldTracker(
-      this.liveDomRoot,
-      this.liveNodeMap,
-      this.snapshotNodeMap,
-      (ops) => this.callback(ops)
-    );
+
 
     this.liveDomObserver = new MutationObserver(this.handleMutations.bind(this));
 
@@ -52,6 +44,10 @@ export class DomChangeDetector {
 
   public getSnapshotDomRoot(): Node {
     return this.snapshotDomRoot.cloneNode(true);
+  }
+
+  public getSnapshotNodeMap(): NodeIdBiMap {
+    return this.snapshotNodeMap;
   }
 
 
@@ -76,8 +72,7 @@ export class DomChangeDetector {
       // and we should then remove it from the dirty regions.
     }
 
-    // Delegate form element mutation handling to FormFieldTracker
-    this.formFieldTracker.handleMutations(mutations);
+
 
     // No timeout logic needed - the interval will process dirty regions regularly
   }
@@ -97,9 +92,7 @@ export class DomChangeDetector {
       allOps.push(...ops);
     }
 
-    // Process form elements for property changes
-    const formOps = this.formFieldTracker.processFormElements();
-    allOps.push(...formOps);
+
 
     // Apply changes to snapshot and notify
     if (allOps.length > 0) {
@@ -296,7 +289,6 @@ export class DomChangeDetector {
       this.batchInterval = null;
     }
     
-    // Cleanup form field tracker
-    this.formFieldTracker.cleanup();
+
   }
 }

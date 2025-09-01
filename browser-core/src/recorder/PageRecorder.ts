@@ -37,6 +37,7 @@ import { getStyleSheetId, StyleSheetWatcher, type StyleSheetWatcherEvent } from 
 import { inlineAdoptedStyleSheet, type InlineAdoptedStyleSheetEvent } from "./inliner/inlineAdoptedStyleSheet";
 import { AssetTracker } from "./inliner/AssetTracker";
 import { CanvasChangedCallback, CanvasChangedEvent, CanvasTracker } from "./CanvasTracker";
+import { FormFieldTracker } from "./FormFieldTracker";
 
 export type FrameHandler = (frame: Frame) => Promise<void>;
 
@@ -48,6 +49,7 @@ export class PageRecorder {
   private changeDetector: DomChangeDetector | null;
   private styleSheetWatcher: StyleSheetWatcher | null;
   private canvasTracker: CanvasTracker | null;
+  private formFieldTracker: FormFieldTracker | null;
   private userInteractionTracker: UserInteractionTracker | null;
   private sourceDocNodeIdMap: NodeIdBiMap | null;
   private recordingEpoch: number;
@@ -62,6 +64,7 @@ export class PageRecorder {
     this.userInteractionTracker = null;
     this.sourceDocNodeIdMap = null;
     this.canvasTracker = null;
+    this.formFieldTracker = null;
     this.recordingEpoch = Date.now();
     this.assetTracker = new AssetTracker();
   }
@@ -135,6 +138,26 @@ export class PageRecorder {
       processIntervalMs: 500,
     });
     this.canvasTracker.watch();
+
+    // Setup form field tracking
+    this.formFieldTracker = new FormFieldTracker(
+      this.sourceDocument,
+      this.sourceDocNodeIdMap,
+      async (operations) => {
+        if (operations.length > 0) {
+          this.emitTimestampFrame();
+          for (const operation of operations) {
+            console.log('Form field property changed:', operation);
+            const op = new DomNodePropertyChanged(operation.nodeId, operation.propertyName, operation.propertyValue);
+            this.emitFrame(op, false);
+          }
+        }
+      },
+      {
+        immediateMode: true
+      }
+    );
+    this.formFieldTracker.start();
   }
 
   public stop() {
@@ -142,6 +165,7 @@ export class PageRecorder {
     this.changeDetector?.disconnect();
     this.styleSheetWatcher?.stop();
     this.canvasTracker?.unwatch();
+    this.formFieldTracker?.stop();
   }
 
   private emitTimestampFrame() {
