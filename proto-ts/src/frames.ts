@@ -95,8 +95,7 @@ export class Timestamp extends Frame {
 
 export class Keyframe extends Frame {
     constructor(
-        public vdocument: VDocument,
-        public assetCount: number,
+        public vDocument: VDocument,
         public viewportWidth: number,
         public viewportHeight: number
     ) {
@@ -106,18 +105,16 @@ export class Keyframe extends Frame {
     static decode(reader: BufferReader): Keyframe {
         if (reader.readU32() !== FrameType.Keyframe) throw new Error(`Expected Keyframe frame type`);
         const vdocument = VDocument.decode(reader);
-        const assetCount = reader.readU32();
         const viewportWidth = reader.readU32();
         const viewportHeight = reader.readU32();
-        return new Keyframe(vdocument, assetCount, viewportWidth, viewportHeight);
+        return new Keyframe(vdocument, viewportWidth, viewportHeight);
     }
 
     // Regular async - yields only at frame boundary
     async encode(w: Writer): Promise<void> {
         w.u32(FrameType.Keyframe);
         // Encode the VDocument synchronously
-        this.vdocument.encode(w);
-        w.u32(this.assetCount);
+        this.vDocument.encode(w);
         w.u32(this.viewportWidth);
         w.u32(this.viewportHeight);
         await w.endFrame();
@@ -335,8 +332,7 @@ export class DomNodeAdded extends Frame {
     constructor(
         public parentNodeId: number,
         public index: number,
-        public vnode: VNode,
-        public assetCount: number
+        public vNode: VNode
     ) {
         super();
     }
@@ -346,8 +342,7 @@ export class DomNodeAdded extends Frame {
         const parentNodeId = reader.readU32();
         const index = reader.readU32();
         const vnode = VNode.decode(reader);
-        const assetCount = reader.readU32();
-        return new DomNodeAdded(parentNodeId, index, vnode, assetCount);
+        return new DomNodeAdded(parentNodeId, index, vnode);
     }
 
     // Regular async - yields only at frame boundary
@@ -355,8 +350,7 @@ export class DomNodeAdded extends Frame {
         w.u32(FrameType.DomNodeAdded);
         w.u32(this.parentNodeId);
         w.u32(this.index);
-        this.vnode.encode(w);            // Encode the VNode synchronously
-        w.u32(this.assetCount);
+        this.vNode.encode(w);            // Encode the VNode synchronously
         await w.endFrame();
     }
 }
@@ -581,8 +575,7 @@ export class AdoptedStyleSheetsChanged extends Frame {
 
 export class NewAdoptedStyleSheet extends Frame {
     constructor(
-        public styleSheet: VStyleSheet,
-        public assetCount: number
+        public styleSheet: VStyleSheet
     ) {
         super();
     }
@@ -590,14 +583,12 @@ export class NewAdoptedStyleSheet extends Frame {
     static decode(reader: BufferReader): NewAdoptedStyleSheet {
         if (reader.readU32() !== FrameType.NewAdoptedStyleSheet) throw new Error(`Expected NewAdoptedStyleSheet frame type`);
         const styleSheet = VStyleSheet.decode(reader);
-        const assetCount = reader.readU32();
-        return new NewAdoptedStyleSheet(styleSheet, assetCount);
+        return new NewAdoptedStyleSheet(styleSheet);
     }
 
     async encode(w: Writer): Promise<void> {
         w.u32(FrameType.NewAdoptedStyleSheet);
         this.styleSheet.encode(w);
-        w.u32(this.assetCount);
         await w.endFrame();
     }
 }
@@ -682,8 +673,7 @@ export class StyleSheetRuleInserted extends Frame {
     constructor(
         public styleSheetId: number,
         public ruleIndex: number,
-        public content: string,
-        public assetCount: number
+        public content: string
     ) {
         super();
     }
@@ -693,8 +683,7 @@ export class StyleSheetRuleInserted extends Frame {
         const styleSheetId = reader.readU32();
         const ruleIndex = reader.readU32();
         const content = reader.readString();
-        const assetCount = reader.readU32();
-        return new StyleSheetRuleInserted(styleSheetId, ruleIndex, content, assetCount);
+        return new StyleSheetRuleInserted(styleSheetId, ruleIndex, content);
     }
 
     async encode(w: Writer): Promise<void> {
@@ -702,7 +691,6 @@ export class StyleSheetRuleInserted extends Frame {
         w.u32(this.styleSheetId);
         w.u32(this.ruleIndex);
         w.strUtf8(this.content);
-        w.u32(this.assetCount);
         await w.endFrame();
     }
 }
@@ -733,8 +721,7 @@ export class StyleSheetRuleDeleted extends Frame {
 export class StyleSheetReplaced extends Frame {
     constructor(
         public styleSheetId: number,
-        public content: string,
-        public assetCount: number
+        public content: string
     ) {
         super();
     }
@@ -743,14 +730,12 @@ export class StyleSheetReplaced extends Frame {
         if (reader.readU32() !== FrameType.StyleSheetReplaced) throw new Error(`Expected StyleSheetReplaced frame type`);
         const styleSheetId = reader.readU32();
         const content = reader.readString();
-        const assetCount = reader.readU32();
-        return new StyleSheetReplaced(styleSheetId, content, assetCount);
+        return new StyleSheetReplaced(styleSheetId, content);
     }
 
     async encode(w: Writer): Promise<void> {
         w.u32(FrameType.StyleSheetReplaced);
         w.u32(this.styleSheetId);
-        w.u32(this.assetCount);
         await w.endFrame();
     }
 }

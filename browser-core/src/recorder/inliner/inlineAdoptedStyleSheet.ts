@@ -5,13 +5,11 @@ import type { Asset } from "./Asset";
 
 export interface InlineAdoptedStyleSheetEvent {
   styleSheet: VStyleSheet;
-  assetCount: number;
 }
 
 export interface InlineSubTreeHandler {
   onInlineStarted: (event: InlineAdoptedStyleSheetEvent) => void;
   onAsset: (asset: Asset) => void;
-  onInlineComplete: () => void;
 }
 
 export async function inlineAdoptedStyleSheet(
@@ -35,10 +33,7 @@ export async function inlineAdoptedStyleSheet(
     collectCssUrlsAssign(text, baseURI, assetTracker);
     const updated = rewriteStyleSheetsToAssetIds(vStyleSheet, baseURI, assetTracker);
 
-    handler.onInlineStarted({
-      styleSheet: updated,
-      assetCount: assetTracker.count()
-    });
+    handler.onInlineStarted({ styleSheet: updated });
 
     await fetchAssets(
       concurrency,
@@ -46,7 +41,6 @@ export async function inlineAdoptedStyleSheet(
       assetTracker,
       (asset) => handler.onAsset(asset));
 
-    handler.onInlineComplete();
   } catch (error) {
     console.warn('Failed to process adopted stylesheet:', error);
   }

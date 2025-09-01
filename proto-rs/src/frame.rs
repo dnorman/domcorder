@@ -20,7 +20,7 @@ pub enum Frame {
     DomAttributeRemoved(DomAttributeRemovedData) = 12,
     DomTextChanged(DomTextChangedData) = 13,
     DomNodeResized(DomNodeResizedData) = 14,
-    StyleSheetChanged = 15, // REMOVED - leaving gap for compatibility
+    DomNodePropertyChanged(DomNodePropertyChangedData) = 15,
     Asset(AssetData) = 16,
 
     // New frame types
@@ -41,7 +41,6 @@ pub struct TimestampData {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeyframeData {
     pub document: VDocument, // Contains the full document structure
-    pub asset_count: u32,
     pub viewport_width: u32,
     pub viewport_height: u32,
 }
@@ -99,7 +98,6 @@ pub struct DomNodeAddedData {
     pub parent_node_id: u32,
     pub index: u32,
     pub node: VNode,
-    pub asset_count: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -153,6 +151,13 @@ pub struct DomNodeResizedData {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DomNodePropertyChangedData {
+    pub node_id: u32,
+    pub property_name: String,
+    pub property_value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssetData {
     pub asset_id: u32,
     pub url: String,
@@ -169,7 +174,6 @@ pub struct AdoptedStyleSheetsChangedData {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewAdoptedStyleSheetData {
     pub style_sheet: VStyleSheet,
-    pub asset_count: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

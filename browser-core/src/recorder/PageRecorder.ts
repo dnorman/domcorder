@@ -43,8 +43,6 @@ export class PageRecorder {
 
   private frameHandlers: FrameHandler[];
 
-  private pendingAssets: boolean;
-  private readonly operationQueue: DomOperation[];
   private changeDetector: DomChangeDetector | null;
   private styleSheetWatcher: StyleSheetWatcher | null;
   private userInteractionTracker: UserInteractionTracker | null;
@@ -56,8 +54,6 @@ export class PageRecorder {
     this.sourceDocument = sourceDocument;
     this.frameHandlers = [];
 
-    this.pendingAssets = false;
-    this.operationQueue = [];
     this.changeDetector = null;
     this.styleSheetWatcher = null;
     this.userInteractionTracker = null;
@@ -109,13 +105,13 @@ export class PageRecorder {
     );
 
     this.changeDetector = new DomChangeDetector(this.sourceDocument, this.sourceDocNodeIdMap, async (operations) => {
-      for (const operation of operations) {
-        this.operationQueue.push(operation);
-      }
-
-      if (!this.pendingAssets) {
-        this.processOperationQueue();
-      }
+      if (operations.length > 0) {
+        this.emitTimestampFrame();
+  
+        for (const operation of operations) {
+          await this.processOperation(operation, this.sourceDocNodeIdMap!);
+        }
+      }    
     }, 500);
 
     this.styleSheetWatcher = new StyleSheetWatcher({
@@ -139,17 +135,6 @@ export class PageRecorder {
     this.emitFrame(frame, false);
   }
 
-  private async processOperationQueue() {
-    if (this.operationQueue.length > 0) {
-      this.emitTimestampFrame();
-
-      for (const operation of this.operationQueue) {
-        await this.processOperation(operation, this.sourceDocNodeIdMap!);
-      }
-      this.operationQueue.length = 0;
-    }
-  }
-
   private async processOperation(
     operation: DomOperation,
     nodeIdMap: NodeIdBiMap
@@ -158,19 +143,13 @@ export class PageRecorder {
       case "insert":
         inlineSubTree(operation.node, nodeIdMap, this.assetsTracker, {
           onInlineStarted: async (ev: InlineStartedEvent) => {
-            this.pendingAssets = ev.assetCount > 0;
-            const frame = new DomNodeAdded(operation.parentId, operation.index, ev.node, ev.assetCount);
+            const frame = new DomNodeAdded(operation.parentId, operation.index, ev.node);
             await this.emitFrame(frame, false);
           },
           onAsset: async (asset: InlinerAsset) => {
             const frame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
             await this.emitFrame(frame, false);
           },
-          onInlineComplete: () => {
-            if (this.pendingAssets) {
-              this.pendingAssetsComplete();
-            }
-          }
         });
         break;
 
@@ -218,11 +197,6 @@ export class PageRecorder {
         await this.emitFrame(propertyFrame, false);
         break;
     }
-  }
-
-  async pendingAssetsComplete() {
-    this.pendingAssets = false;
-    await this.processOperationQueue();
   }
 
   private createUserInteractionHandler(): UserInteractionEventHandler {
@@ -277,19 +251,12 @@ export class PageRecorder {
   private createKeyFrameHandler() {
     return {
       onKeyFrameStarted: async (ev: KeyFrameStartedEvent) => {
-        this.pendingAssets = ev.assetCount > 0;
-
-        const keyframe = new Keyframe(ev.document, ev.assetCount, ev.viewportWidth, ev.viewportHeight);
+        const keyframe = new Keyframe(ev.document, ev.viewportWidth, ev.viewportHeight);
         await this.emitFrame(keyframe);
       },
       onAsset: async (asset: InlinerAsset) => {
         const assetFrame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
         await this.emitFrame(assetFrame, false);
-      },
-      onKeyFrameComplete: () => {
-        if (this.pendingAssets) {
-          this.pendingAssetsComplete();
-        }
       },
     };
   }
@@ -306,19 +273,12 @@ export class PageRecorder {
         for (const sheet of event.added) {
           await inlineAdoptedStyleSheet(sheet, this.sourceDocument.baseURI, this.assetsTracker, {
             onInlineStarted: (ev: InlineAdoptedStyleSheetEvent) => {
-              this.pendingAssets = ev.assetCount > 0;
-
-              const newStyleSheetFrame = new NewAdoptedStyleSheet(ev.styleSheet, ev.assetCount);
+              const newStyleSheetFrame = new NewAdoptedStyleSheet(ev.styleSheet);
               this.emitFrame(newStyleSheetFrame, false);
             },
             onAsset: (asset: InlinerAsset) => {
               const assetFrame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
               this.emitFrame(assetFrame, false);
-            },
-            onInlineComplete: () => {
-              if (this.pendingAssets) {
-                this.pendingAssetsComplete();
-              }
             }
           });
         }

@@ -12,7 +12,6 @@ import { ensureStyleSheetId } from "../StyleSheetWatcher";
 
 export interface KeyFrameStartedEvent {
   document: VDocument;
-  assetCount: number;
   viewportWidth: number;
   viewportHeight: number;
 }
@@ -20,7 +19,6 @@ export interface KeyFrameStartedEvent {
 export interface KeyFrameEventHandler {
   onKeyFrameStarted: (event: KeyFrameStartedEvent) => void;
   onAsset: (asset: Asset) => void;
-  onKeyFrameComplete: () => void;
 }
 
 export interface KeyFrameGenerationOptions {
@@ -34,7 +32,7 @@ export async function generateKeyFrame(
   doc: Document = document,
   nodeIdMap: NodeIdBiMap,
   handler: KeyFrameEventHandler,
-  pendingAssets: AssetsTracker,
+  assetTracker: AssetsTracker,
   opts: KeyFrameGenerationOptions = {}
 ): Promise<void> {
 
@@ -45,11 +43,9 @@ export async function generateKeyFrame(
       await waitForQuietWindow(doc, opts.quietWindowMs);
     }
 
-    
-
     // Phase 1: synchronous snapshot + assign ids + rewrite to asset:<id>
     const snap = snapshotVDomStreaming(doc, nodeIdMap, antiAnimationStylesheet);
-    rewriteAllRefsToAssetIds(snap, doc.baseURI, pendingAssets); // proactive rewrite
+    rewriteAllRefsToAssetIds(snap, doc.baseURI, assetTracker); // proactive rewrite
 
     // Capture viewport dimensions
     const viewportWidth = doc.defaultView?.innerWidth || 600;
@@ -58,7 +54,6 @@ export async function generateKeyFrame(
     // Emit the structural snapshot right away
     handler.onKeyFrameStarted({
       document: snap,
-      assetCount: pendingAssets.count(),
       viewportWidth,
       viewportHeight
     });
@@ -67,12 +62,8 @@ export async function generateKeyFrame(
     await fetchAssets(
       opts.concurrency || 6,
       opts.inlineCrossOrigin || false,
-      pendingAssets,
+      assetTracker,
       (asset) => handler.onAsset(asset));
-
-    // All assets processed; signal completion (no payload)
-    handler.onKeyFrameComplete();
-
   } finally {
     if (antiAnimationStylesheet) {
       // Remove the anti-animation stylesheet from adopted stylesheets

@@ -29,7 +29,6 @@ import {
   DomNodePropertyChanged
 } from "@domcorder/proto-ts";
 import type { StringMutationOperation } from "../common/StringMutationOperation";
-import type { VStyleSheet } from "@domcorder/proto-ts";
 import { StyleSheetWatcher, type StyleSheetWatcherEvent } from "../recorder/StyleSheetWatcher";
 import { AdoptedStyleSheetMutator } from "./AdoptedStyleSheetMutator";
 import { MouseSimulator } from "./MouseSimulator";
@@ -192,7 +191,7 @@ export class PagePlayer {
     this.viewportHeight = keyframeData.viewportHeight;
     this._updateIframeSize();
 
-    this.materializer.materializeDocument(keyframeData.vdocument);
+    this.materializer.materializeDocument(keyframeData.vDocument);
 
     const targetDocNodeIdMap = new NodeIdBiMap();
     targetDocNodeIdMap.adoptNodesFromSubTree(this.targetDocument);
@@ -204,7 +203,7 @@ export class PagePlayer {
   }
 
   private _handleNodeAddedFrame(domNodeAddedData: DomNodeAdded) {
-    const materializedNode = this.materializer.materializeNode(domNodeAddedData.vnode);
+    const materializedNode = this.materializer.materializeNode(domNodeAddedData.vNode);
 
     this.mutator!.applyOps([{
       op: 'insert',

@@ -6,36 +6,31 @@ import { AssetsTracker } from "./AssetTracker";
 
 export interface InlineStartedEvent {
   node: VNode;
-  assetCount: number;
 }
 
 export interface InlineSubTreeHandler {
   onInlineStarted: (event: InlineStartedEvent) => void;
   onAsset: (asset: Asset) => void;
-  onInlineComplete: () => void;
 }
 
 export async function inlineSubTree(
   node: Node, 
   nodeIdMap: NodeIdBiMap, 
-  pendingAssets: AssetsTracker,
+  assetTracker: AssetsTracker,
   handler: InlineSubTreeHandler, 
   concurrency: number = 6,
   inlineCrossOrigin: boolean = false
 ) {
-  const vNode = snapshotNode(node, pendingAssets, nodeIdMap);
-  rewriteTreeUrlsToAssetIds(vNode, node.baseURI, pendingAssets);
+  const vNode = snapshotNode(node, assetTracker, nodeIdMap);
+  rewriteTreeUrlsToAssetIds(vNode, node.baseURI, assetTracker);
 
   handler.onInlineStarted({
     node: vNode,
-    assetCount: pendingAssets.count()
   });
 
   await fetchAssets(
     concurrency, 
     inlineCrossOrigin,
-    pendingAssets,
+    assetTracker,
     (asset) => handler.onAsset(asset));
-
-  handler.onInlineComplete();
 }
