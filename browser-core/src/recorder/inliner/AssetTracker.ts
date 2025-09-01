@@ -20,8 +20,6 @@ export class AssetTracker {
     const pa = { id: this.nextId++, url, data, mime };
     this.byUrl.set(url, pa);
     this.order.push(pa);
-
-    console.log('assign', pa);
     
     return pa;
   }

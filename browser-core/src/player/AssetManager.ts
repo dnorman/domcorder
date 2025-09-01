@@ -4,7 +4,7 @@ export type AssetLoadedHandler = (asset: AssetEntry) => void;
 
 interface AssetEntry {
   sourceUrl?: string;
-  blob?: Blob;
+  buf?: ArrayBuffer;
   pendingBlobUrl?: string;
   resolvedUrl?: string;
   referenceCount: number;
@@ -66,32 +66,70 @@ export class AssetManager {
    * Adds an asset to the manager, creating a blob and object URL
    */
   public receiveAsset(asset: Asset): void {
-    console.log('receiveAsset', asset);
     let assetEntry = this.assets.get(asset.asset_id);
     if (!assetEntry) {
       assetEntry = this.addAssetEntry(asset.asset_id, asset.url);
     }
 
-    if (!assetEntry.resolvedUrl) {
-      let blob: Blob | undefined;
-      let objectUrl: string | undefined;
+    if (assetEntry.resolvedUrl) {
+      return;
+    }
 
-      if (asset.buf.byteLength > 0) {
-        blob = new Blob([asset.buf], { type: asset.mime || 'application/octet-stream' });
-        objectUrl = URL.createObjectURL(blob);
-      } else {
-        objectUrl = asset.url;
-      }
+    assetEntry.buf = asset.buf;
 
-      assetEntry.blob = blob;
-      assetEntry.resolvedUrl = objectUrl;
+    let blob: Blob | undefined;
+    let objectUrl: string | undefined;
+
+    if (asset.buf.byteLength > 0) {
+      blob = new Blob([asset.buf], { type: asset.mime || 'application/octet-stream' });
+      objectUrl = URL.createObjectURL(blob);
+    } else {
+      objectUrl = asset.url;
+    }
+    
+    assetEntry.resolvedUrl = objectUrl;
+    
+
+    // FIXME: let's optimize this so that we don't create the blob / object url above.
+
+    // Special handling for CSS assets which may have references to other assets.
+    if (asset.mime === 'text/css') {
+      const originalCssText = new TextDecoder().decode(asset.buf);
+
+      const processedCssText = this.processAssetsInCssText(originalCssText, (assetId, subAssetEntry) => {
+        const handler: AssetLoadedHandler = (resolveSubAssetEntry: AssetEntry) => {
+          
+          const currentCssText = new TextDecoder().decode(assetEntry.buf);
+          const updatedCssText = currentCssText.replaceAll(resolveSubAssetEntry.pendingBlobUrl!, resolveSubAssetEntry.resolvedUrl!);
+          assetEntry.buf = new TextEncoder().encode(updatedCssText).buffer as ArrayBuffer;
+
+          const blob = new Blob([assetEntry.buf], { type: 'text/css' });
+
+          // Here we set the pending blob url to the resolved on,
+          // so that when we notify the requestors, the code will
+          // correctly the current url with the new one.
+          assetEntry.pendingBlobUrl = assetEntry.resolvedUrl!;
+          assetEntry.resolvedUrl = URL.createObjectURL(blob);
+
+          assetEntry.assetRequestors.forEach(requestor => {
+            requestor(assetEntry);
+          });
+        }   
+        subAssetEntry.assetRequestors.add(handler);
+      });
+
+      const processedCssBuffer = new TextEncoder().encode(processedCssText);
+      const processedCssArrayBuffer = processedCssBuffer.buffer as ArrayBuffer;
+      assetEntry.buf = processedCssArrayBuffer;
+
+      const blob = new Blob([processedCssArrayBuffer], { type: 'text/css' });
+      assetEntry.resolvedUrl = URL.createObjectURL(blob);
     }
 
     if (assetEntry.assetRequestors.size > 0) {
       assetEntry.assetRequestors.forEach(requestor => {
         requestor(assetEntry);
       });
-      assetEntry.assetRequestors.clear();
     }
 
     if (assetEntry.pendingBlobUrl) {
@@ -114,7 +152,7 @@ export class AssetManager {
     const assetEntry: AssetEntry = {
       sourceUrl,
       pendingBlobUrl,      
-      blob: undefined,
+      buf: undefined,
       resolvedUrl: undefined,
       referenceCount: 0,
       elements: new Set<Element>(),

@@ -186,7 +186,6 @@ export class PagePlayer {
   }
 
   private _handleKeyFrame(keyframeData: Keyframe) {
-    console.log('keyframeData', keyframeData);
     // Update viewport dimensions from keyframe
     this.viewportWidth = keyframeData.viewportWidth;
     this.viewportHeight = keyframeData.viewportHeight;
