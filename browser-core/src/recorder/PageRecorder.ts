@@ -28,13 +28,15 @@ import {
   type TextRemoveOperationData,
   type TextOperationData,
   Timestamp,
-  DomNodePropertyChanged
+  DomNodePropertyChanged,
+  CanvasChanged
 } from "@domcorder/proto-ts";
 import { NodeIdBiMap } from "../common";
 import type { DomOperation } from "../common/DomOperation";
 import { getStyleSheetId, StyleSheetWatcher, type StyleSheetWatcherEvent } from "./StyleSheetWatcher";
 import { inlineAdoptedStyleSheet, type InlineAdoptedStyleSheetEvent } from "./inliner/inlineAdoptedStyleSheet";
 import { AssetTracker } from "./inliner/AssetTracker";
+import { CanvasChangedCallback, CanvasChangedEvent, CanvasTracker } from "./CanvasTracker";
 
 export type FrameHandler = (frame: Frame) => Promise<void>;
 
@@ -45,11 +47,12 @@ export class PageRecorder {
 
   private changeDetector: DomChangeDetector | null;
   private styleSheetWatcher: StyleSheetWatcher | null;
+  private canvasTracker: CanvasTracker | null;
   private userInteractionTracker: UserInteractionTracker | null;
   private sourceDocNodeIdMap: NodeIdBiMap | null;
   private recordingEpoch: number;
   private readonly assetTracker: AssetTracker;
-
+  
   constructor(sourceDocument: Document) {
     this.sourceDocument = sourceDocument;
     this.frameHandlers = [];
@@ -58,6 +61,7 @@ export class PageRecorder {
     this.styleSheetWatcher = null;
     this.userInteractionTracker = null;
     this.sourceDocNodeIdMap = null;
+    this.canvasTracker = null;
     this.recordingEpoch = Date.now();
     this.assetTracker = new AssetTracker();
   }
@@ -121,12 +125,22 @@ export class PageRecorder {
     });
 
     this.styleSheetWatcher.start();
+
+    this.canvasTracker = new CanvasTracker(this.createCanvasHandler(), this.sourceDocNodeIdMap, {
+      watch2D: true,
+      watchWebGL: true,
+      observeDom: true,
+      includeDocuments: [this.sourceDocument],
+      shadowRoots: [],
+    });
+    this.canvasTracker.watch();
   }
 
   public stop() {
     this.userInteractionTracker?.stop();
     this.changeDetector?.disconnect();
     this.styleSheetWatcher?.stop();
+    this.canvasTracker?.unwatch();
   }
 
   private emitTimestampFrame() {
@@ -196,7 +210,7 @@ export class PageRecorder {
         const propertyFrame = new DomNodePropertyChanged(operation.nodeId, operation.property, operation.value);
         await this.emitFrame(propertyFrame, false);
         break;
-    }
+    } 
   }
 
   private createUserInteractionHandler(): UserInteractionEventHandler {
@@ -282,6 +296,17 @@ export class PageRecorder {
             }
           });
         }
+      }
+    };
+  }
+
+  private createCanvasHandler(): CanvasChangedCallback {
+    return (event: CanvasChangedEvent) => {
+      const frame = new CanvasChanged(event.nodeId, event.mime, event.data);
+      try {
+      this.emitFrame(frame, true);
+      } catch (error) {
+        console.error('Error emitting canvas changed frame:', error);
       }
     };
   }

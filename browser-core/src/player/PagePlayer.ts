@@ -26,7 +26,8 @@ import {
   ElementBlurred,
   WindowFocused,
   WindowBlurred,
-  DomNodePropertyChanged
+  DomNodePropertyChanged,
+  CanvasChanged
 } from "@domcorder/proto-ts";
 import type { StringMutationOperation } from "../common/StringMutationOperation";
 import { StyleSheetWatcher, type StyleSheetWatcherEvent } from "../recorder/StyleSheetWatcher";
@@ -157,9 +158,16 @@ export class PagePlayer {
       this._handleMouseClickedFrame(frame);
     } else if (frame instanceof TextSelectionChanged) {
       this._handleTextSelectionChangedFrame(frame);
+    } else if (frame instanceof CanvasChanged) {
+      this._handleCanvasChangedFrame(frame);
     } else {
       console.warn('Unhandled frame type:', frame.constructor.name);
     }
+  }
+  
+  private _handleCanvasChangedFrame(frame: CanvasChanged) {
+    console.log('Canvas changed:', frame.nodeId, frame.mimeType, frame.data);
+    this.mutator?.updateCanvas(frame.nodeId, frame.mimeType, frame.data);
   }
 
   private _handleElementScrolledFrame(frame: ElementScrolled) {

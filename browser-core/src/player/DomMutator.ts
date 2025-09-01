@@ -87,4 +87,23 @@ export class DomMutator {
       }
     }
   }
+
+  public async updateCanvas(nodeId: number, mimeType: string, data: ArrayBuffer) {
+    const canvas = this.nodeMap.getNodeById(nodeId)! as HTMLCanvasElement;
+    if (!canvas) return;
+
+    const blob = new Blob([data], { type: mimeType });
+    const bitmap = await createImageBitmap(blob);
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("2D context not available");
+
+    // Resize canvas if needed
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.drawImage(bitmap, 0, 0);
+  }
 }

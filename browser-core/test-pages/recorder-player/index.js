@@ -6,7 +6,7 @@ const player = new PagePlayerComponent(targetContainer);
 
 const frameChunkReader = new FrameChunkReader({
   next: (frame) => {
-    // console.log('frame', frame);
+    console.log('frame', frame);
     player.handleFrame(frame);
   },
 });

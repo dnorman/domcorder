@@ -14,12 +14,12 @@ function setupCanvas(canvas) {
   return ctx;
 }
 
-function drawSmiley(ctx, x, y, radius) {
+function drawSmiley(ctx, x, y, radius, faceColor) {
   ctx.save();
 
   // Face
   ctx.lineWidth = 4;
-  ctx.fillStyle = '#ffeb3b';
+  ctx.fillStyle = faceColor;
   ctx.strokeStyle = '#333';
 
   ctx.beginPath();
@@ -49,7 +49,7 @@ function drawSmiley(ctx, x, y, radius) {
   ctx.restore();
 }
 
-function drawSmileyOnCanvas(canvasId) {
+function drawSmileyOnCanvas(canvasId, color) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) {
     throw new Error('Canvas element with id "' + canvasId + '" not found');
@@ -65,10 +65,20 @@ function drawSmileyOnCanvas(canvasId) {
   const centerY = rect.height / 2;
   const radius = Math.min(rect.width, rect.height) / 2 - 10;
 
-  drawSmiley(ctx, centerX, centerY, radius);
+  drawSmiley(ctx, centerX, centerY, radius, color);
 }
+
 
 // Run once page is loaded
 window.onload = function () {
-  drawSmileyOnCanvas('canvas');
+  const colors = ['lightgreen', 'lightblue', '#ffeb3b', 'pink'];
+  drawSmileyOnCanvas('canvas', colors[0]);
+
+  let colorIndex = 1;
+
+  setInterval(() => {
+    const color = colors[colorIndex];
+    drawSmileyOnCanvas('canvas', color);
+    colorIndex = (colorIndex + 1) % colors.length;
+  }, 10000);
 };

@@ -38,6 +38,8 @@ export enum FrameType {
     StyleSheetRuleInserted = 23,
     StyleSheetRuleDeleted = 24,
     StyleSheetReplaced = 25,
+
+    CanvasChanged = 26,
 }
 
 // BufferReader interface for decoding
@@ -543,6 +545,40 @@ export class DomNodePropertyChanged extends Frame {
     }
 }
 
+export class CanvasChanged extends Frame {
+    constructor(
+        public nodeId: number,
+        public mimeType: string,
+        public data: ArrayBuffer
+    ) {
+        super();
+    }
+
+    static decode(reader: BufferReader): CanvasChanged {
+        if (reader.readU32() !== FrameType.CanvasChanged) throw new Error(`Expected DomNodePropertyChanged frame type`);
+        const nodeId = reader.readU32();
+        const mimeType = reader.readString();
+        // Read buffer
+        const length = Number(reader.readU64());
+        const bytes = reader.readBytes(length);
+        const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+
+        return new CanvasChanged(nodeId, mimeType, data);
+    }
+
+    async encode(w: Writer): Promise<void> {
+        w.u32(FrameType.CanvasChanged);
+        w.u32(this.nodeId);
+        w.strUtf8(this.mimeType);
+        
+        // Encode buffer
+        const bytes = new Uint8Array(this.data);
+        w.u64(BigInt(bytes.length));  // u64 length (BE)
+        w.bytes(bytes);               // Raw bytes
+        await w.endFrame();
+    }
+}
+
 export class AdoptedStyleSheetsChanged extends Frame {
     constructor(
         public styleSheetIds: number[],
@@ -766,3 +802,4 @@ DECODERS[FrameType.WindowBlurred] = WindowBlurred.decode;
 DECODERS[FrameType.StyleSheetRuleInserted] = StyleSheetRuleInserted.decode;
 DECODERS[FrameType.StyleSheetRuleDeleted] = StyleSheetRuleDeleted.decode;
 DECODERS[FrameType.StyleSheetReplaced] = StyleSheetReplaced.decode;
+DECODERS[FrameType.CanvasChanged] = CanvasChanged.decode;

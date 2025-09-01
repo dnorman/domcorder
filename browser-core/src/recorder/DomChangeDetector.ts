@@ -294,6 +294,10 @@ export class DomChangeDetector {
       allOps.push(...ops);
     }
 
+    // FIXME: Not sure if this is completely needed, I think we should
+    // be marking the form elements as dirty, and just dealing with
+    // them as we traverse.
+
     // Always scan for form elements with property changes
     if (this.liveDomRoot.nodeType === Node.ELEMENT_NODE) {
       const rootElement = this.liveDomRoot as Element;
