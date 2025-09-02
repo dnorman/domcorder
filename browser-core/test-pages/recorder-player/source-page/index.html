@@ -84,10 +84,13 @@
   </div>
 
   <h1>Forms</h1>
-  <form>
+  <form id="form">
     <div class="form-container">
       <label>Text</label>
-      <input type="text" />
+      <div>
+        <input type="text" />
+        <button onclick="resetTextField(this.previousElementSibling)" type="button">Reset Field</button>
+      </div>
     
       <label>Textarea</label>
       <textarea rows="4"></textarea>
@@ -118,6 +121,10 @@
     
       <label>Color</label>
       <input type="color" />
+    </div>
+    <div class="form-actions">
+      <button onclick="resetForm()" type="button">Reset</button>
+      <button onclick="toggleEnablement()" type="button">Toggle Enablement</button>
     </div>
   </form>
   
@@ -150,5 +157,6 @@
     
   <script src="index.js" type="module"></script>
   <script src="canvas.js"></script>
+  <script src="form.js"></script>
 </body>
 </html>

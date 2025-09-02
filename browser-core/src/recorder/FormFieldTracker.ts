@@ -45,6 +45,13 @@ export class FormFieldTracker {
     'text', 'email', 'url', 'password', 'search', 'tel'
   ]);
 
+  // Store original property descriptors for restoration
+  private static originalDescriptors = new Map<string, PropertyDescriptor>();
+  private static patchingInitialized = false;
+  
+  // Track all active FormFieldTracker instances for property change notifications
+  private static activeTrackers = new Set<FormFieldTracker>();
+
   constructor(
     liveDomRoot: Node,
     liveNodeMap: NodeIdBiMap,
@@ -58,6 +65,227 @@ export class FormFieldTracker {
       immediateMode: options.immediateMode ?? false,
       batchIntervalMs: options.batchIntervalMs ?? 500,
     };
+  }
+
+  /**
+   * Patches property setters to detect programmatic changes
+   */
+  private static patchPropertySetters(): void {
+    if (FormFieldTracker.patchingInitialized) return;
+
+    // Patch HTMLInputElement properties
+    FormFieldTracker.patchProperty(HTMLInputElement.prototype, 'value');
+    FormFieldTracker.patchProperty(HTMLInputElement.prototype, 'checked');
+    FormFieldTracker.patchProperty(HTMLInputElement.prototype, 'selectedIndex');
+
+    // Patch HTMLSelectElement properties
+    FormFieldTracker.patchProperty(HTMLSelectElement.prototype, 'value');
+    FormFieldTracker.patchProperty(HTMLSelectElement.prototype, 'selectedIndex');
+
+    // Patch HTMLTextAreaElement properties
+    FormFieldTracker.patchProperty(HTMLTextAreaElement.prototype, 'value');
+
+    // Patch HTMLFormElement.reset method
+    FormFieldTracker.patchFormReset();
+
+    FormFieldTracker.patchingInitialized = true;
+  }
+
+  /**
+   * Patches HTMLFormElement.reset method to detect form resets
+   */
+  private static patchFormReset(): void {
+    const key = 'HTMLFormElement.reset';
+    const originalReset = HTMLFormElement.prototype.reset;
+
+    // Store original method for restoration
+    FormFieldTracker.originalDescriptors.set(key, {
+      value: originalReset,
+      writable: true,
+      enumerable: false,
+      configurable: true
+    });
+
+    // Replace with wrapped version
+    HTMLFormElement.prototype.reset = function(this: HTMLFormElement) {
+      // Get all form fields before reset
+      const formFields = Array.from(this.querySelectorAll('input, select, textarea'));
+      const preResetValues = new Map<Element, any>();
+      
+      // Store current values
+      for (const field of formFields) {
+        if (field instanceof HTMLInputElement) {
+          preResetValues.set(field, { value: field.value, checked: field.checked });
+        } else if (field instanceof HTMLSelectElement) {
+          preResetValues.set(field, { value: field.value, selectedIndex: field.selectedIndex });
+        } else if (field instanceof HTMLTextAreaElement) {
+          preResetValues.set(field, { value: field.value });
+        }
+      }
+
+      // Call original reset
+      originalReset.call(this);
+
+      // Notify trackers of changes
+      for (const field of formFields) {
+        const preValues = preResetValues.get(field);
+        if (!preValues) continue;
+
+        let hasChanges = false;
+        if (field instanceof HTMLInputElement) {
+          if (preValues.value !== field.value || preValues.checked !== field.checked) {
+            hasChanges = true;
+          }
+        } else if (field instanceof HTMLSelectElement) {
+          if (preValues.value !== field.value || preValues.selectedIndex !== field.selectedIndex) {
+            hasChanges = true;
+          }
+        } else if (field instanceof HTMLTextAreaElement) {
+          if (preValues.value !== field.value) {
+            hasChanges = true;
+          }
+        }
+
+        if (hasChanges) {
+          FormFieldTracker.notifyFormReset(field);
+        }
+      }
+    };
+  }
+
+  /**
+   * Notifies all active FormFieldTracker instances of a form reset
+   */
+  private static notifyFormReset(element: Element): void {
+    for (const tracker of FormFieldTracker.activeTrackers) {
+      if (tracker.isTrackingElement(element)) {
+        tracker.handleFormReset(element);
+      }
+    }
+  }
+
+  /**
+   * Patches a single property on a prototype
+   */
+  private static patchProperty(prototype: any, propertyName: string): void {
+    const key = `${prototype.constructor.name}.${propertyName}`;
+    const originalDescriptor = Object.getOwnPropertyDescriptor(prototype, propertyName) ||
+                               Object.getOwnPropertyDescriptor(Object.getPrototypeOf(prototype), propertyName);
+
+    if (!originalDescriptor) {
+      console.warn(`Could not find descriptor for ${key}`);
+      return;
+    }
+
+    // Store original descriptor for restoration
+    FormFieldTracker.originalDescriptors.set(key, originalDescriptor);
+
+    // Create new descriptor with wrapped setter
+    const newDescriptor: PropertyDescriptor = {
+      get: originalDescriptor.get,
+      set: function(this: Element, value: any) {
+        const oldValue = originalDescriptor.get?.call(this);
+        
+        // Call original setter
+        originalDescriptor.set?.call(this, value);
+        
+        // Trigger change detection if value actually changed
+        if (oldValue !== value) {
+          FormFieldTracker.notifyPropertyChange(this, propertyName, value);
+        }
+      },
+      enumerable: originalDescriptor.enumerable,
+      configurable: originalDescriptor.configurable
+    };
+
+    Object.defineProperty(prototype, propertyName, newDescriptor);
+  }
+
+  /**
+   * Notifies all active FormFieldTracker instances of a property change
+   */
+  private static notifyPropertyChange(element: Element, propertyName: string, newValue: any): void {
+    // Find all FormFieldTracker instances that are tracking this element
+    for (const tracker of FormFieldTracker.activeTrackers) {
+      if (tracker.isTrackingElement(element)) {
+        tracker.handleProgrammaticChange(element, propertyName, newValue);
+      }
+    }
+  }
+
+  /**
+   * Restores original property descriptors
+   */
+  private static restorePropertySetters(): void {
+    if (!FormFieldTracker.patchingInitialized) return;
+
+    for (const [key, descriptor] of FormFieldTracker.originalDescriptors) {
+      const [constructorName, propertyName] = key.split('.');
+      
+      if (key === 'HTMLFormElement.reset') {
+        // Restore the original reset method
+        HTMLFormElement.prototype.reset = descriptor.value;
+        continue;
+      }
+      
+      let prototype: any;
+      
+      switch (constructorName) {
+        case 'HTMLInputElement':
+          prototype = HTMLInputElement.prototype;
+          break;
+        case 'HTMLSelectElement':
+          prototype = HTMLSelectElement.prototype;
+          break;
+        case 'HTMLTextAreaElement':
+          prototype = HTMLTextAreaElement.prototype;
+          break;
+        default:
+          continue;
+      }
+
+      Object.defineProperty(prototype, propertyName, descriptor);
+    }
+
+    FormFieldTracker.originalDescriptors.clear();
+    FormFieldTracker.patchingInitialized = false;
+  }
+
+  /**
+   * Checks if this tracker is monitoring a specific element
+   */
+  private isTrackingElement(element: Element): boolean {
+    return this.formElementsMap.has(element);
+  }
+
+  /**
+   * Handles programmatic property changes detected by monkey patching
+   */
+  private handleProgrammaticChange(element: Element, propertyName: string, newValue: any): void {
+    // Only process if we're tracking this element
+    if (!this.isTrackingElement(element)) return;
+
+    // Process the change using the same logic as event-based changes
+    if (this.options.immediateMode) {
+      this.processElementChanges(element);
+    } else {
+      this.dirtyFormElements.add(element);
+    }
+  }
+
+  /**
+   * Handles form reset events detected by monkey patching
+   */
+  private handleFormReset(element: Element): void {
+    // Only process if we're tracking this element
+    if (!this.isTrackingElement(element)) return;
+
+    // Process the reset using the same logic as other changes
+    if (this.options.immediateMode) {
+      this.processElementChanges(element);
+    } else {
+      this.dirtyFormElements.add(element);
+    }
   }
 
   /**
@@ -294,6 +522,12 @@ export class FormFieldTracker {
    * Starts the form field tracker
    */
   public start(): void {
+    // Register this tracker instance
+    FormFieldTracker.activeTrackers.add(this);
+    
+    // Initialize property patching (only done once globally)
+    FormFieldTracker.patchPropertySetters();
+
     // Scan for existing form elements and bind to them
     this.scanAndBindToFormElements();
 
@@ -316,6 +550,14 @@ export class FormFieldTracker {
    * Stops the form field tracker
    */
   public stop(): void {
+    // Unregister this tracker instance
+    FormFieldTracker.activeTrackers.delete(this);
+    
+    // If this is the last tracker, restore original property setters
+    if (FormFieldTracker.activeTrackers.size === 0) {
+      FormFieldTracker.restorePropertySetters();
+    }
+
     if (this.batchInterval) {
       clearInterval(this.batchInterval);
       this.batchInterval = null;
@@ -490,6 +732,39 @@ export class FormFieldTracker {
         
         // Update the stored previous value
         previousValueMap.set(property, currentValue);
+
+        if (liveEl instanceof HTMLInputElement && liveEl.type === "radio" && property === "checked") {
+          const additionalOps = this.generateEventsForOtherRadiosInGroup(liveEl);
+          ops.push(...additionalOps);
+        }
+      }
+    }
+
+    return ops;
+  }
+
+  private generateEventsForOtherRadiosInGroup(checkedRadio: HTMLInputElement): DomNodePropertyChanged[] {
+    const ops: DomNodePropertyChanged[] = [];
+
+    const radios = checkedRadio.form ? 
+      checkedRadio.form.querySelectorAll(`input[type=radio][name=${checkedRadio.name}]`) :
+      document.querySelectorAll(`input[type=radio][name=${checkedRadio.name}]`);
+
+    for (const radio of (radios || [])) {
+      if (radio === checkedRadio) continue;
+
+      const otherRadioId = this.liveNodeMap.getNodeId(radio)!;
+      const otherRadioPreviousValue = this.previousValues.get(otherRadioId);
+      if (!otherRadioPreviousValue) continue;
+
+      const otherRadioChecked = otherRadioPreviousValue?.get("checked");
+      if (otherRadioChecked) {
+        ops.push({
+          nodeId: otherRadioId,
+          propertyName: "checked",
+          propertyValue: false
+        });
+        otherRadioPreviousValue.set("checked", false);
       }
     }
 

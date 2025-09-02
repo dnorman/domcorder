@@ -79,6 +79,12 @@ span.unicode:after {
   font-weight: bold;  
 }
 
+.form-actions {
+  text-align: right;
+  margin-top: 10px;
+  width: 400px;
+}
+
 .images-container {
   display: grid;
   grid-template-columns: auto 1fr;
