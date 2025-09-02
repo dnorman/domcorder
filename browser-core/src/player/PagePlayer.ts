@@ -27,6 +27,7 @@ import {
   WindowFocused,
   WindowBlurred,
   DomNodePropertyChanged,
+  DomNodePropertyTextChanged,
   CanvasChanged
 } from "@domcorder/proto-ts";
 import type { StringMutationOperation } from "../common/StringMutationOperation";
@@ -112,6 +113,7 @@ export class PagePlayer {
   }
 
   private handleFrame(frame: Frame) {
+    console.log('Handling frame:', frame);
     if (frame instanceof Keyframe) {
       this._handleKeyFrame(frame as Keyframe);
     } else if (frame instanceof Asset) {
@@ -144,6 +146,8 @@ export class PagePlayer {
       this._handleAttributeRemovedFrame(frame);
     } else if (frame instanceof DomNodePropertyChanged) {
       this._handleNodePropertyChangedFrame(frame);
+    } else if (frame instanceof DomNodePropertyTextChanged) {
+      this._handleNodePropertyTextChangedFrame(frame);
     } else if (frame instanceof AdoptedStyleSheetsChanged) {
       this._handleAdoptedStyleSheetsChangedFrame(frame);
     } else if (frame instanceof NewAdoptedStyleSheet) {
@@ -285,6 +289,32 @@ export class PagePlayer {
       nodeId: frame.nodeId,
       property: frame.propertyName,
       value: frame.propertyValue
+    }]);
+  }
+
+  private _handleNodePropertyTextChangedFrame(frame: DomNodePropertyTextChanged) {
+    // Convert TextOperationData back to StringMutationOperation
+    const stringOps: StringMutationOperation[] = frame.operations.map(op => {
+      if (op.op === 'insert') {
+        return {
+          type: 'insert',
+          index: op.index,
+          content: op.text
+        };
+      } else {
+        return {
+          type: 'remove',
+          index: op.index,
+          count: op.length
+        };
+      }
+    });
+
+    this.mutator!.applyOps([{
+      op: 'propertyTextChanged',
+      nodeId: frame.nodeId,
+      property: frame.propertyName,
+      operations: stringOps
     }]);
   }
 

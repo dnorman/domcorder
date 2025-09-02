@@ -1,4 +1,6 @@
 import { NodeIdBiMap } from '../common';
+import type { StringMutationOperation } from '../common/StringMutationOperation';
+import { computeMinimalChanges } from './StringChangeDetector';
 
 export type DomNodePropertyChanged = {
   nodeId: number;
@@ -6,7 +8,16 @@ export type DomNodePropertyChanged = {
   propertyValue: string | boolean | number | null;
 };
 
-export type FormFieldChangedCallback = (ops: DomNodePropertyChanged[]) => void;
+export type DomNodePropertyTextChanged = {
+  nodeId: number;
+  propertyName: string;
+  operations: StringMutationOperation[];
+};
+
+export type FormFieldCallbacks = {
+  onPropertyChanged: (ops: DomNodePropertyChanged[]) => void;
+  onTextChanged: (ops: DomNodePropertyTextChanged[]) => void;
+};
 
 export type FormFieldTrackerOptions = {
   immediateMode?: boolean;     // If true, process changes immediately instead of batching
@@ -16,7 +27,7 @@ export type FormFieldTrackerOptions = {
 export class FormFieldTracker {
   private readonly liveDomRoot: Node;
   private readonly liveNodeMap: NodeIdBiMap;
-  private readonly callback: FormFieldChangedCallback;
+  private readonly callbacks: FormFieldCallbacks;
   private readonly options: Required<FormFieldTrackerOptions>;
   private batchInterval: number | null = null;
   private mutationObserver: MutationObserver | null = null;
@@ -29,19 +40,39 @@ export class FormFieldTracker {
   // Store previous values for each form element by nodeId
   private readonly previousValues = new Map<number, Map<string, any>>();
 
+  // Text-based input types that should use text diffing
+  private static readonly TEXT_DIFF_INPUT_TYPES = new Set([
+    'text', 'email', 'url', 'password', 'search', 'tel'
+  ]);
+
   constructor(
     liveDomRoot: Node,
     liveNodeMap: NodeIdBiMap,
-    callback: FormFieldChangedCallback,
+    callbacks: FormFieldCallbacks,
     options: FormFieldTrackerOptions = {}
   ) {
     this.liveDomRoot = liveDomRoot;
     this.liveNodeMap = liveNodeMap;
-    this.callback = callback;
+    this.callbacks = callbacks;
     this.options = {
       immediateMode: options.immediateMode ?? false,
       batchIntervalMs: options.batchIntervalMs ?? 500,
     };
+  }
+
+  /**
+   * Determines if an element should use text diffing for value changes
+   */
+  private shouldUseTextDiffing(element: Element): boolean {
+    const tagName = element.tagName.toLowerCase();
+    if (tagName === 'textarea') return true;
+    
+    if (tagName === 'input') {
+      const inputType = (element as HTMLInputElement).type;
+      return FormFieldTracker.TEXT_DIFF_INPUT_TYPES.has(inputType);
+    }
+    
+    return false;
   }
 
   /**
@@ -145,10 +176,7 @@ export class FormFieldTracker {
     const handlePropertyChange = () => {
       if (this.options.immediateMode) {
         // Process immediately
-        const ops = this.computeFormElementOperations(element);
-        if (ops.length > 0) {
-          this.callback(ops);
-        }
+        this.processElementChanges(element);
       } else {
         // Mark the element as dirty for batch processing
         this.dirtyFormElements.add(element);
@@ -302,12 +330,35 @@ export class FormFieldTracker {
   }
 
   /**
+   * Processes a single element's changes immediately
+   */
+  private processElementChanges(element: Element): void {
+    if (!this.isFormElement(element)) return;
+    
+    const liveNodeId = this.liveNodeMap.getNodeId(element);
+    if (liveNodeId === undefined) return;
+
+    if (this.shouldUseTextDiffing(element)) {
+      const textOps = this.computeTextOperations(element);
+      if (textOps.length > 0) {
+        this.callbacks.onTextChanged(textOps);
+      }
+    } else {
+      const propertyOps = this.computePropertyOperations(element);
+      if (propertyOps.length > 0) {
+        this.callbacks.onPropertyChanged(propertyOps);
+      }
+    }
+  }
+
+  /**
    * Processes dirty form elements and generates operations
    */
   private processDirtyFormElements(): void {
     if (this.dirtyFormElements.size === 0) return;
 
-    const allOps: DomNodePropertyChanged[] = [];
+    const propertyOps: DomNodePropertyChanged[] = [];
+    const textOps: DomNodePropertyTextChanged[] = [];
     const elementsToProcess = Array.from(this.dirtyFormElements);
     this.dirtyFormElements.clear();
 
@@ -320,14 +371,22 @@ export class FormFieldTracker {
           continue;
         }
 
-        const ops = this.computeFormElementOperations(element);
-        allOps.push(...ops);
+        if (this.shouldUseTextDiffing(element)) {
+          const ops = this.computeTextOperations(element);
+          textOps.push(...ops);
+        } else {
+          const ops = this.computePropertyOperations(element);
+          propertyOps.push(...ops);
+        }
       }
     }
 
     // Emit operations if any were generated
-    if (allOps.length > 0) {
-      this.callback(allOps);
+    if (propertyOps.length > 0) {
+      this.callbacks.onPropertyChanged(propertyOps);
+    }
+    if (textOps.length > 0) {
+      this.callbacks.onTextChanged(textOps);
     }
   }
 
@@ -335,8 +394,9 @@ export class FormFieldTracker {
    * Processes all form elements to detect property changes and generates operations
    * (This method can be called externally for immediate processing)
    */
-  public processFormElements(): DomNodePropertyChanged[] {
-    const allOps: DomNodePropertyChanged[] = [];
+  public processFormElements(): { propertyOps: DomNodePropertyChanged[], textOps: DomNodePropertyTextChanged[] } {
+    const propertyOps: DomNodePropertyChanged[] = [];
+    const textOps: DomNodePropertyTextChanged[] = [];
 
     // Always scan for form elements with property changes
     if (this.liveDomRoot.nodeType === Node.ELEMENT_NODE || this.liveDomRoot.nodeType === Node.DOCUMENT_NODE) {
@@ -347,19 +407,62 @@ export class FormFieldTracker {
           const liveNodeId = this.liveNodeMap.getNodeId(element);
           if (liveNodeId === undefined) continue;
 
-          const ops = this.computeFormElementOperations(element);
-          allOps.push(...ops);
+          if (this.shouldUseTextDiffing(element)) {
+            const ops = this.computeTextOperations(element);
+            textOps.push(...ops);
+          } else {
+            const ops = this.computePropertyOperations(element);
+            propertyOps.push(...ops);
+          }
         }
       }
     }
 
-    return allOps;
+    return { propertyOps, textOps };
   }
 
   /**
-   * Computes operations for a specific form element by comparing with stored previous values
+   * Computes text operations for text-based form elements
    */
-  private computeFormElementOperations(liveEl: Element): DomNodePropertyChanged[] {
+  private computeTextOperations(liveEl: Element): DomNodePropertyTextChanged[] {
+    const ops: DomNodePropertyTextChanged[] = [];
+    const liveNodeId = this.liveNodeMap.getNodeId(liveEl)!;
+
+    // Get stored previous values for this element
+    const previousValueMap = this.previousValues.get(liveNodeId);
+    if (!previousValueMap) {
+      // No previous values stored, store current values and return no ops
+      this.storeCurrentValues(liveEl, liveNodeId);
+      return ops;
+    }
+
+    // For text elements, we only care about the 'value' property
+    const currentValue = (liveEl as any).value || '';
+    const previousValue = previousValueMap.get('value') || '';
+    
+    if (currentValue !== previousValue) {
+      // Compute minimal text changes
+      const textOperations = computeMinimalChanges(previousValue, currentValue);
+      
+      if (textOperations.length > 0) {
+        ops.push({
+          nodeId: liveNodeId,
+          propertyName: 'value',
+          operations: textOperations
+        });
+      }
+      
+      // Update the stored previous value
+      previousValueMap.set('value', currentValue);
+    }
+
+    return ops;
+  }
+
+  /**
+   * Computes property operations for non-text form elements
+   */
+  private computePropertyOperations(liveEl: Element): DomNodePropertyChanged[] {
     const ops: DomNodePropertyChanged[] = [];
     const liveNodeId = this.liveNodeMap.getNodeId(liveEl)!;
 

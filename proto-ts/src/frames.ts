@@ -40,6 +40,7 @@ export enum FrameType {
     StyleSheetReplaced = 25,
 
     CanvasChanged = 26,
+    DomNodePropertyTextChanged = 27,
 }
 
 // BufferReader interface for decoding
@@ -518,6 +519,62 @@ export class DomNodeResized extends Frame {
     }
 }
 
+
+
+export class DomNodePropertyTextChanged extends Frame {
+    constructor(
+        public nodeId: number,
+        public propertyName: string,
+        public operations: TextOperationData[]
+    ) {
+        super();
+    }
+
+    static decode(reader: BufferReader): DomNodePropertyTextChanged {
+        if (reader.readU32() !== FrameType.DomNodePropertyTextChanged) throw new Error(`Expected DomNodePropertyTextChanged frame type`);
+        const nodeId = reader.readU32();
+        const propertyName = reader.readString();
+        const operationCount = Number(reader.readU64());
+        const operations: TextOperationData[] = [];
+
+        for (let i = 0; i < operationCount; i++) {
+            const opType = reader.readU32();
+            if (opType === 0) { // Insert
+                const index = reader.readU32();
+                const text = reader.readString();
+                operations.push({ op: 'insert', index, text });
+            } else { // Remove
+                const index = reader.readU32();
+                const length = reader.readU32();
+                operations.push({ op: 'remove', index, length });
+            }
+        }
+
+        return new DomNodePropertyTextChanged(nodeId, propertyName, operations);
+    }
+
+    async encode(w: Writer): Promise<void> {
+        w.u32(FrameType.DomNodePropertyTextChanged);
+        w.u32(this.nodeId);
+        w.strUtf8(this.propertyName);
+        w.u64(BigInt(this.operations.length));
+
+        for (const operation of this.operations) {
+            if (operation.op === 'insert') {
+                w.u32(0); // Insert type
+                w.u32(operation.index);
+                w.strUtf8(operation.text);
+            } else { // remove
+                w.u32(1); // Remove type
+                w.u32(operation.index);
+                w.u32(operation.length);
+            }
+        }
+
+        await w.endFrame();
+    }
+}
+
 // FIXME remove the JSON encoding step
 export class DomNodePropertyChanged extends Frame {
     constructor(
@@ -803,3 +860,4 @@ DECODERS[FrameType.StyleSheetRuleInserted] = StyleSheetRuleInserted.decode;
 DECODERS[FrameType.StyleSheetRuleDeleted] = StyleSheetRuleDeleted.decode;
 DECODERS[FrameType.StyleSheetReplaced] = StyleSheetReplaced.decode;
 DECODERS[FrameType.CanvasChanged] = CanvasChanged.decode;
+DECODERS[FrameType.DomNodePropertyTextChanged] = DomNodePropertyTextChanged.decode;

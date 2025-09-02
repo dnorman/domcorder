@@ -29,6 +29,7 @@ import {
   type TextOperationData,
   Timestamp,
   DomNodePropertyChanged,
+  DomNodePropertyTextChanged,
   CanvasChanged
 } from "@domcorder/proto-ts";
 import { NodeIdBiMap } from "../common";
@@ -37,7 +38,7 @@ import { getStyleSheetId, StyleSheetWatcher, type StyleSheetWatcherEvent } from 
 import { inlineAdoptedStyleSheet, type InlineAdoptedStyleSheetEvent } from "./inliner/inlineAdoptedStyleSheet";
 import { AssetTracker } from "./inliner/AssetTracker";
 import { CanvasChangedCallback, CanvasChangedEvent, CanvasTracker } from "./CanvasTracker";
-import { FormFieldTracker } from "./FormFieldTracker";
+import { FormFieldTracker, type FormFieldCallbacks } from "./FormFieldTracker";
 
 export type FrameHandler = (frame: Frame) => Promise<void>;
 
@@ -143,13 +144,40 @@ export class PageRecorder {
     this.formFieldTracker = new FormFieldTracker(
       this.sourceDocument,
       this.sourceDocNodeIdMap,
-      async (operations) => {
-        if (operations.length > 0) {
-          this.emitTimestampFrame();
-          for (const operation of operations) {
-            console.log('Form field property changed:', operation);
-            const op = new DomNodePropertyChanged(operation.nodeId, operation.propertyName, operation.propertyValue);
-            this.emitFrame(op, false);
+      {
+        onPropertyChanged: async (operations) => {
+          if (operations.length > 0) {
+            this.emitTimestampFrame();
+            for (const operation of operations) {
+              const op = new DomNodePropertyChanged(operation.nodeId, operation.propertyName, operation.propertyValue);
+              this.emitFrame(op, false);
+            }
+          }
+        },
+        onTextChanged: async (operations) => {
+          if (operations.length > 0) {
+            this.emitTimestampFrame();
+            for (const operation of operations) {
+              // Convert StringMutationOperation to TextOperationData
+              const textOps = operation.operations.map(op => {
+                if (op.type === 'insert') {
+                  return {
+                    op: 'insert' as const,
+                    index: op.index,
+                    text: op.content
+                  };
+                } else {
+                  return {
+                    op: 'remove' as const,
+                    index: op.index,
+                    length: op.count
+                  };
+                }
+              });
+              
+              const frame = new DomNodePropertyTextChanged(operation.nodeId, operation.propertyName, textOps);
+              this.emitFrame(frame, false);
+            }
           }
         }
       },

@@ -7,4 +7,5 @@ export type DomOperation =
   | { op: 'updateAttribute'; nodeId: number; name: string; value: string }
   | { op: 'removeAttribute'; nodeId: number; name: string; }
   | { op: 'updateText'; nodeId: number; ops: StringMutationOperation[] }
-  | { op: 'propertyChanged'; nodeId: number; property: string; value: any };
+  | { op: 'propertyChanged'; nodeId: number; property: string; value: any }
+  | { op: 'propertyTextChanged'; nodeId: number; property: string; operations: StringMutationOperation[] };
