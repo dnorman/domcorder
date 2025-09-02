@@ -113,7 +113,6 @@ export class PagePlayer {
   }
 
   private handleFrame(frame: Frame) {
-    console.log('Handling frame:', frame);
     if (frame instanceof Keyframe) {
       this._handleKeyFrame(frame as Keyframe);
     } else if (frame instanceof Asset) {
@@ -284,12 +283,7 @@ export class PagePlayer {
   }
 
   private _handleNodePropertyChangedFrame(frame: DomNodePropertyChanged) {
-    this.mutator!.applyOps([{
-      op: 'propertyChanged',
-      nodeId: frame.nodeId,
-      property: frame.propertyName,
-      value: frame.propertyValue
-    }]);
+    this.mutator!.updateNodeProperty(frame.nodeId, frame.propertyName, frame.propertyValue);
   }
 
   private _handleNodePropertyTextChangedFrame(frame: DomNodePropertyTextChanged) {
@@ -310,12 +304,7 @@ export class PagePlayer {
       }
     });
 
-    this.mutator!.applyOps([{
-      op: 'propertyTextChanged',
-      nodeId: frame.nodeId,
-      property: frame.propertyName,
-      operations: stringOps
-    }]);
+    this.mutator!.updateNodePropertyWithTextOperations(frame.nodeId, frame.propertyName, stringOps);
   }
 
   private _handleAssetFrame(frame: Asset) {

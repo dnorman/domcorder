@@ -1,5 +1,6 @@
 import { NodeIdBiMap } from '../common';
 import type { DomOperation } from '../common/DomOperation';
+import type { StringMutationOperation } from '../common/StringMutationOperation';
 import { applyChanges } from '../recorder/StringChangeDetector';
 
 export class DomMutator {
@@ -77,34 +78,35 @@ export class DomMutator {
           }
           break;
         }
-        case 'propertyChanged': {
-          const node = this.nodeMap.getNodeById(op.nodeId)!;
-          if (node && node.nodeType === Node.ELEMENT_NODE) {
-            (node as any)[op.property] = op.value;
-          }
-          break;
-        }
-        case 'propertyTextChanged': {
-          const node = this.nodeMap.getNodeById(op.nodeId)!;
-          if (node && node.nodeType === Node.ELEMENT_NODE) {
-            const element = node as Element;
-            const currentValue = (element as any)[op.property] || '';
-            
-            // Apply text operations to get the new value
-            let newValue = currentValue;
-            for (const textOp of op.operations) {
-              if (textOp.type === 'insert') {
-                newValue = newValue.slice(0, textOp.index) + textOp.content + newValue.slice(textOp.index);
-              } else if (textOp.type === 'remove') {
-                newValue = newValue.slice(0, textOp.index) + newValue.slice(textOp.index + textOp.count);
-              }
-            }
-            
-            (element as any)[op.property] = newValue;
-          }
-          break;
+
+      }
+    }
+  }
+
+  public updateNodeProperty(nodeId: number, property: string, value: any): void {
+    const node = this.nodeMap.getNodeById(nodeId);
+    if (node && node.nodeType === Node.ELEMENT_NODE) {
+      (node as any)[property] = value;
+    }
+  }
+
+  public updateNodePropertyWithTextOperations(nodeId: number, property: string, operations: StringMutationOperation[]): void {
+    const node = this.nodeMap.getNodeById(nodeId);
+    if (node && node.nodeType === Node.ELEMENT_NODE) {
+      const element = node as Element;
+      const currentValue = (element as any)[property] || '';
+      
+      // Apply text operations to get the new value
+      let newValue = currentValue;
+      for (const textOp of operations) {
+        if (textOp.type === 'insert') {
+          newValue = newValue.slice(0, textOp.index) + textOp.content + newValue.slice(textOp.index);
+        } else if (textOp.type === 'remove') {
+          newValue = newValue.slice(0, textOp.index) + newValue.slice(textOp.index + textOp.count);
         }
       }
+      
+      (element as any)[property] = newValue;
     }
   }
 
