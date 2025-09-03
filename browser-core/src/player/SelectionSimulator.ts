@@ -296,7 +296,7 @@ export class SelectionSimulator {
     textElement: HTMLInputElement | HTMLTextAreaElement,
     startOffset: number,
     endOffset: number
-  ): Array<{ x: number, y: number, width: number, height: number }> | null {
+  ): LineRect[] {
     const style = window.getComputedStyle(textElement);
     const rect = textElement.getBoundingClientRect();
     
@@ -332,7 +332,7 @@ export class SelectionSimulator {
       // Canvas cleanup is automatic (no DOM insertion)
     }
     
-    return null;
+    return [];
   }
 
   /**
@@ -347,7 +347,7 @@ export class SelectionSimulator {
     paddingLeft: number,
     paddingTop: number,
     lineHeight: number
-  ): Array<{ x: number, y: number, width: number, height: number }> {
+  ): LineRect[] {
     const textBefore = input.value.substring(0, startOffset);
     const selectedText = input.value.substring(startOffset, endOffset);
     
@@ -355,13 +355,15 @@ export class SelectionSimulator {
     const startX = ctx.measureText(textBefore).width;
     const selectionWidth = ctx.measureText(selectedText).width;
     
-              // Calculate coordinates relative to element's content area (not viewport)
-          const baseX = paddingLeft + startX - input.scrollLeft;
-          const baseY = paddingTop;
+              // Calculate viewport coordinates (like getBoundingClientRect)
+          const baseX = rect.left + paddingLeft + startX - input.scrollLeft;
+          const baseY = rect.top + paddingTop;
     
     return [{
-      x: baseX,
-      y: baseY,
+      left: baseX,
+      top: baseY,
+      right: baseX + selectionWidth,
+      bottom: baseY + lineHeight,
       width: selectionWidth,
       height: lineHeight
     }];
@@ -379,8 +381,8 @@ export class SelectionSimulator {
     paddingLeft: number,
     paddingTop: number,
     lineHeight: number
-  ): Array<{ x: number, y: number, width: number, height: number }> {
-    const results: Array<{ x: number, y: number, width: number, height: number }> = [];
+  ): LineRect[] {
+    const results: LineRect[] = [];
     const text = textarea.value;
     
     // Calculate available width for text (excluding padding)
@@ -410,13 +412,15 @@ export class SelectionSimulator {
           const startX = ctx.measureText(textBefore).width;
           const selectionWidth = ctx.measureText(selectedText).width;
           
-          // Calculate coordinates relative to element's content area (not viewport)
-          const baseX = paddingLeft + startX - textarea.scrollLeft;
-          const baseY = paddingTop + (lineIndex * lineHeight) - textarea.scrollTop;
+          // Calculate viewport coordinates (like getBoundingClientRect)
+          const baseX = rect.left + paddingLeft + startX - textarea.scrollLeft;
+          const baseY = rect.top + paddingTop + (lineIndex * lineHeight) - textarea.scrollTop;
           
           results.push({
-            x: baseX,
-            y: baseY,
+            left: baseX,
+            top: baseY,
+            right: baseX + selectionWidth,
+            bottom: baseY + lineHeight,
             width: selectionWidth,
             height: lineHeight
           });
@@ -528,40 +532,28 @@ export class SelectionSimulator {
   }
 
 
-
-
-
   /**
    * Creates overlay DOM elements for text selection using existing scrollable element system
    */
   private createTextOverlayElements(
     textElement: HTMLInputElement | HTMLTextAreaElement,
-    selectionRects: Array<{ x: number, y: number, width: number, height: number }>
+    selectionRects: LineRect[]
   ): void {
     // Use the existing scrollable element system to get the appropriate container
     const targetContainer = this.scrollableRegistry.findOrCreateScrollableContainer(textElement);
     
+    // Get the scrollable element for coordinate conversion
+    const scrollableElement = this.getScrollableElementForContainer(targetContainer);
+    
     for (const rect of selectionRects) {
-      const overlay = document.createElement('div');
-      overlay.className = 'selection-overlay text-selection-overlay';
-      
-      // Position relative to the scrollable container (like normal document selections)
-      const containerRect = targetContainer.getBoundingClientRect();
-      overlay.style.cssText = `
-        position: absolute;
-        left: ${rect.x - containerRect.left}px;
-        top: ${rect.y - containerRect.top}px;
-        width: ${rect.width}px;
-        height: ${rect.height}px;
-        background-color: rgba(0, 123, 255, 0.3);
-        pointer-events: none;
-        z-index: 999999;
-        border-radius: 2px;
-      `;
-      
-      // Add to the scrollable container (not the main selection container)
-      targetContainer.appendChild(overlay);
-      this.currentSelectionElements.push(overlay);
+      if (rect.width > 0 && rect.height > 0) {
+        // Use the existing createOverlayElement method (same as document selections)
+        const overlayElement = this.createOverlayElement(rect, targetContainer, scrollableElement);
+        overlayElement.classList.add('text-selection-overlay');
+        
+        targetContainer.appendChild(overlayElement);
+        this.currentSelectionElements.push(overlayElement);
+      }
     }
   }
 
