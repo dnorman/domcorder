@@ -237,25 +237,6 @@ export class SelectionSimulator {
   }
 
   /**
-   * Updates the position of selection overlays for a specific element
-   * 
-   * @param nodeId - The ID of the element to update
-   * @param scrollX - The horizontal scroll offset
-   * @param scrollY - The vertical scroll offset
-   */
-  public updateElementScrollPosition(nodeId: number, scrollX: number, scrollY: number): void {
-    const element = this.nodeIdBiMap.getNodeById(nodeId);
-    if (!element) return;
-    
-    const scrollableInfo = this.scrollableRegistry.getScrollableInfo(element as Element);
-    if (scrollableInfo) {
-      // The ElementScrollHandler will automatically update the container position
-      // when it receives the scroll event, so we don't need to do anything here
-      // This method exists for compatibility with the PagePlayer interface
-    }
-  }
-
-  /**
    * Updates the NodeIdBiMap reference (called when the map is recreated)
    */
   public updateNodeIdBiMap(nodeIdBiMap: NodeIdBiMap): void {

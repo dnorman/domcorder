@@ -175,10 +175,6 @@ export class PagePlayer {
 
   private _handleElementScrolledFrame(frame: ElementScrolled) {
     this.mutator!.updateElementScrollPosition(frame.node_id, frame.scrollXOffset, frame.scrollYOffset);
-
-    if (this.selectionSimulator) {
-      this.selectionSimulator.updateElementScrollPosition(frame.node_id, frame.scrollXOffset, frame.scrollYOffset);
-    }
   }
 
   private _handleWindowScrolledFrame(scrollFrame: ScrollOffsetChanged) {
