@@ -1,6 +1,13 @@
 import { NodeIdBiMap } from '../common/NodeIdBiMap';
 import { EventRateLimiter } from './EventRateLimiter';
 
+export type TextSelectionEvent = {
+  startNodeId: number;
+  startOffset: number;
+  endNodeId: number;
+  endOffset: number;
+};
+
 /**
  * Event handler interface for user interaction events
  */
@@ -13,7 +20,7 @@ export interface UserInteractionEventHandler {
   onElementScroll?: (event: { elementId: number; scrollLeft: number; scrollTop: number }) => void;
   onElementFocus?: (event: { elementId: number }) => void;
   onElementBlur?: (event: { elementId: number }) => void;
-  onTextSelection?: (event: { startNodeId: number; startOffset: number; endNodeId: number; endOffset: number }) => void;
+  onTextSelection?: (event: TextSelectionEvent) => void;
   onWindowFocus?: (event: {}) => void;
   onWindowBlur?: (event: {}) => void;
 }
@@ -334,14 +341,46 @@ export class UserInteractionTracker {
   };
 
   private handleTextSelection = (): void => {
-    this.rateLimiter.rateLimit('selection', this.config.selectionRateLimitMs, {
-      startNodeId: this.getElementId(this.targetWindow.getSelection()?.anchorNode as Element) || -1,
-      startOffset: this.targetWindow.getSelection()?.anchorOffset || 0,
-      endNodeId: this.getElementId(this.targetWindow.getSelection()?.focusNode as Element) || -1,
-      endOffset: this.targetWindow.getSelection()?.focusOffset || 0
-    }, (data) => {
-      this.eventHandler.onTextSelection?.(data);
-    });
+    const doc = this.getTargetDocument();
+    const active = doc.activeElement;
+
+    let event: Partial<TextSelectionEvent> = {};
+
+    if (active instanceof HTMLTextAreaElement || 
+        (active instanceof HTMLInputElement && (
+          active.type === "text" || 
+          active.type === "search" || 
+          active.type === "tel" || 
+          active.type === "url" || 
+          active.type === "password"
+        )
+      )) {
+        const nodeId = this.getElementId(active);
+        if (nodeId === null) return;
+
+        event = {
+          startNodeId: nodeId,
+          startOffset: active.selectionStart ?? 0,
+          endNodeId: nodeId,
+          endOffset: active.selectionEnd ?? 0,
+        };
+    } else {
+      event = {
+        startNodeId: this.getElementId(this.targetWindow.getSelection()?.anchorNode as Element) || -1,
+        startOffset: this.targetWindow.getSelection()?.anchorOffset || 0,
+        endNodeId: this.getElementId(this.targetWindow.getSelection()?.focusNode as Element) || -1,
+        endOffset: this.targetWindow.getSelection()?.focusOffset || 0
+      };
+    }
+
+    this.rateLimiter.rateLimit(
+      'selection', 
+      this.config.selectionRateLimitMs, 
+      event, 
+      (data) => {
+      this.eventHandler.onTextSelection?.(data as TextSelectionEvent);
+      }
+    );
   };
 
   private handleWindowFocus = (): void => {

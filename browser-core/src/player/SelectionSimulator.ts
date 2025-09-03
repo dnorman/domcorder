@@ -63,6 +63,8 @@ export class SelectionSimulator {
   // Target document (iframe document)
   private targetDocument: Document;
 
+  private targetWindow: Window & typeof globalThis;
+
   // Scrollable element management
   private scrollableRegistry: ScrollableElementRegistry;
   private scrollableTracker: ScrollableElementTracker;
@@ -76,6 +78,7 @@ export class SelectionSimulator {
     this.overlayElement = overlayElement;
     this.nodeIdBiMap = nodeIdBiMap;
     this.targetDocument = targetDocument;
+    this.targetWindow = targetDocument.defaultView!;
     this.config = { ...DEFAULT_CONFIG, ...config };
     
     // Create a container element for selections that will be translated on scroll
@@ -119,6 +122,9 @@ export class SelectionSimulator {
     // Clear any existing selection
     this.clearSelection();
 
+    // Update container size to ensure it matches current document dimensions
+    this.updateContainerSize();
+
     // Get the nodes from the bi-directional map
     const startNode = this.nodeIdBiMap.getNodeById(startNodeId);
     const endNode = this.nodeIdBiMap.getNodeById(endNodeId);
@@ -133,41 +139,42 @@ export class SelectionSimulator {
       // throw new Error(`End node with ID ${endNodeId} not found in NodeIdBiMap`);
     }
 
-    // Validate offsets
-    const startTextContent = startNode.textContent || '';
-    const endTextContent = endNode.textContent || '';
+    if (this.isTextElementSelection(startNode, endNode) !== null) {
+      this.createTextElementSelectionOverlay(startNode as HTMLInputElement | HTMLTextAreaElement, startOffset, endOffset);
+    } else {
+      // Validate offsets
+      const startTextContent = startNode.textContent || '';
+      const endTextContent = endNode.textContent || '';
 
-    if (startOffset < 0 || startOffset > startTextContent.length) {
-      return;
-      // throw new Error(
-      //   `Start offset ${startOffset} is out of range for node ${startNodeId}. ` +
-      //   `Valid range: 0 to ${startTextContent.length}`
-      // );
+      if (startOffset < 0 || startOffset > startTextContent.length) {
+        return;
+        // throw new Error(
+        //   `Start offset ${startOffset} is out of range for node ${startNodeId}. ` +
+        //   `Valid range: 0 to ${startTextContent.length}`
+        // );
+      }
+
+      if (endOffset < 0 || endOffset > endTextContent.length) {
+        return;
+        //   throw new Error(
+        //     `End offset ${endOffset} is out of range for node ${endNodeId}. ` +
+        //     `Valid range: 0 to ${endTextContent.length}`
+        // );
+      }
+
+      // Determine the correct document order for the range
+      const { documentStartNode, documentStartOffset, documentEndNode, documentEndOffset } = 
+        this.getDocumentOrderedPositions(startNode, startOffset, endNode, endOffset);
+
+      // Create overlay elements for the selection
+      this.createSelectionOverlays(documentStartNode, documentStartOffset, documentEndNode, documentEndOffset);
     }
-
-    if (endOffset < 0 || endOffset > endTextContent.length) {
-      return;
-      //   throw new Error(
-      //     `End offset ${endOffset} is out of range for node ${endNodeId}. ` +
-      //     `Valid range: 0 to ${endTextContent.length}`
-      // );
-    }
-
-    // Determine the correct document order for the range
-    const { documentStartNode, documentStartOffset, documentEndNode, documentEndOffset } = 
-      this.getDocumentOrderedPositions(startNode, startOffset, endNode, endOffset);
-
-    // Update container size to ensure it matches current document dimensions
-    this.updateContainerSize();
-    
-    // Create overlay elements for the selection
-    this.createSelectionOverlays(documentStartNode, documentStartOffset, documentEndNode, documentEndOffset);
   }
 
   /**
    * Clears all selection overlays
    */
-  public clearSelection(): void {
+  private clearSelection(): void {
     this.currentSelectionElements.forEach(element => {
       if (element.parentNode) {
         element.parentNode.removeChild(element);
@@ -197,7 +204,7 @@ export class SelectionSimulator {
    * Updates the size of the selection container to match the document dimensions
    * Should be called when document content changes
    */
-  public updateContainerSize(): void {
+  private updateContainerSize(): void {
     // Get the maximum of all possible document dimension measurements
     const htmlElement = this.targetDocument.querySelector('html');
     
@@ -253,6 +260,367 @@ export class SelectionSimulator {
    */
   public updateNodeIdBiMap(nodeIdBiMap: NodeIdBiMap): void {
     this.nodeIdBiMap = nodeIdBiMap;
+  }
+
+  /**
+   * Checks if the selection is within a text input element
+   */
+  private isTextElementSelection(startNode: Node, endNode: Node): HTMLInputElement | HTMLTextAreaElement | null {
+    // Check if both start and end nodes are within the same text element
+    const startElement = startNode.nodeType === Node.ELEMENT_NODE ? 
+      startNode as Element : startNode.parentElement;
+    const endElement = endNode.nodeType === Node.ELEMENT_NODE ? 
+      endNode as Element : endNode.parentElement;
+    
+    if (startElement === endElement) {
+      if (startElement instanceof this.targetWindow.HTMLInputElement && this.isTextInputType(startElement)) {
+        return startElement;
+      }
+      if (startElement instanceof this.targetWindow.HTMLTextAreaElement) {
+        return startElement;
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Checks if an input element is a text-type input
+   */
+  private isTextInputType(input: HTMLInputElement): boolean {
+    const textTypes = ['text', 'password', 'email', 'url', 'search', 'tel'];
+    return textTypes.includes(input.type);
+  }
+
+  /**
+   * Creates selection overlay for text input/textarea elements using canvas-based measurement
+   */
+  private createTextElementSelectionOverlay(
+    textElement: HTMLInputElement | HTMLTextAreaElement,
+    startOffset: number,
+    endOffset: number
+  ): void {
+    // Calculate the pixel coordinates of the selection using canvas measurement
+    const selectionCoords = this.calculateTextSelectionCoordinatesWithCanvas(textElement, startOffset, endOffset);
+    console.log('selectionCoords', selectionCoords);
+    if (selectionCoords && selectionCoords.length > 0) {
+      this.createTextOverlayElements(textElement, selectionCoords);
+    }
+  }
+
+  /**
+   * Calculates pixel coordinates for text selection using canvas-based measurement
+   */
+  private calculateTextSelectionCoordinatesWithCanvas(
+    textElement: HTMLInputElement | HTMLTextAreaElement,
+    startOffset: number,
+    endOffset: number
+  ): Array<{ x: number, y: number, width: number, height: number }> | null {
+    const style = window.getComputedStyle(textElement);
+    const rect = textElement.getBoundingClientRect();
+    
+    // Create canvas for text measurement
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    
+    // Set canvas font to match the text element exactly
+    ctx.font = style.font;
+    
+    // Get layout metrics
+    const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
+    const paddingLeft = parseFloat(style.paddingLeft);
+    const paddingTop = parseFloat(style.paddingTop);
+    
+    try {
+      // For single-line inputs
+      if (textElement instanceof this.targetWindow.HTMLInputElement) {
+        return this.calculateSingleLineSelectionWithCanvas(
+          ctx, textElement, startOffset, endOffset, 
+          rect, paddingLeft, paddingTop, lineHeight
+        );
+      }
+      
+      // For multi-line textareas
+      if (textElement instanceof this.targetWindow.HTMLTextAreaElement) {
+        return this.calculateMultiLineSelectionWithCanvas(
+          ctx, textElement, startOffset, endOffset,
+          rect, paddingLeft, paddingTop, lineHeight
+        );
+      }
+    } finally {
+      // Canvas cleanup is automatic (no DOM insertion)
+    }
+    
+    return null;
+  }
+
+  /**
+   * Calculates selection coordinates for single-line input elements using canvas
+   */
+  private calculateSingleLineSelectionWithCanvas(
+    ctx: CanvasRenderingContext2D,
+    input: HTMLInputElement,
+    startOffset: number,
+    endOffset: number,
+    rect: DOMRect,
+    paddingLeft: number,
+    paddingTop: number,
+    lineHeight: number
+  ): Array<{ x: number, y: number, width: number, height: number }> {
+    const textBefore = input.value.substring(0, startOffset);
+    const selectedText = input.value.substring(startOffset, endOffset);
+    
+    // Use canvas to measure text width precisely
+    const startX = ctx.measureText(textBefore).width;
+    const selectionWidth = ctx.measureText(selectedText).width;
+    
+    // Calculate base coordinates
+    const baseX = rect.left + paddingLeft + startX - input.scrollLeft;
+    const baseY = rect.top + paddingTop;
+    
+    // Adjust for scrolling
+    const adjustedCoords = this.getScrollAdjustedCoordinates(input, baseX, baseY);
+    
+    return [{
+      x: adjustedCoords.x,
+      y: adjustedCoords.y,
+      width: selectionWidth,
+      height: lineHeight
+    }];
+  }
+
+  /**
+   * Calculates selection coordinates for multi-line textarea elements using canvas
+   */
+  private calculateMultiLineSelectionWithCanvas(
+    ctx: CanvasRenderingContext2D,
+    textarea: HTMLTextAreaElement,
+    startOffset: number,
+    endOffset: number,
+    rect: DOMRect,
+    paddingLeft: number,
+    paddingTop: number,
+    lineHeight: number
+  ): Array<{ x: number, y: number, width: number, height: number }> {
+    const results: Array<{ x: number, y: number, width: number, height: number }> = [];
+    const text = textarea.value;
+    
+    // Calculate available width for text (excluding padding)
+    const style = getComputedStyle(textarea);
+    const paddingRight = parseFloat(style.paddingRight);
+    const availableWidth = textarea.clientWidth - paddingLeft - paddingRight;
+    
+    // Break text into visual lines accounting for word wrapping
+    const visualLines = this.calculateWrappedLines(ctx, text, availableWidth);
+    
+    for (let lineIndex = 0; lineIndex < visualLines.length; lineIndex++) {
+      const lineInfo = visualLines[lineIndex];
+      const lineContent = lineInfo.content;
+      const lineStart = lineInfo.startOffset;
+      const lineEnd = lineInfo.endOffset;
+      
+      // Check if this line contains part of the selection
+      if (startOffset <= lineEnd && endOffset >= lineStart) {
+        const selectionStart = Math.max(startOffset, lineStart) - lineStart;
+        const selectionEnd = Math.min(endOffset, lineEnd) - lineStart;
+        
+        if (selectionStart < selectionEnd) {
+          // Use canvas to measure text width for this line's selection
+          const textBefore = lineContent.substring(0, selectionStart);
+          const selectedText = lineContent.substring(selectionStart, selectionEnd);
+          
+          const startX = ctx.measureText(textBefore).width;
+          const selectionWidth = ctx.measureText(selectedText).width;
+          
+          // Calculate base coordinates
+          const baseX = rect.left + paddingLeft + startX - textarea.scrollLeft;
+          const baseY = rect.top + paddingTop + (lineIndex * lineHeight) - textarea.scrollTop;
+          
+          // Adjust for scrolling
+          const adjustedCoords = this.getScrollAdjustedCoordinates(textarea, baseX, baseY);
+          
+          results.push({
+            x: adjustedCoords.x,
+            y: adjustedCoords.y,
+            width: selectionWidth,
+            height: lineHeight
+          });
+        }
+      }
+    }
+    
+    return results;
+  }
+
+  /**
+   * Breaks text into visual lines accounting for word wrapping and explicit line breaks
+   * Returns both the line content and the original character position mapping
+   */
+  private calculateWrappedLines(ctx: CanvasRenderingContext2D, text: string, availableWidth: number): Array<{
+    content: string;
+    startOffset: number;
+    endOffset: number;
+  }> {
+    const lines: Array<{ content: string; startOffset: number; endOffset: number }> = [];
+    const paragraphs = text.split('\n');
+    let globalOffset = 0;
+    
+    for (let paragraphIndex = 0; paragraphIndex < paragraphs.length; paragraphIndex++) {
+      const paragraph = paragraphs[paragraphIndex];
+      
+      if (paragraph.length === 0) {
+        // Empty line for explicit \n
+        lines.push({
+          content: '',
+          startOffset: globalOffset,
+          endOffset: globalOffset
+        });
+        globalOffset += 1; // Account for the \n character
+        continue;
+      }
+      
+      // Break paragraph into wrapped lines based on width
+      const wrappedLines = this.wrapTextToWidth(ctx, paragraph, availableWidth, globalOffset);
+      lines.push(...wrappedLines);
+      
+      // Move past this paragraph and its \n (except for the last paragraph)
+      globalOffset += paragraph.length;
+      if (paragraphIndex < paragraphs.length - 1) {
+        globalOffset += 1; // Account for the \n character
+      }
+    }
+    
+    return lines;
+  }
+
+  /**
+   * Wraps a single paragraph of text to fit within the specified width
+   * Returns lines with their original character position mapping
+   */
+  private wrapTextToWidth(
+    ctx: CanvasRenderingContext2D, 
+    text: string, 
+    maxWidth: number, 
+    baseOffset: number
+  ): Array<{ content: string; startOffset: number; endOffset: number }> {
+    const words = text.split(' ');
+    const lines: Array<{ content: string; startOffset: number; endOffset: number }> = [];
+    let currentLine = '';
+    let lineStartOffset = baseOffset;
+    let currentOffset = baseOffset;
+    
+    for (let wordIndex = 0; wordIndex < words.length; wordIndex++) {
+      const word = words[wordIndex];
+      const separator = currentLine ? ' ' : '';
+      const testLine = currentLine + separator + word;
+      const testWidth = ctx.measureText(testLine).width;
+      
+      if (testWidth <= maxWidth || currentLine === '') {
+        // Word fits on current line, or it's the first word (even if too long)
+        currentLine = testLine;
+        currentOffset += separator.length + word.length;
+      } else {
+        // Word doesn't fit, finish current line and start new one
+        if (currentLine) {
+          lines.push({
+            content: currentLine,
+            startOffset: lineStartOffset,
+            endOffset: currentOffset
+          });
+        }
+        
+        // Start new line with this word
+        currentLine = word;
+        lineStartOffset = currentOffset + (separator.length); // Skip the space that didn't fit
+        currentOffset = lineStartOffset + word.length;
+      }
+    }
+    
+    // Add the last line
+    if (currentLine) {
+      lines.push({
+        content: currentLine,
+        startOffset: lineStartOffset,
+        endOffset: currentOffset
+      });
+    }
+    
+    return lines.length > 0 ? lines : [{
+      content: '',
+      startOffset: baseOffset,
+      endOffset: baseOffset
+    }];
+  }
+
+
+
+  /**
+   * Gets the scroll-adjusted coordinates for a text element
+   */
+  private getScrollAdjustedCoordinates(
+    textElement: HTMLInputElement | HTMLTextAreaElement,
+    x: number,
+    y: number
+  ): { x: number, y: number } {
+    // Find the closest scrollable ancestor
+    const scrollableAncestor = this.findClosestScrollableAncestor(textElement);
+    
+    if (!scrollableAncestor) {
+      // No scrollable ancestor, use page scroll offset
+      return {
+        x: x + this.currentScrollX,
+        y: y + this.currentScrollY
+      };
+    }
+    
+    // If there's a scrollable ancestor, we need to account for its scroll position
+    const scrollableInfo = this.scrollableRegistry.getScrollableInfo(scrollableAncestor);
+    if (scrollableInfo) {
+      // The scrollable element system handles positioning relative to the scrollable container
+      // For text elements, we need to calculate relative to the scrollable element's content area
+      const elementRect = scrollableAncestor.getBoundingClientRect();
+      const computed = getComputedStyle(scrollableAncestor);
+      const borderLeft = parseFloat(computed.borderLeftWidth) || 0;
+      const borderTop = parseFloat(computed.borderTopWidth) || 0;
+      
+      return {
+        x: x - (elementRect.left + borderLeft) + scrollableAncestor.scrollLeft,
+        y: y - (elementRect.top + borderTop) + scrollableAncestor.scrollTop
+      };
+    }
+    
+    // Fallback to page scroll
+    return {
+      x: x + this.currentScrollX,
+      y: y + this.currentScrollY
+    };
+  }
+
+  /**
+   * Creates overlay DOM elements for text selection
+   */
+  private createTextOverlayElements(
+    textElement: HTMLInputElement | HTMLTextAreaElement,
+    selectionRects: Array<{ x: number, y: number, width: number, height: number }>
+  ): void {
+    for (const rect of selectionRects) {
+      const overlay = document.createElement('div');
+      overlay.className = 'selection-overlay';
+      overlay.style.cssText = `
+        position: fixed;
+        left: ${rect.x}px;
+        top: ${rect.y}px;
+        width: ${rect.width}px;
+        height: ${rect.height}px;
+        background-color: rgba(0, 123, 255, 0.3);
+        pointer-events: none;
+        z-index: 999999;
+        border-radius: 2px;
+      `;
+      
+      this.selectionContainer.appendChild(overlay);
+      this.currentSelectionElements.push(overlay);
+    }
   }
 
   /**

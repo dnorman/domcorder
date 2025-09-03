@@ -113,6 +113,7 @@ export class PagePlayer {
   }
 
   private handleFrame(frame: Frame) {
+    // console.log("Handling frame:", frame);
     if (frame instanceof Keyframe) {
       this._handleKeyFrame(frame as Keyframe);
     } else if (frame instanceof Asset) {
@@ -321,6 +322,7 @@ export class PagePlayer {
   }
 
   private _handleMouseMovedFrame(mouseMovedData: MouseMoved): void {
+    console.log('mouseMovedData', mouseMovedData);
     this.mouseSimulator.moveTo(mouseMovedData.x, mouseMovedData.y);
   }
 
