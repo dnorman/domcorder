@@ -4,8 +4,26 @@
   "types": "dist/index.d.ts",
   "module": "src/index.ts",
   "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./recorder": {
+      "import": "./dist/recorder.js",
+      "require": "./dist/recorder.js",
+      "types": "./dist/recorder.d.ts"
+    },
+    "./player": {
+      "import": "./dist/player.js",
+      "require": "./dist/player.js",
+      "types": "./dist/player.d.ts"
+    }
+  },
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "prepare": "bun run bun.build.ts",
+    "build": "bun run bun.build.ts",
     "dev": "bun build src/index.ts --outdir dist --target bun --watch & bun run test-pages/server.js",
     "test": "bun test",
     "test:watch": "bun test --watch"
@@ -20,7 +38,8 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "jsdom": "^26.1.0",
-    "@domcorder/proto-ts": "workspace:*"
+    "@domcorder/proto-ts": "workspace:*",
+    "@playwright/mcp": "^0.0.36",
+    "jsdom": "^26.1.0"
   }
 }

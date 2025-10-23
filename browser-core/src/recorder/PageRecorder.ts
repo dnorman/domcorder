@@ -38,7 +38,7 @@ import { getStyleSheetId, StyleSheetWatcher, type StyleSheetWatcherEvent } from 
 import { inlineAdoptedStyleSheet, type InlineAdoptedStyleSheetEvent } from "./inliner/inlineAdoptedStyleSheet";
 import { AssetTracker } from "./inliner/AssetTracker";
 import { CanvasChangedCallback, CanvasChangedEvent, CanvasTracker } from "./CanvasTracker";
-import { FormFieldTracker, type FormFieldCallbacks } from "./FormFieldTracker";
+import { FormFieldTracker } from "./FormFieldTracker";
 
 export type FrameHandler = (frame: Frame) => Promise<void>;
 
