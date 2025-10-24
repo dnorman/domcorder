@@ -11,7 +11,7 @@
     "injection"
   ],
   "scripts": {
-    "postinstall": "bun install --ignore-scripts && cd browser-core && bun run bun.build.ts",
+    "prepare": "bun install --ignore-scripts && cd browser-core && bun run bun.build.ts",
     "dev": "cd player && bun run dev",
     "build": "cd player && bun run build",
     "build:injection": "cd injection && bun run build",
