@@ -2,7 +2,7 @@
   "name": "domcorder-workspace",
   "version": "0.1.0",
   "description": "DomCorder workspace - captures web pages as videos with full fidelity",
-  "private": true,
+  "private": false,
   "type": "module",
   "workspaces": [
     "proto-ts",
@@ -11,6 +11,7 @@
     "injection"
   ],
   "scripts": {
+    "prepare": "cd browser-core && bun run bun.build.ts",
     "dev": "cd player && bun run dev",
     "build": "cd player && bun run build",
     "build:injection": "cd injection && bun run build",
@@ -19,6 +20,20 @@
     "test:proto-rs": "cd proto-rs && cargo test",
     "test:all": "bun run test:proto-ts && bun run test:proto-rs",
     "clean": "rm -rf player/node_modules proto-ts/node_modules browser-core/node_modules injection/node_modules node_modules && rm -rf proto-rs/target"
+  },
+  "exports": {
+    "./browser-core": {
+      "import": "./browser-core/dist/index.js",
+      "types": "./browser-core/dist/index.d.ts"
+    },
+    "./browser-core/recorder": {
+      "import": "./browser-core/dist/recorder.js",
+      "types": "./browser-core/dist/recorder.d.ts"
+    },
+    "./browser-core/player": {
+      "import": "./browser-core/dist/player.js",
+      "types": "./browser-core/dist/player.d.ts"
+    }
   },
   "keywords": [
     "dom",

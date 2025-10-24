@@ -22,8 +22,7 @@
     }
   },
   "scripts": {
-    "prepare": "bun run bun.build.ts",
-    "build": "bun run bun.build.ts",
+
     "dev": "bun build src/index.ts --outdir dist --target bun --watch & bun run test-pages/server.js",
     "test": "bun test",
     "test:watch": "bun test --watch"
