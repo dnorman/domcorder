@@ -1,5 +1,5 @@
-import { Writer } from "./writer.ts";
-import { VNode, VDocument, VStyleSheet } from "./vdom.ts";
+import { Writer } from "./writer";
+import { VNode, VDocument, VStyleSheet } from "./vdom";
 
 
 export enum FrameType {

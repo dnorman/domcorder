@@ -55,16 +55,37 @@ for (const { entrypoint, outfile, name } of builds) {
 console.log("\nAll bundles built successfully!");
 console.log("\nGenerating TypeScript declarations...");
 
-// Generate TypeScript declarations
-const tscResult = Bun.spawnSync(["tsc", "--emitDeclarationOnly", "--declaration", "--outDir", "dist"]);
+// Use rollup to bundle TypeScript declarations
+const rollupResult = Bun.spawnSync([
+  "bunx",
+  "rollup",
+  "-c",
+  "rollup.dts.config.js"
+]);
 
-if (tscResult.exitCode !== 0) {
+if (rollupResult.exitCode !== 0) {
   console.error("Failed to generate TypeScript declarations:");
-  console.error(tscResult.stderr.toString());
+  console.error(rollupResult.stderr.toString());
   process.exit(1);
 }
 
 console.log("✓ TypeScript declarations generated successfully");
+
+// Clean up the old subdirectories that are no longer needed
+console.log("\nCleaning up old type definition directories...");
+const fs = await import("fs");
+const dirsToRemove = ["dist/recorder", "dist/player", "dist/common"];
+
+for (const dir of dirsToRemove) {
+  try {
+    await fs.promises.rm(dir, { recursive: true, force: true });
+    console.log(`✓ Removed ${dir}`);
+  } catch (error) {
+    // Directory might not exist, that's okay
+  }
+}
+
+console.log("\n✓ Build complete!");
 
 export {};
 

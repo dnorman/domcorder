@@ -17,7 +17,7 @@
   "author": "Domcorder Team",
   "license": "MIT",
   "devDependencies": {
-    "jsdom": "^22.1.0"
+    "jsdom": "22.1.0"
   },
   "files": [
     "src/"
