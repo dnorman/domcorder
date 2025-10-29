@@ -219,7 +219,7 @@ async fn handle_options() -> impl IntoResponse {
 }
 
 async fn handle_list_recordings(State(state): State<AppState>) -> impl IntoResponse {
-    match state.list_recordings() {
+    match state.list_recordings(None) {
         Ok(recordings) => {
             let json = serde_json::to_string(&recordings).unwrap_or_else(|_| "[]".to_string());
 

@@ -36,11 +36,17 @@ impl StorageState {
         Ok(filename)
     }
 
-    pub fn list_recordings(&self) -> io::Result<Vec<RecordingInfo>> {
+    pub fn list_recordings(&self, subdir: Option<PathBuf>) -> io::Result<Vec<RecordingInfo>> {
         let mut recordings = Vec::new();
         let active_recordings = self.active_recordings.lock().unwrap();
 
-        for entry in fs::read_dir(&self.storage_dir)? {
+        let read_dir = if let Some(subdir) = subdir {
+            fs::read_dir(&self.storage_dir.join(&subdir))?
+        } else {
+            fs::read_dir(&self.storage_dir)?
+        };
+
+        for entry in read_dir {
             let entry = entry?;
             let path = entry.path();
 

@@ -26,7 +26,7 @@ mod tests {
         assert!(filename.ends_with(".dcrr"));
 
         // List recordings
-        let recordings = storage.list_recordings().unwrap();
+        let recordings = storage.list_recordings(None).unwrap();
         assert_eq!(recordings.len(), 1);
         assert_eq!(recordings[0].filename, filename);
         assert_eq!(recordings[0].size, test_data.len() as u64);
