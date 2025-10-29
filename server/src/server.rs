@@ -87,8 +87,11 @@ async fn handle_websocket_stream(socket: WebSocket, state: AppState) {
 
     // Spawn a task to handle the streaming save
     let state_clone = state.clone();
-    let save_task =
-        tokio::spawn(async move { state_clone.save_recording_stream_raw(pipe_reader).await });
+    let save_task = tokio::spawn(async move {
+        state_clone
+            .save_recording_stream_raw(pipe_reader, None)
+            .await
+    });
 
     let mut total_bytes = 0;
     let mut last_frame_time: Option<u128> = None;

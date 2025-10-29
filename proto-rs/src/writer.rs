@@ -1,6 +1,6 @@
-use std::io::{self, Write};
-use bincode::Options;
 use crate::Frame;
+use bincode::Options;
+use std::io::{self, Write};
 
 // File format constants
 pub const DCRR_MAGIC: [u8; 4] = [0x44, 0x43, 0x52, 0x52]; // "DCRR"
@@ -67,16 +67,16 @@ impl<W: Write> FrameWriter<W> {
 
         // Write magic bytes (4 bytes)
         self.writer.write_all(&header.magic)?;
-        
+
         // Write version (4 bytes, big-endian)
         self.writer.write_all(&header.version.to_be_bytes())?;
-        
+
         // Write timestamp (8 bytes, big-endian)
         self.writer.write_all(&header.created_at.to_be_bytes())?;
-        
+
         // Write reserved bytes (16 bytes)
         self.writer.write_all(&header.reserved)?;
-        
+
         self.header_written = true;
         Ok(())
     }
@@ -86,10 +86,11 @@ impl<W: Write> FrameWriter<W> {
         let config = bincode::DefaultOptions::new()
             .with_big_endian()
             .with_fixint_encoding();
-            
-        let encoded = config.serialize(frame)
+
+        let encoded = config
+            .serialize(frame)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-            
+
         self.writer.write_all(&encoded)?;
         Ok(())
     }

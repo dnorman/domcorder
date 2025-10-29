@@ -20,7 +20,7 @@ impl StorageState {
     }
 
     pub fn generate_filename(&self) -> String {
-        let timestamp = Utc::now().format("%Y-%m-%d_%H-%M-%S");
+        let timestamp = Utc::now().format("%Y-%m-%d_%H-%M-%S.%f");
         let uuid = Uuid::new_v4().simple();
         format!("{}_{}.dcrr", timestamp, uuid)
     }
@@ -113,9 +113,19 @@ impl StorageState {
     pub async fn save_recording_stream_raw<R: AsyncRead + Unpin>(
         &self,
         mut source: R,
+        subdir: Option<PathBuf>,
     ) -> io::Result<String> {
         let filename = self.generate_filename();
-        let filepath = self.storage_dir.join(&filename);
+
+        // Build the filepath, creating subdirectory if provided
+        let filepath = if let Some(subdir) = subdir {
+            let full_subdir = self.storage_dir.join(&subdir);
+            // Ensure the subdirectory exists
+            tokio::fs::create_dir_all(&full_subdir).await?;
+            full_subdir.join(&filename)
+        } else {
+            self.storage_dir.join(&filename)
+        };
 
         // Mark this recording as active
         self.mark_recording_active(&filename);
