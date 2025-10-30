@@ -106,13 +106,13 @@ impl StorageState {
     /// Mark a recording as completed (no longer being written to)
     pub fn mark_recording_completed(&self, filename: &str) {
         let mut active_recordings = self.active_recordings.lock().unwrap();
-        active_recordings.remove(filename);
+        active_recordings.remove(&filename.to_string());
     }
 
     /// Check if a recording is currently active
     pub fn is_recording_active(&self, filename: &str) -> bool {
         let active_recordings = self.active_recordings.lock().unwrap();
-        active_recordings.contains_key(filename)
+        active_recordings.contains_key(&filename.to_string())
     }
 
     /// TEMPORARILY BYPASS FRAME PROCESSING: Stream raw data directly to file with header
@@ -120,21 +120,32 @@ impl StorageState {
         &self,
         mut source: R,
         subdir: Option<PathBuf>,
+        filename: Option<String>,
     ) -> io::Result<String> {
-        let filename = self.generate_filename();
-
-        // Build the filepath, creating subdirectory if provided
-        let filepath = if let Some(subdir) = subdir {
-            let full_subdir = self.storage_dir.join(&subdir);
-            // Ensure the subdirectory exists
-            tokio::fs::create_dir_all(&full_subdir).await?;
-            full_subdir.join(&filename)
-        } else {
-            self.storage_dir.join(&filename)
+        let recording_dir = match subdir.clone() {    
+            Some(subdir) => self.storage_dir.join(subdir.clone()),
+            None => self.storage_dir.clone(),
         };
 
+        fs::create_dir_all(&recording_dir)?;
+
+
+        let file_name = match filename {
+            Some(filename) => filename,
+            None => self.generate_filename(),
+        };
+
+        let recording_file = recording_dir.join(file_name.clone());
+
+        let relative_path = match subdir {
+            Some(subdir) => subdir.join(file_name.clone()).to_string_lossy().to_string(),
+            None => file_name,
+        };
+
+        info!("Saving recording to: {}", relative_path);
+
         // Mark this recording as active
-        self.mark_recording_active(&filename);
+        self.mark_recording_active(&relative_path);
 
         // First, write the file header using the sync FrameWriter
         let header = FileHeader::new();
@@ -144,7 +155,7 @@ impl StorageState {
                 .write(true)
                 .create(true)
                 .truncate(true)
-                .open(&filepath)?;
+                .open(&recording_file)?;
             let mut frame_writer = FrameWriter::new(sync_file);
             frame_writer.write_header(&header)?;
             frame_writer.flush()?;
@@ -153,7 +164,7 @@ impl StorageState {
         // Reopen the file in append mode for async operations
         let mut output_file = tokio::fs::OpenOptions::new()
             .append(true)
-            .open(&filepath)
+            .open(&recording_file)
             .await?;
 
         // Copy raw frame bytes directly after the header - no frame processing
@@ -161,13 +172,13 @@ impl StorageState {
 
         info!(
             "📁 Raw copy completed: {} bytes written to {} (plus header)",
-            bytes_copied, filename
+            bytes_copied, recording_file.to_string_lossy().to_string()
         );
 
         // Mark this recording as completed
-        self.mark_recording_completed(&filename);
+        self.mark_recording_completed(&relative_path);
 
-        Ok(filename)
+        Ok(relative_path)
     }
 
     /// Stream and validate frames from an AsyncRead source (frame data only, no header), writing them to a file
@@ -340,6 +351,7 @@ impl StorageState {
         file.seek(std::io::SeekFrom::Start(32)).await?;
 
         if self.is_recording_active(filename) {
+            info!("Creating tailing reader for active recording: {}", filename);
             // For active recordings, create a tailing reader
             Ok(Box::new(TailingReader::new(
                 file,
@@ -348,6 +360,7 @@ impl StorageState {
                 self.clone(),
             )))
         } else {
+            info!("Creating reader for completed recording: {}", filename);
             // For completed recordings, just return the file
             Ok(Box::new(file))
         }

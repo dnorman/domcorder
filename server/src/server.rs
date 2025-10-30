@@ -89,7 +89,7 @@ async fn handle_websocket_stream(socket: WebSocket, state: AppState) {
     let state_clone = state.clone();
     let save_task = tokio::spawn(async move {
         state_clone
-            .save_recording_stream_raw(pipe_reader, None)
+            .save_recording_stream_raw(pipe_reader, None, None)
             .await
     });
 
