@@ -1,5 +1,4 @@
-import { VNode, VDocument } from "./vdom";
-import { Frame, FrameType } from "./frames";
+import { Frame } from "./frames";
 
 // BufferReader interface for DOM decoding
 interface BufferReader {
