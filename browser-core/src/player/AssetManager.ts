@@ -292,6 +292,10 @@ export class AssetManager {
   }
 
   public bindAssetsToStyleElement(styleElement: HTMLStyleElement): void { 
+    if (styleElement.childNodes.length === 0) {
+      return;
+    }
+
     const processedCssText = this.processAssetsInCssText(styleElement.textContent || "", (assetId, asset) => {
       this.useAssetInElement(assetId, styleElement, () => {
         const resolvedUrl = asset.resolvedUrl!;
