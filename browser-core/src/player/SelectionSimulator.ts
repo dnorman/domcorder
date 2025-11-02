@@ -283,7 +283,6 @@ export class SelectionSimulator {
   ): void {
     // Calculate the pixel coordinates of the selection using canvas measurement
     const selectionCoords = this.calculateTextSelectionCoordinatesWithCanvas(textElement, startOffset, endOffset);
-    console.log('selectionCoords', selectionCoords);
     if (selectionCoords && selectionCoords.length > 0) {
       this.createTextOverlayElements(textElement, selectionCoords);
     }
