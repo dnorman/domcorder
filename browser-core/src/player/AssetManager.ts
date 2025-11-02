@@ -239,7 +239,7 @@ export class AssetManager {
   }
 
   private replaceAssetInCssText(cssText: string, assetId: number, newUrl: string): string {
-    return cssText.replace(/url\(['"]?([^'"]+)['"]?\)/g, (_, url) => {
+    return cssText.replace(/url\((['"]?)([^'")]+)\1\)/g, (_, quote, url) => {
       const assetMatch = url.match(/^asset:(\d+)$/);
       if (assetMatch) {
         const matchedAssetId = parseInt(assetMatch[1], 10);
@@ -311,18 +311,20 @@ export class AssetManager {
   }
 
   private processAssetsInCssText(cssText: string, registrationCallback: (id: number, asset: AssetEntry) => void): string {
+    
     // FIXME update asset counts and references.
     const detectedAssetIds = new Set<number>();
 
     // Look for url() references and replace them with blob URLs if the asset exists
-    const processedCssText = cssText.replace(/url\(['"]?([^'"]+)['"]?\)/g, (match, url) => {
-      const assetMatch = url.match(/^asset:(\d+)$/);
+    return cssText.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, quote, raw) => {
+      const url = raw.trim();
+      const assetMatch = /^asset:(\d+)$/.exec(url);
       if (assetMatch) {
         const assetId = parseInt(assetMatch[1], 10);
         if (!detectedAssetIds.has(assetId)) {
           detectedAssetIds.add(assetId);
           const asset = this.getOrCreateAssetEntry(assetId);
-          const pendingBlobUrl = asset.pendingBlobUrl!;
+          const pendingBlobUrl = asset.resolvedUrl || asset.pendingBlobUrl!;
           registrationCallback(assetId, asset);
           return `url(${pendingBlobUrl})`;
         } else {
@@ -331,9 +333,31 @@ export class AssetManager {
       }
       return match;
     });
-
-    return processedCssText;
   }
+
+  // processAssetsInCssText(cssText, registrationCallback) {
+  //   const detectedAssetIds = new Set();
+  
+  //   return cssText.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, _q, raw) => {
+  //     const value = raw.trim();
+  //     const m = /^asset:(\d+)$/.exec(value);
+  //     if (!m) return match;
+  //     const assetId = Number(m[1]);
+  
+  //     // Register once per assetId, but always replace in CSS
+  //     if (!detectedAssetIds.has(assetId)) {
+  //       const asset = this.getOrCreateAssetEntry(assetId);
+  //       detectedAssetIds.add(assetId);
+  //       const pendingBlobUrl = asset.resolvedUrl || asset.pendingBlobUrl ;
+  //       registrationCallback(assetId, asset);
+  //       return `url(${pendingBlobUrl})`;
+  //     }
+  
+
+  //     // Read after registration (callback may set it)
+  //     return match;
+  //   });
+  // }
 
   /**
    * Returns the blob URL for an asset and sets up reference counting for an adopted stylesheet
