@@ -28,15 +28,19 @@ import {
   WindowBlurred,
   DomNodePropertyChanged,
   DomNodePropertyTextChanged,
-  CanvasChanged
+  CanvasChanged,
+  StyleSheetRuleInserted,
+  StyleSheetRuleDeleted,
+  StyleSheetReplaced
 } from "@domcorder/proto-ts";
 import type { StringMutationOperation } from "../common/StringMutationOperation";
 import { StyleSheetWatcher, type StyleSheetWatcherEvent } from "../recorder/StyleSheetWatcher";
-import { AdoptedStyleSheetMutator } from "./AdoptedStyleSheetMutator";
+import { AdoptedStyleSheetsMutator } from "./AdoptedStyleSheetMutator";
+import { StyleSheetMutator } from "./StyleSheetMutator";
 import { MouseSimulator } from "./MouseSimulator";
 import { SelectionSimulator } from "./SelectionSimulator";
 import { TypingSimulator } from "./TypingSimulator";
-import { PlaybackQueue, PlayEvent } from "./PlaybackQueue";
+import { PlaybackQueue } from "./PlaybackQueue";
 
 
 export class PagePlayer {
@@ -51,7 +55,8 @@ export class PagePlayer {
 
   private mutator: DomMutator | null;
   private readonly styleSheetWatcher: StyleSheetWatcher;
-  private readonly adoptedStyleSheetMutator: AdoptedStyleSheetMutator;
+  private readonly adoptedStyleSheetMutator: AdoptedStyleSheetsMutator;
+  private readonly styleSheetMutator: StyleSheetMutator;
 
   // Viewport dimensions
   private viewportWidth: number = 0;
@@ -91,7 +96,8 @@ export class PagePlayer {
     });
     this.styleSheetWatcher.start();
 
-    this.adoptedStyleSheetMutator = new AdoptedStyleSheetMutator(this.targetDocument, this.assetManager);
+    this.adoptedStyleSheetMutator = new AdoptedStyleSheetsMutator(this.targetDocument, this.assetManager);
+    this.styleSheetMutator = new StyleSheetMutator(this.targetDocument, this.assetManager);
     this.selectionSimulator = null;
     this.mouseSimulator.start();
 
@@ -101,10 +107,8 @@ export class PagePlayer {
       }
     });
 
-    this.playbackQueue = new PlaybackQueue(live, (event: PlayEvent) => {
-      for (const frame of event.frames) {
-        this.handleFrame(frame);
-      }
+    this.playbackQueue = new PlaybackQueue(live, async (frame: Frame, timestamp: number) => {
+      await this.handleFrame(frame);
     });
   }
 
@@ -112,60 +116,71 @@ export class PagePlayer {
     this.playbackQueue.enqueueFrame(frame);
   }
 
-  private handleFrame(frame: Frame) {
-    // console.log("Handling frame:", frame);
-    if (frame instanceof Keyframe) {
-      this._handleKeyFrame(frame as Keyframe);
+  private async handleFrame(frame: Frame): Promise<void> {
+    try {
+      if (frame instanceof Keyframe) {
+        await this._handleKeyFrame(frame as Keyframe);
     } else if (frame instanceof Asset) {
-      this._handleAssetFrame(frame as Asset);
+      await this._handleAssetFrame(frame as Asset);
     } else if (frame instanceof Timestamp) {
-      this._handleTimestampFrame(frame);
+      await this._handleTimestampFrame(frame);
     } else if (frame instanceof ViewportResized) {
-      this._handleViewportResizedFrame(frame);
+      await this._handleViewportResizedFrame(frame);
     } else if (frame instanceof KeyPressed) {
-      this._handleKeyPressedFrame(frame);
+      await this._handleKeyPressedFrame(frame);
     } else if (frame instanceof ElementFocused) {
-      this._handleElementFocusedFrame(frame);
+      await this._handleElementFocusedFrame(frame);
     } else if (frame instanceof ElementBlurred) {
-      this._handleElementBlurredFrame(frame);
+      await this._handleElementBlurredFrame(frame);
     } else if (frame instanceof WindowFocused) {
-      this._handleWindowFocusedFrame(frame);
+      await this._handleWindowFocusedFrame(frame);
     } else if (frame instanceof WindowBlurred) {
-      this._handleWindowBlurredFrame(frame);
+      await this._handleWindowBlurredFrame(frame);
     } else if (frame instanceof DomNodeResized) {
-      this._handleDomNodeResizedFrame(frame);
+      await this._handleDomNodeResizedFrame(frame);
     } else if (frame instanceof DomTextChanged) {
-      this._handleTextChangedFrame(frame);
+      await this._handleTextChangedFrame(frame);
     } else if (frame instanceof DomNodeAdded) {
-      this._handleNodeAddedFrame(frame);
+      await this._handleNodeAddedFrame(frame);
     } else if (frame instanceof DomNodeRemoved) {
-      this._handleNodeRemovedFrame(frame);
+      await this._handleNodeRemovedFrame(frame);
     } else if (frame instanceof DomAttributeChanged) {
-      this._handleAttributeChangedFrame(frame);
+      await this._handleAttributeChangedFrame(frame);
     } else if (frame instanceof DomAttributeRemoved) {
-      this._handleAttributeRemovedFrame(frame);
+      await this._handleAttributeRemovedFrame(frame);
     } else if (frame instanceof DomNodePropertyChanged) {
-      this._handleNodePropertyChangedFrame(frame);
+      await this._handleNodePropertyChangedFrame(frame);
     } else if (frame instanceof DomNodePropertyTextChanged) {
-      this._handleNodePropertyTextChangedFrame(frame);
+      await this._handleNodePropertyTextChangedFrame(frame);
     } else if (frame instanceof AdoptedStyleSheetsChanged) {
-      this._handleAdoptedStyleSheetsChangedFrame(frame);
-    } else if (frame instanceof NewAdoptedStyleSheet) {
-      this._handleAdoptedStyleSheetAddedFrame(frame);
+      await this._handleAdoptedStyleSheetsChangedFrame(frame);
+    } else if (frame instanceof StyleSheetRuleInserted) {
+      await this._handleStyleSheetRuleInsertedFrame(frame);
+    } else if (frame instanceof StyleSheetRuleDeleted) {
+      await this._handleStyleSheetRuleDeletedFrame(frame);
+    } else if (frame instanceof StyleSheetReplaced) {
+      await this._handleStyleSheetReplacedFrame(frame);
+    }
+    else if (frame instanceof NewAdoptedStyleSheet) {
+      await this._handleAdoptedStyleSheetAddedFrame(frame);
     } else if (frame instanceof ScrollOffsetChanged) {
-      this._handleWindowScrolledFrame(frame);
+      await this._handleWindowScrolledFrame(frame);
     } else if (frame instanceof ElementScrolled) {
-      this._handleElementScrolledFrame(frame);
+      await this._handleElementScrolledFrame(frame);
     } else if (frame instanceof MouseMoved) {
-      this._handleMouseMovedFrame(frame);
+      await this._handleMouseMovedFrame(frame);
     } else if (frame instanceof MouseClicked) {
-      this._handleMouseClickedFrame(frame);
+      await this._handleMouseClickedFrame(frame);
     } else if (frame instanceof TextSelectionChanged) {
-      this._handleTextSelectionChangedFrame(frame);
+      await this._handleTextSelectionChangedFrame(frame);
     } else if (frame instanceof CanvasChanged) {
-      this._handleCanvasChangedFrame(frame);
+      await this._handleCanvasChangedFrame(frame);
     } else {
       console.warn('Unhandled frame type:', frame.constructor.name);
+    }
+    } catch (error) {
+      console.error(`[PagePlayer] Error handling frame:`, error);
+      throw error;
     }
   }
   
@@ -203,7 +218,7 @@ export class PagePlayer {
     const targetDocNodeIdMap = new NodeIdBiMap();
     targetDocNodeIdMap.adoptNodesFromSubTree(this.targetDocument);
 
-    this.mutator = new DomMutator(targetDocNodeIdMap);
+    this.mutator = new DomMutator(targetDocNodeIdMap, this.assetManager);
 
     // Update the SelectionSimulator with the new NodeIdBiMap
     this.selectionSimulator = new SelectionSimulator(this.overlayElement, targetDocNodeIdMap, this.targetDocument);
@@ -348,7 +363,6 @@ export class PagePlayer {
     this.viewportWidth = frame.width;
     this.viewportHeight = frame.height;
     this._updateIframeSize();
-    console.debug('Viewport resized:', frame.width, 'x', frame.height);
   }
 
   private _handleKeyPressedFrame(frame: KeyPressed): void {
@@ -359,8 +373,6 @@ export class PagePlayer {
     if (this.viewportWidth > 0 && this.viewportHeight > 0) {
       this.targetIframe.style.width = `${this.viewportWidth}px`;
       this.targetIframe.style.height = `${this.viewportHeight}px`;
-
-      console.debug('Updated iframe size to:', this.viewportWidth, 'x', this.viewportHeight);
 
       // Notify player component to update scaling
       if (this.playerComponent && this.playerComponent.onViewportChanged) {
@@ -400,8 +412,27 @@ export class PagePlayer {
   }
 
   private _handleDomNodeResizedFrame(frame: DomNodeResized): void {
-    // Handle DOM node resize events
-    console.debug('DOM node resized:', frame.nodeId, frame.width, 'x', frame.height);
     // TODO: Implement node resize handling if needed (might involve ResizeObserver simulation)
+  }
+
+  private async _handleStyleSheetRuleInsertedFrame(frame: StyleSheetRuleInserted): Promise<void> {
+    // Check if the node exists before attempting to find the stylesheet
+    const node = this.mutator?.getElementByNodeId(frame.styleSheetId);
+    if (!node && frame.styleSheetId >= 0) {
+      // Only log for non-negative IDs (negative IDs are used for temporary nodes)
+      console.warn(
+        `[PagePlayer] StyleSheetRuleInserted frame for stylesheet ID ${frame.styleSheetId}, ` +
+        `but corresponding DOM node does not exist. This may indicate a missing DomNodeAdded frame.`
+      );
+    }
+    await this.styleSheetMutator.insertRule(frame.styleSheetId, frame.ruleIndex, frame.content);
+  }
+
+  private async _handleStyleSheetRuleDeletedFrame(frame: StyleSheetRuleDeleted): Promise<void> {
+    await this.styleSheetMutator.deleteRule(frame.styleSheetId, frame.ruleIndex);
+  }
+
+  private async _handleStyleSheetReplacedFrame(frame: StyleSheetReplaced): Promise<void> {
+    await this.styleSheetMutator.replaceSheet(frame.styleSheetId, frame.content);
   }
 }

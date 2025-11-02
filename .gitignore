@@ -163,6 +163,8 @@ dist
 
 .vscode-test
 
+.cursor/mcp.json
+
 # yarn v2
 
 .yarn/cache

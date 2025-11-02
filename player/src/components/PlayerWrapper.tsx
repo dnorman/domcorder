@@ -242,8 +242,7 @@ export const PlayerWrapper: React.FC<PlayerWrapperProps> = ({ recording }) => {
                     // Update progress
                     loadedBytes += value.length;
                     setProgress({ loaded: loadedBytes, total: totalBytes });
-
-                    console.log("Reading frame chunk from server", value.length);
+                    
                     frameChunkReader.read(value);
 
                 }

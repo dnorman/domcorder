@@ -17,6 +17,23 @@ export class NodeIdBiMap {
     delete (node as any)[NodeIdBiMap.NODE_ID_PROPERTY];
   }
 
+  /**
+   * Copies node IDs from source to target tree without updating any NodeIdBiMap.
+   * Useful for cloning nodes for operations without corrupting the map.
+   */
+  public static copyNodeIdsToSubTree(sourceNode: Node, targetNode: Node) {
+    const id = NodeIdBiMap.getNodeId(sourceNode);
+    if (id === undefined) {
+      throw new Error("Can not copy node IDs from node without an ID");
+    }
+
+    NodeIdBiMap.setNodeId(targetNode, id);
+
+    for (let i = 0; i < sourceNode.childNodes.length; i++) {
+      NodeIdBiMap.copyNodeIdsToSubTree(sourceNode.childNodes[i], targetNode.childNodes[i]);
+    }
+  }
+
   private readonly idToNodeMap;
   private maxNodeId: number;
 

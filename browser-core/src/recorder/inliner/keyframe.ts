@@ -8,7 +8,7 @@ import {
   snapshotNode
 } from "./inline";
 import type { Asset } from "./Asset";
-import { ensureStyleSheetId } from "../StyleSheetWatcher";
+import { ensureAdoptedStyleSheetId } from "../../common/StyleSheetIdUtils";
 
 export interface KeyFrameStartedEvent {
   document: VDocument;
@@ -109,7 +109,7 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, assetTrack
   if (doc.adoptedStyleSheets && doc.adoptedStyleSheets.length > 0) {
     for (let i = 0; i < doc.adoptedStyleSheets.length; i++) {
       const sheet = doc.adoptedStyleSheets[i];
-      ensureStyleSheetId(sheet);
+      ensureAdoptedStyleSheetId(sheet);
 
       // Skip the anti-animation stylesheet
       if (antiAnimationStylesheet && sheet === antiAnimationStylesheet) {
@@ -120,7 +120,7 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, assetTrack
         const rules = Array.from(sheet.cssRules);
         const text = rules.map(rule => rule.cssText).join('\n');
         adoptedStyleSheets.push(new VStyleSheet(
-          (sheet as any).__css_stylesheet_id__,
+          sheet.__adopted_stylesheet_id__!,
           text,
           sheet.media.mediaText || undefined
         ));

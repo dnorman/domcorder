@@ -178,10 +178,10 @@ export class PagePlayerComponent {
     const containerWidth = containerRect.width;
     const containerHeight = containerRect.height;
 
-    console.debug(`Container rect: ${containerWidth}x${containerHeight}`);
+    // console.debug(`Container rect: ${containerWidth}x${containerHeight}`);
 
     if (containerWidth === 0 || containerHeight === 0) {
-      console.debug('Container has zero dimensions, skipping scale update');
+      // console.debug('Container has zero dimensions, skipping scale update');
       return;
     }
 
@@ -189,10 +189,10 @@ export class PagePlayerComponent {
     const iframeWidth = this.iframe.offsetWidth || this.iframe.clientWidth;
     const iframeHeight = this.iframe.offsetHeight || this.iframe.clientHeight;
 
-    console.debug(`Iframe dimensions: ${iframeWidth}x${iframeHeight}`);
+    // console.debug(`Iframe dimensions: ${iframeWidth}x${iframeHeight}`);
 
     if (iframeWidth === 0 || iframeHeight === 0) {
-      console.debug('Iframe has zero dimensions, skipping scale update');
+      // console.debug('Iframe has zero dimensions, skipping scale update');
       return;
     }
 
@@ -201,7 +201,7 @@ export class PagePlayerComponent {
     const scaleY = containerHeight / iframeHeight;
     const scale = Math.min(scaleX, scaleY); // Scale to fit available space
 
-    console.debug(`Scale calculation: scaleX=${scaleX.toFixed(3)}, scaleY=${scaleY.toFixed(3)}, final scale=${scale.toFixed(3)}`);
+    // console.debug(`Scale calculation: scaleX=${scaleX.toFixed(3)}, scaleY=${scaleY.toFixed(3)}, final scale=${scale.toFixed(3)}`);
 
     this.currentScale = scale;
 
@@ -209,12 +209,12 @@ export class PagePlayerComponent {
     const playerContent = this.shadowRoot.querySelector('.player-content') as HTMLElement;
     if (playerContent) {
       playerContent.style.transform = `scale(${scale})`;
-      console.debug(`Applied transform: scale(${scale})`);
+      // console.debug(`Applied transform: scale(${scale})`);
     } else {
       console.debug('Could not find .player-content element');
     }
 
-    console.debug(`Scaled player: container=${containerWidth}x${containerHeight}, iframe=${iframeWidth}x${iframeHeight}, scale=${scale.toFixed(3)}`);
+    // console.debug(`Scaled player: container=${containerWidth}x${containerHeight}, iframe=${iframeWidth}x${iframeHeight}, scale=${scale.toFixed(3)}`);
   }
 
   // Method to be called by PagePlayer when viewport dimensions change

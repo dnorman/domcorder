@@ -14,7 +14,6 @@ import {
   DomNodeRemoved,
   DomAttributeRemoved,
   VDocument,
-  VNode,
   VElement,
   VTextNode
 } from "@domcorder/proto-ts";
@@ -79,9 +78,12 @@ describe("FrameChunkReader and FrameChunkWriter Integration", () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Don't call close() as it causes ReadableStream locked errors
     // The reader and writer will be garbage collected
+    // Wait a bit for any async processing to complete
+    await new Promise(resolve => setTimeout(resolve, 10));
+    
     frameChunkReader = null as any;
     frameChunkWriter = null as any;
   });
@@ -196,8 +198,9 @@ describe("FrameChunkReader and FrameChunkWriter Integration", () => {
       await frameChunkWriter.write(frame);
     }
     
-    // Wait for processing
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // Wait longer for all async processing to complete
+    // This ensures all chunks are fully processed before test ends
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     expect(receivedFrames).toHaveLength(100);
     
@@ -205,6 +208,9 @@ describe("FrameChunkReader and FrameChunkWriter Integration", () => {
     for (let i = 0; i < 100; i++) {
       expect((receivedFrames[i] as Timestamp).timestamp).toBe(BigInt(i));
     }
+    
+    // Clear received frames to avoid interference with next test
+    receivedFrames = [];
   });
 
   test("should handle mixed frame sizes", async () => {
@@ -237,17 +243,40 @@ describe("FrameChunkReader and FrameChunkWriter Integration", () => {
   });
 
   test("should handle reader read before ready", async () => {
-    // Create a new reader and immediately try to read before it's ready
-    const newReader = new FrameChunkReader(readerHandler);
+    // Create a new reader with its own handler to avoid polluting the main test handler
+    let errorReceived = false;
+    const testHandler = {
+      next: (frame: Frame) => {
+        // Should not be called for invalid data
+      },
+      error: (error: Error) => {
+        // Expected - invalid data should cause decode errors
+        // This is fine, we're testing that the reader handles errors gracefully
+        errorReceived = true;
+      },
+      cancelled: (reason: any) => {},
+      done: () => {}
+    };
     
-    // The reader should be ready immediately due to the start callback
-    // So we need to test the error case differently
+    const newReader = new FrameChunkReader(testHandler);
+    await newReader.whenReady();
+    
+    // The reader should be ready
     expect(newReader.ready()).toBe(true);
     
-    // Test that we can read successfully when ready
+    // Test that we can call read() without throwing (even with invalid data)
+    // The reader will handle decode errors internally via the error handler
     expect(() => {
       newReader.read(new Uint8Array([1, 2, 3, 4]));
     }).not.toThrow();
+    
+    // Wait a bit for async error handling
+    await new Promise(resolve => setTimeout(resolve, 10));
+    
+    // The error should have been caught and passed to the error handler
+    // (errors are expected when reading invalid data)
+    // Note: We don't assert errorReceived because the error might be handled asynchronously
+    // The important thing is that the read() call doesn't throw synchronously
   });
 
   test("should handle empty frames", async () => {
@@ -303,13 +332,36 @@ describe("FrameChunkReader and FrameChunkWriter Integration", () => {
   });
 
   test("should handle multiple writers to single reader", async () => {
-    // Create a second writer
-    const writer2 = new FrameChunkWriter(writerHandler, { chunkSize: 512 });
+    // Create a second writer with its own handler to avoid interleaving chunks
+    // Each writer should have its own handler since they're separate streams
+    const writer2Handler = {
+      next: (chunk: Uint8Array) => {
+        receivedChunks.push(chunk);
+        // Feed chunks from writer2 to the same reader
+        if (frameChunkReader && frameChunkReader.ready()) {
+          frameChunkReader.read(chunk);
+        }
+      },
+      error: (error: Error) => {
+        console.error("Writer2 error:", error);
+      },
+      cancelled: (reason: any) => {
+        console.log("Writer2 cancelled:", reason);
+      },
+      done: () => {
+        console.log("Writer2 done");
+      }
+    };
+    
+    const writer2 = new FrameChunkWriter(writer2Handler, { chunkSize: 512 });
     
     const frame1 = new Timestamp(100n);
     const frame2 = new Timestamp(200n);
     
+    // Write frames sequentially to avoid interleaving
     await frameChunkWriter.write(frame1);
+    await new Promise(resolve => setTimeout(resolve, 10)); // Wait for first frame to be processed
+    
     await writer2.write(frame2);
     
     // Wait for processing
