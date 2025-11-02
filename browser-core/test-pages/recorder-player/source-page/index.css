@@ -1,6 +1,7 @@
 :root {
   --red-color: red;
   --pink-color: pink;
+  --skyblue-color: skyblue;
 }
 
 body {
@@ -96,5 +97,8 @@ span.unicode:after {
   font-weight: bold;
 }
 
-
-
+.background-svg {
+  background: var(--skyblue-color) url(images/cloud.svg) no-repeat center center / cover; 
+  width: 75px; 
+  height: 75px;
+}
