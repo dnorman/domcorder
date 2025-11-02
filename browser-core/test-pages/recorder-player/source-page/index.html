@@ -43,8 +43,34 @@
       const removeButton = document.getElementById('remove-style-sheet-button');
       removeButton.disabled = true;
     }
-  </script>
 
+    function addDynamicStyleSheetRule() {
+      const dynamicStyleSheet = document.getElementById('dynamic-style-sheet');
+      dynamicStyleSheet.sheet.insertRule(`
+        .dynamic-style-sheet-rule {
+          background-color: skyblue;
+        }
+      `);
+
+      const addRuleButton = document.getElementById('add-style-sheet-rule-button');
+      addRuleButton.disabled = true;
+
+      const removeRuleButton = document.getElementById('remove-style-sheet-rule-button');
+      removeRuleButton.disabled = false;
+    }
+
+    function removeDynamicStyleSheetRule() {
+      const dynamicStyleSheet = document.getElementById('dynamic-style-sheet');
+      dynamicStyleSheet.sheet.deleteRule(0);
+
+      const addRuleButton = document.getElementById('add-style-sheet-rule-button');
+      addRuleButton.disabled = false;
+
+      const removeRuleButton = document.getElementById('remove-style-sheet-rule-button');
+      removeRuleButton.disabled = true;
+    }
+  </script>
+  <style id="dynamic-style-sheet"></style>
 </head>
 <body>
   
@@ -66,6 +92,16 @@
       <span>Add the additional adopted stylesheet to style this element.</span>
       <div></div>
     </div>
+  </div>
+
+  <h2>CSSOM Manipulation of Inline Style Tag</h2>
+  <div style="margin-bottom: 10px;">
+    <button id="add-style-sheet-rule-button" onclick="addDynamicStyleSheetRule()">Add Style Sheet Rule</button>
+    <button id="remove-style-sheet-rule-button" onclick="removeDynamicStyleSheetRule()" disabled>Remove Style Sheet Rule</button>
+  </div>
+  <div class="dynamic-style-sheet-rule">
+    <span>Add the additional adopted stylesheet to style this element.</span>
+    <div></div>
   </div>
 
   <h1>Fonts and Unicode</h1>

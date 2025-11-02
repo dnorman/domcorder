@@ -30,11 +30,15 @@ import {
   Timestamp,
   DomNodePropertyChanged,
   DomNodePropertyTextChanged,
-  CanvasChanged
+  CanvasChanged,
+  StyleSheetRuleDeleted,
+  StyleSheetRuleInserted,
+  StyleSheetReplaced
 } from "@domcorder/proto-ts";
 import { NodeIdBiMap } from "../common";
 import type { DomOperation } from "../common/DomOperation";
-import { getStyleSheetId, StyleSheetWatcher, type StyleSheetWatcherEvent } from "./StyleSheetWatcher";
+import { getAdoptedStyleSheetId } from "../common/StyleSheetIdUtils";
+import { StyleSheetWatcher, type StyleSheetWatcherEvent } from "./StyleSheetWatcher";
 import { inlineAdoptedStyleSheet, type InlineAdoptedStyleSheetEvent } from "./inliner/inlineAdoptedStyleSheet";
 import { AssetTracker } from "./inliner/AssetTracker";
 import { CanvasChangedCallback, CanvasChangedEvent, CanvasTracker } from "./CanvasTracker";
@@ -79,6 +83,7 @@ export class PageRecorder {
   }
 
   private async emitFrame(frame: Frame, timestamp: boolean = true) {
+    console.log(frame);
     if (timestamp) {
       this.emitTimestampFrame();
     }
@@ -112,23 +117,44 @@ export class PageRecorder {
       this.assetTracker
     );
 
-    this.changeDetector = new DomChangeDetector(this.sourceDocument, this.sourceDocNodeIdMap, async (operations) => {
-      if (operations.length > 0) {
-        this.emitTimestampFrame();
-  
-        for (const operation of operations) {
-          await this.processOperation(operation, this.sourceDocNodeIdMap!);
-        }
-      }    
-    }, 500);
+    this.changeDetector = new DomChangeDetector(
+      this.sourceDocument,
+      this.sourceDocNodeIdMap,
+      async (operations) => {
+        if (operations.length > 0) {
+          // Collect all nodes from insert operations before processing
+          // These are nodes that have been assigned IDs by DomChangeDetector but haven't been emitted yet
+          // NOTE: This could be optimized by collecting nodes during operation creation in DomChangeDetector
+          const pendingNewNodes = this.collectNodesFromInsertOperations(operations, this.sourceDocNodeIdMap!);
+          if (pendingNewNodes.size > 0) {
+            this.styleSheetWatcher?.addPendingNewNodes(pendingNewNodes);
+          }
+          
+          this.emitTimestampFrame();
+      
+          for (const operation of operations) {
+            await this.processOperation(operation, this.sourceDocNodeIdMap!);
+          }
+        }    
+      },
+      500,
+      true  // Enable immediate processing to ensure DomNodeAdded frames are emitted before stylesheet mutations
+    );
 
     this.styleSheetWatcher = new StyleSheetWatcher({
       patchCSSOM: true,
       root: this.sourceDocument,
-      handler: this.createStyleSheetHandler()
+      handler: this.createStyleSheetHandler(),
+      nodeIdMap: this.sourceDocNodeIdMap
     });
 
     this.styleSheetWatcher.start();
+
+    // Mark all nodes from the keyframe as already emitted
+    // (they exist in the initial DOM snapshot, so no DomNodeAdded frames will be emitted for them)
+    const allInitialNodes: Node[] = [];
+    this.collectNodesFromDocumentRecursive(this.sourceDocument, allInitialNodes);
+    this.styleSheetWatcher.markSubtreeEmitted(allInitialNodes);
 
     this.canvasTracker = new CanvasTracker(this.createCanvasHandler(), this.sourceDocNodeIdMap, {
       watch2D: true,
@@ -202,6 +228,95 @@ export class PageRecorder {
     this.emitFrame(frame, false);
   }
 
+  /**
+   * Recursively collects all node IDs from a VNode tree
+   */
+  private collectNodeIds(vNode: any, nodeIds: number[]): void {
+    if (vNode && typeof vNode.id === 'number') {
+      nodeIds.push(vNode.id);
+    }
+    if (vNode.children) {
+      for (const child of vNode.children) {
+        this.collectNodeIds(child, nodeIds);
+      }
+    }
+    if (vNode.shadow) {
+      for (const shadowChild of vNode.shadow) {
+        this.collectNodeIds(shadowChild, nodeIds);
+      }
+    }
+  }
+
+  /**
+   * Recursively collects all node IDs from the live DOM document
+   */
+  private collectNodeIdsFromDocument(node: Node, nodeIds: number[]): void {
+    const nodeId = this.sourceDocNodeIdMap?.getNodeId(node);
+    if (nodeId !== undefined) {
+      nodeIds.push(nodeId);
+    }
+    for (const child of Array.from(node.childNodes)) {
+      this.collectNodeIdsFromDocument(child, nodeIds);
+    }
+  }
+
+  /**
+   * Recursively collects all nodes from the live DOM document
+   */
+  private collectNodesFromDocumentRecursive(node: Node, nodes: Node[]): void {
+    nodes.push(node);
+    for (const child of Array.from(node.childNodes)) {
+      this.collectNodesFromDocumentRecursive(child, nodes);
+    }
+  }
+
+  /**
+   * Recursively collects all nodes from a subtree (starting from a cloned node with IDs).
+   * Resolves each node ID to the corresponding live DOM node.
+   * 
+   * @param clonedNode The cloned node (from operation) that has IDs
+   * @param nodeIdMap The NodeIdBiMap to resolve IDs to live nodes
+   * @param nodes Set to collect the live nodes into
+   */
+  private collectNodesFromClonedNode(clonedNode: Node, nodeIdMap: NodeIdBiMap, nodes: Set<Node>): void {
+    const nodeId = NodeIdBiMap.getNodeId(clonedNode);
+    if (nodeId !== undefined) {
+      const liveNode = nodeIdMap.getNodeById(nodeId);
+      if (liveNode) {
+        nodes.add(liveNode);
+      }
+    }
+    
+    // Recursively collect all child nodes
+    for (const child of Array.from(clonedNode.childNodes)) {
+      this.collectNodesFromClonedNode(child, nodeIdMap, nodes);
+    }
+  }
+
+  /**
+   * Collects all nodes from insert operations.
+   * These are nodes that have been assigned IDs by DomChangeDetector but haven't been emitted yet.
+   * 
+   * NOTE: This could be optimized by collecting nodes during operation creation in DomChangeDetector,
+   * but for now we traverse the operations after creation.
+   * 
+   * @param operations Array of operations from DomChangeDetector
+   * @param nodeIdMap The NodeIdBiMap to resolve IDs to live nodes
+   * @returns Set of live DOM nodes from insert operations
+   */
+  private collectNodesFromInsertOperations(operations: DomOperation[], nodeIdMap: NodeIdBiMap): Set<Node> {
+    const nodes = new Set<Node>();
+    
+    for (const operation of operations) {
+      if (operation.op === 'insert') {
+        // Collect all nodes from the subtree (recursively)
+        this.collectNodesFromClonedNode(operation.node, nodeIdMap, nodes);
+      }
+    }
+    
+    return nodes;
+  }
+
   private async processOperation(
     operation: DomOperation,
     nodeIdMap: NodeIdBiMap
@@ -212,6 +327,13 @@ export class PageRecorder {
           onInlineStarted: async (ev: InlineStartedEvent) => {
             const frame = new DomNodeAdded(operation.parentId, operation.index, ev.node);
             await this.emitFrame(frame, false);
+            
+            // Mark all nodes in this subtree as emitted so queued stylesheet mutations can be flushed
+            // Collect the actual live DOM nodes from the cloned node (which has IDs)
+            // Note: ev.node is a VNode, but operation.node is the actual DOM Node with IDs
+            const nodesSet = new Set<Node>();
+            this.collectNodesFromClonedNode(operation.node, nodeIdMap, nodesSet);
+            this.styleSheetWatcher?.markSubtreeEmitted(Array.from(nodesSet));
           },
           onAsset: async (asset: InlinerAsset) => {
             const frame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
@@ -223,6 +345,12 @@ export class PageRecorder {
       case "remove":
         const removeFrame = new DomNodeRemoved(operation.nodeId);
         await this.emitFrame(removeFrame, false);
+        // Clean up stylesheet watcher tracking for this node
+        // Resolve nodeId to live node
+        const removedNode = nodeIdMap.getNodeById(operation.nodeId);
+        if (removedNode) {
+          this.styleSheetWatcher?.markNodeRemoved(removedNode);
+        }
         break;
 
       case "updateAttribute":
@@ -329,7 +457,7 @@ export class PageRecorder {
     return async (event: StyleSheetWatcherEvent) => {
       if (event.type === 'adopted-style-sheets') {
         const frame = new AdoptedStyleSheetsChanged(
-          event.now.map(sheet => getStyleSheetId(sheet)),
+          event.now.map(sheet => getAdoptedStyleSheetId(sheet)),
           event.added.length
         );
         await this.emitFrame(frame);
@@ -346,6 +474,15 @@ export class PageRecorder {
             }
           });
         }
+      } else if (event.type === 'sheet-rules-insert') {
+        const frame = new StyleSheetRuleInserted(event.sheetId, event.index!, event.rule);
+        this.emitFrame(frame);
+      } else if (event.type === 'sheet-rules-delete') {
+        const frame = new StyleSheetRuleDeleted(event.sheetId, event.index);
+        this.emitFrame(frame);
+      } else if (event.type === 'sheet-rules-replace') {
+        const frame = new StyleSheetReplaced(event.sheetId, event.text);
+        this.emitFrame(frame);
       }
     };
   }

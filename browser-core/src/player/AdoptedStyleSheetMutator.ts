@@ -1,8 +1,8 @@
 import type { VStyleSheet } from "@domcorder/proto-ts";
-import { getStyleSheetId, setStyleSheetId } from "../recorder/StyleSheetWatcher";
+import { getAdoptedStyleSheetId, setAdoptedStyleSheetId } from "../common/StyleSheetIdUtils";
 import type { AssetManager } from "./AssetManager";
 
-export class AdoptedStyleSheetMutator {
+export class AdoptedStyleSheetsMutator {
   private readonly targetDocument: Document;
   private readonly assetManager: AssetManager;
   constructor(targetDocument: Document, assetManager: AssetManager) {
@@ -13,7 +13,7 @@ export class AdoptedStyleSheetMutator {
   updateAdoptedStyleSheets(styleSheetIds: number[]): void {
     const map = new Map<number, CSSStyleSheet>();
     for (const existingSheet of this.targetDocument.adoptedStyleSheets) {
-      map.set(getStyleSheetId(existingSheet), existingSheet);
+      map.set(getAdoptedStyleSheetId(existingSheet), existingSheet);
     }
 
     const newStyleSheetsIds = styleSheetIds.filter(id => !map.has(id)!);
@@ -21,7 +21,7 @@ export class AdoptedStyleSheetMutator {
     for (const newSheetId of newStyleSheetsIds) {
       const targetWindow = this.targetDocument.defaultView!;
       const newStyleSheet = new targetWindow.CSSStyleSheet();
-      setStyleSheetId(newStyleSheet, newSheetId);
+      setAdoptedStyleSheetId(newStyleSheet, newSheetId);
       map.set(newSheetId, newStyleSheet);
     }
     const newAdoptedStyleSheets = styleSheetIds.map(id => map.get(id)!);
@@ -29,7 +29,7 @@ export class AdoptedStyleSheetMutator {
   }
 
   public receiveAdoptedStyleSheet(styleSheet: VStyleSheet): void {
-    const targetSheet = this.targetDocument.adoptedStyleSheets.find(sheet => getStyleSheetId(sheet) === styleSheet.id);
+    const targetSheet = this.targetDocument.adoptedStyleSheets.find(sheet => getAdoptedStyleSheetId(sheet) === styleSheet.id);
     if (targetSheet) {
       this.assetManager.bindAssetsToStyleSheet(targetSheet, styleSheet.text);
       if (styleSheet.media) {

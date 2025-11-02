@@ -1,9 +1,7 @@
 import { NodeIdBiMap } from '../common/NodeIdBiMap';
 import type { VDocument, VNode, VElement, VTextNode, VCDATASection, VComment, VProcessingInstruction, VDocumentType, VStyleSheet } from '@domcorder/proto-ts';
 import { AssetManager } from './AssetManager';
-import { setStyleSheetId } from '../recorder/StyleSheetWatcher';
-
-const ASSET_CONTAINING_ATTRIBUTES = ['src', 'href', 'poster', 'xlink:href', 'data-src', 'srcset', 'style'];
+import { setAdoptedStyleSheetId, ASSET_CONTAINING_ATTRIBUTES } from '../common';
 
 /**
  * DomMaterializer recreates an HTML document from a VDocument and associated assets.
@@ -83,11 +81,7 @@ export class DomMaterializer {
     // Set attributes
     if (vElement.attrs) {
       for (const [property, value] of Object.entries(vElement.attrs)) {
-        element.setAttribute(property, value);
-
-        if (ASSET_CONTAINING_ATTRIBUTES.includes(property)) {
-          this.assetManager.findAndBindAssetToElementProperty(element, property);
-        }
+        this.assetManager.findAndBindAssetToElementProperty(element, property, value);
       }
     }
 
@@ -187,7 +181,7 @@ export class DomMaterializer {
       // Create a new stylesheet using CSSOM API
       const targetWindow = this.document.defaultView!;
       const stylesheet = new targetWindow.CSSStyleSheet();
-      setStyleSheetId(stylesheet, sheet.id);
+      setAdoptedStyleSheetId(stylesheet, sheet.id);
 
       this.assetManager.bindAssetsToStyleSheet(stylesheet, sheet.text);
       

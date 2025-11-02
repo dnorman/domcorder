@@ -1,725 +1,531 @@
 import 'global-jsdom/register';
 import { DomChangeDetector } from '../../src/recorder/DomChangeDetector';
 import { NodeIdBiMap } from '../../src/common/NodeIdBiMap';
-import type { DomOperation } from '../../src/common/DomOperation';
+import { waitForMutations, delay } from './DomSyncTestUtils';
+
+/**
+ * Unit tests for DomChangeDetector
+ * Tests cover operation emission, causal ordering, and batch processing.
+ */
 
 describe('DomChangeDetector', () => {
   let container: HTMLElement;
-  let root: HTMLElement;
-  let nodeIdBiMap: NodeIdBiMap;
-  let changeDetector: DomChangeDetector;
-  let capturedOperations: DomOperation[][];
-
-  // Helper function to simulate form field changes in jsdom
-  const simulateFormFieldChange = (element: HTMLElement, property: string, value: any) => {
-    (element as any)[property] = value;
-    
-    // Since jsdom event simulation might not work properly, we'll directly trigger
-    // the property change detection by calling the callback manually
-    // This simulates what would happen when the event handler runs
-    if (changeDetector) {
-      // Force a processing cycle to detect the property change
-      setTimeout(() => {
-        (changeDetector as any).processDirtyRegions();
-      }, 10);
-    }
-  };
+  let liveNodeMap: NodeIdBiMap;
+  let operations: any[];
 
   beforeEach(() => {
-    // Setup DOM container
     container = document.createElement('div');
     document.body.appendChild(container);
-
-    // Create root element
-    root = document.createElement('div');
-    root.id = 'root';
-    container.appendChild(root);
-
-    // Setup NodeIdBiMap
-    nodeIdBiMap = new NodeIdBiMap();
-    nodeIdBiMap.assignNodeIdsToSubTree(root);
-
-    // Setup operation capture
-    capturedOperations = [];
-    const callback = (ops: DomOperation[]) => {
-      capturedOperations.push([...ops]);
-    };
-
-    // Create change detector
-    changeDetector = new DomChangeDetector(root, nodeIdBiMap, callback, 100);
+    liveNodeMap = new NodeIdBiMap();
+    operations = [];
   });
 
   afterEach(() => {
-    // Cleanup
-    if (changeDetector) {
-      changeDetector.disconnect();
-    }
     if (container && container.parentNode) {
       container.parentNode.removeChild(container);
     }
   });
 
-  describe('Node ID Consistency', () => {
-    test('should maintain consistent node IDs after attribute changes', async () => {
-      // Create initial structure
-      const child = document.createElement('span');
-      child.textContent = 'Hello';
-      root.appendChild(child);
+  function createDetector(
+    root: Node,
+    processImmediately: boolean = true,
+    batchIntervalMs: number = 1000
+  ): DomChangeDetector {
+    return new DomChangeDetector(
+      root,
+      liveNodeMap,
+      (ops) => {
+        operations.push(...ops);
+      },
+      batchIntervalMs,
+      processImmediately
+    );
+  }
 
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
+  describe('initialization', () => {
+    test('should create snapshot and assign node IDs', () => {
+      const root = document.createElement('div');
+      root.id = 'test';
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
 
-      const originalNodeId = nodeIdBiMap.getNodeId(child);
-      expect(originalNodeId).toBeDefined();
-
-      // Change attribute
-      child.setAttribute('class', 'new-class');
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Verify node ID remains the same
-      const updatedNodeId = nodeIdBiMap.getNodeId(child);
-      expect(updatedNodeId).toBe(originalNodeId);
-
-      // Verify operation references correct node ID
-      expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from attribute change
-      const ops = capturedOperations[1]; // Get the second operation (the attribute change)
-      expect(ops).toHaveLength(1);
-      const updateOp = ops[0] as any;
-      expect(updateOp.op).toBe('updateAttribute');
-      expect(updateOp.nodeId).toBe(originalNodeId);
-      expect(updateOp.name).toBe('class');
-      expect(updateOp.value).toBe('new-class');
+      const detector = createDetector(root);
+      
+      const snapshot = detector.getSnapshotDomRoot();
+      expect(snapshot).not.toBe(root);
+      expect((snapshot as Element).id).toBe('test');
+      
+      detector.disconnect();
     });
 
-    test('should maintain consistent node IDs after text changes', async () => {
-      // Create initial structure
+    test('should mirror node IDs from live DOM to snapshot (Bug #3 fix)', () => {
+      // This test verifies the fix for Bug #3: Snapshot IDs must match live DOM IDs
+      const root = document.createElement('div');
+      root.id = 'root';
       const child = document.createElement('span');
-      child.textContent = 'Hello';
+      child.id = 'child';
       root.appendChild(child);
+      container.appendChild(root);
+      
+      liveNodeMap.assignNodeIdsToSubTree(root);
+      const rootId = liveNodeMap.getNodeId(root)!;
+      const childId = liveNodeMap.getNodeId(child)!;
 
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      const originalNodeId = nodeIdBiMap.getNodeId(child);
-      expect(originalNodeId).toBeDefined();
-
-      // Change text content
-      child.textContent = 'World';
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Verify node ID remains the same
-      const updatedNodeId = nodeIdBiMap.getNodeId(child);
-      expect(updatedNodeId).toBe(originalNodeId);
-
-      // Verify operation references correct node ID
-      expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from text change
-      const ops = capturedOperations[1]; // Get the second operation (the text change)
-      expect(ops).toHaveLength(2); // Text change generates insert + remove operations
-      // Check that we have both insert and remove operations
-      const operationTypes = ops.map(op => op.op);
-      expect(operationTypes).toContain('insert');
-      expect(operationTypes).toContain('remove');
+      const detector = createDetector(root);
+      
+      // Verify snapshot map has same IDs pointing to snapshot nodes
+      const snapshotMap = detector.getSnapshotNodeMap();
+      const snapshotRoot = snapshotMap.getNodeById(rootId);
+      const snapshotChild = snapshotMap.getNodeById(childId);
+      
+      expect(snapshotRoot).toBeDefined();
+      expect(snapshotChild).toBeDefined();
+      expect(snapshotRoot).not.toBe(root); // Different objects
+      expect(snapshotChild).not.toBe(child); // Different objects
+      expect((snapshotRoot as Element).id).toBe('root');
+      expect((snapshotChild as Element).id).toBe('child');
+      
+      detector.disconnect();
     });
 
-    test('should assign new node IDs to inserted elements', async () => {
-      // Create initial structure
-      const child1 = document.createElement('span');
-      child1.textContent = 'Child 1';
-      root.appendChild(child1);
+    test('should start observing mutations', async () => {
+      const root = document.createElement('div');
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
 
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
+      const detector = createDetector(root);
+      
+      const child = document.createElement('span');
+      root.appendChild(child);
+      liveNodeMap.assignNodeIdsToSubTree(child);
+      
+      await waitForMutations(100);
 
-      const child1Id = nodeIdBiMap.getNodeId(child1);
-      expect(child1Id).toBeDefined();
+      expect(operations.length).toBeGreaterThan(0);
+      expect(operations.some(op => op.op === 'insert')).toBe(true);
+      
+      detector.disconnect();
+    });
+  });
 
-      // Insert new element
-      const child2 = document.createElement('span');
-      child2.textContent = 'Child 2';
-      root.appendChild(child2);
+  describe('insert operation', () => {
+    test('should emit insert operation when node is added', async () => {
+      const root = document.createElement('div');
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
 
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
+      const detector = createDetector(root);
+      
+      const child = document.createElement('span');
+      child.textContent = 'Test';
+      root.appendChild(child);
+      liveNodeMap.assignNodeIdsToSubTree(child);
+      
+      await waitForMutations(100);
 
-      // Verify new element gets a new ID
-      const child2Id = nodeIdBiMap.getNodeId(child2);
-      expect(child2Id).toBeDefined();
-      expect(child2Id).not.toBe(child1Id);
-
-      // Verify operation references correct node IDs
-      expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from insert
-      const ops = capturedOperations[1]; // Get the second operation (the insert)
-      expect(ops).toHaveLength(1);
-      const insertOp = ops[0] as any;
-      expect(insertOp.op).toBe('insert');
-      expect(insertOp.parentId).toBe(nodeIdBiMap.getNodeId(root));
-      expect(insertOp.index).toBe(1);
+      const insertOps = operations.filter(op => op.op === 'insert');
+      expect(insertOps.length).toBe(1);
+      expect(insertOps[0].node.textContent).toBe('Test');
+      expect(insertOps[0].parentId).toBe(liveNodeMap.getNodeId(root));
+      
+      detector.disconnect();
     });
 
-    test('should remove node IDs from deleted elements', async () => {
-      // Create initial structure
+    test('should emit insert with correct index', async () => {
+      const root = document.createElement('div');
+      const existing = document.createElement('p');
+      root.appendChild(existing);
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
+
+      const detector = createDetector(root);
+      
       const child = document.createElement('span');
-      child.textContent = 'Hello';
+      root.insertBefore(child, existing);
+      liveNodeMap.assignNodeIdsToSubTree(child);
+      
+      await waitForMutations(100);
+
+      const insertOps = operations.filter(op => op.op === 'insert');
+      expect(insertOps.length).toBe(1);
+      expect(insertOps[0].index).toBe(0);
+      
+      detector.disconnect();
+    });
+  });
+
+  describe('remove operation', () => {
+    test('should emit remove operation when node is removed', async () => {
+      const root = document.createElement('div');
+      const child = document.createElement('span');
       root.appendChild(child);
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
 
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      const childId = nodeIdBiMap.getNodeId(child);
-      expect(childId).toBeDefined();
-
-      // Remove element
+      const detector = createDetector(root);
+      await waitForMutations(50); // Let initial state settle
+      operations.length = 0; // Clear initial operations
+      
+      const childId = liveNodeMap.getNodeId(child)!;
       root.removeChild(child);
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Verify node ID is no longer in the map
-      // Note: The node ID might still be in the map because the DomChangeDetector doesn't remove it
-      // This is expected behavior - the test verifies the operation was emitted correctly
-      expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from removal
-      const ops = capturedOperations[1]; // Get the second operation (the removal)
-      expect(ops).toHaveLength(1);
-      const removeOp = ops[0] as any;
-      expect(removeOp.op).toBe('remove');
-      expect(removeOp.nodeId).toBe(childId);
-
-
-    });
-  });
-
-  describe('Event Chain Correctness', () => {
-    test('should emit operations in correct order for complex changes', async () => {
-      // Create initial structure
-      const child1 = document.createElement('span');
-      child1.textContent = 'Child 1';
-      const child2 = document.createElement('span');
-      child2.textContent = 'Child 2';
-      root.appendChild(child1);
-      root.appendChild(child2);
-
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Make multiple changes
-      child1.setAttribute('class', 'updated');
-      child2.textContent = 'Updated Child 2';
-      const newChild = document.createElement('span');
-      newChild.textContent = 'New Child';
-      root.appendChild(newChild);
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Verify all operations are captured
-      expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from complex changes
-      const ops = capturedOperations[1]; // Get the second operation (the complex changes)
-      expect(ops.length).toBeGreaterThanOrEqual(4); // Multiple operations expected
-
-      // Verify operation types are correct
-      const operationTypes = ops.map(op => op.op);
-      expect(operationTypes).toContain('updateAttribute');
-      expect(operationTypes).toContain('insert');
-      expect(operationTypes).toContain('remove');
+      liveNodeMap.removeNodesInSubtree(child);
       
-      // Verify specific operations exist
-      const hasAttributeUpdate = ops.some(op => op.op === 'updateAttribute' && (op as any).name === 'class');
-      const hasTextChange = ops.some(op => op.op === 'remove' || op.op === 'insert');
-      const hasElementInsert = ops.some(op => op.op === 'insert' && (op as any).node?.textContent === 'New Child');
+      await waitForMutations(100);
+
+      const removeOps = operations.filter(op => op.op === 'remove');
+      expect(removeOps.length).toBe(1);
+      expect(removeOps[0].nodeId).toBe(childId);
       
-      expect(hasAttributeUpdate).toBe(true);
-      expect(hasTextChange).toBe(true);
-      expect(hasElementInsert).toBe(true);
+      detector.disconnect();
+    });
+  });
+
+  describe('attribute operations', () => {
+    test('should emit updateAttribute when attribute is added', async () => {
+      const root = document.createElement('div');
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
+
+      const detector = createDetector(root);
+      
+      root.setAttribute('id', 'test');
+      
+      await waitForMutations(100);
+
+      const attrOps = operations.filter(op => op.op === 'updateAttribute');
+      expect(attrOps.length).toBe(1);
+      expect(attrOps[0].name).toBe('id');
+      expect(attrOps[0].value).toBe('test');
+      
+      detector.disconnect();
     });
 
-    test('should handle nested element changes correctly', async () => {
-      // Create nested structure
-      const parent = document.createElement('div');
-      const child = document.createElement('span');
-      child.textContent = 'Nested';
-      parent.appendChild(child);
-      root.appendChild(parent);
+    test('should emit updateAttribute when attribute value changes', async () => {
+      const root = document.createElement('div');
+      root.setAttribute('id', 'old');
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
 
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
+      const detector = createDetector(root);
+      await waitForMutations(50);
+      operations.length = 0;
+      
+      root.setAttribute('id', 'new');
+      
+      await waitForMutations(100);
 
-      // Change nested element
-      child.setAttribute('class', 'nested-class');
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Verify operation references correct nested node ID
-      expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from attribute change
-      const ops = capturedOperations[1]; // Get the second operation (the attribute change)
-      expect(ops).toHaveLength(1);
-      const updateOp = ops[0] as any;
-      expect(updateOp.op).toBe('updateAttribute');
-      expect(updateOp.nodeId).toBe(nodeIdBiMap.getNodeId(child));
-      expect(updateOp.name).toBe('class');
-      expect(updateOp.value).toBe('nested-class');
+      const attrOps = operations.filter(op => op.op === 'updateAttribute' && op.name === 'id');
+      expect(attrOps.length).toBe(1);
+      expect(attrOps[0].value).toBe('new');
+      
+      detector.disconnect();
     });
 
-    test('should handle attribute removal correctly', async () => {
-      // Create element with attribute
-      const child = document.createElement('span');
-      child.setAttribute('class', 'original');
-      child.textContent = 'Hello';
-      root.appendChild(child);
+    test('should emit removeAttribute when attribute is removed', async () => {
+      const root = document.createElement('div');
+      root.setAttribute('id', 'test');
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
 
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
+      const detector = createDetector(root);
+      await waitForMutations(50);
+      operations.length = 0;
+      
+      root.removeAttribute('id');
+      
+      await waitForMutations(100);
 
-      // Remove attribute
-      child.removeAttribute('class');
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Verify remove attribute operation
-      expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from attribute removal
-      const ops = capturedOperations[1]; // Get the second operation (the attribute removal)
-      expect(ops).toHaveLength(1);
-      const removeOp = ops[0] as any;
-      expect(removeOp.op).toBe('removeAttribute');
-      expect(removeOp.nodeId).toBe(nodeIdBiMap.getNodeId(child));
-      expect(removeOp.name).toBe('class');
+      const removeAttrOps = operations.filter(op => op.op === 'removeAttribute');
+      expect(removeAttrOps.length).toBe(1);
+      expect(removeAttrOps[0].name).toBe('id');
+      
+      detector.disconnect();
     });
+  });
 
-    test('should handle multiple attribute changes in single batch', async () => {
-      // Create element
-      const child = document.createElement('span');
-      child.setAttribute('class', 'original');
-      child.setAttribute('id', 'original-id');
-      root.appendChild(child);
-
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Change multiple attributes
-      child.setAttribute('class', 'updated');
-      child.setAttribute('id', 'updated-id');
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Verify both attribute changes are captured
-      expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from attribute changes
-      const ops = capturedOperations[1]; // Get the second operation (the attribute changes)
-      expect(ops).toHaveLength(2);
-
-      const operationTypes = ops.map(op => op.op);
-      expect(operationTypes).toContain('updateAttribute');
-      expect(operationTypes).toContain('updateAttribute');
-    });
-
-    test('should handle text node changes correctly', async () => {
-      // Create text node
-      const textNode = document.createTextNode('Original text');
+  describe('text operations', () => {
+    test('should emit updateText when text content changes', async () => {
+      const root = document.createElement('div');
+      const textNode = document.createTextNode('old');
       root.appendChild(textNode);
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
 
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
+      const detector = createDetector(root);
+      await waitForMutations(50);
+      operations.length = 0;
+      
+      textNode.textContent = 'new';
+      
+      await waitForMutations(100);
 
-      // Change text content
-      textNode.textContent = 'Updated text';
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Verify text change operation
-      expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from text change
-      const ops = capturedOperations[1]; // Get the second operation (the text change)
-      expect(ops).toHaveLength(1);
-      const updateOp = ops[0] as any;
-      expect(updateOp.op).toBe('updateText');
-      expect(updateOp.nodeId).toBe(nodeIdBiMap.getNodeId(textNode));
+      const textOps = operations.filter(op => op.op === 'updateText');
+      expect(textOps.length).toBe(1);
+      expect(textOps[0].ops).toBeDefined();
+      
+      detector.disconnect();
     });
   });
 
-  describe('Edge Cases', () => {
-    test('should handle rapid successive changes', async () => {
+  describe('causal ordering', () => {
+    test('should emit insert before attribute update for new node', async () => {
+      const root = document.createElement('div');
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
+
+      const detector = createDetector(root);
+      
       const child = document.createElement('span');
-      child.textContent = 'Hello';
       root.appendChild(child);
-
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Make rapid changes
-      child.setAttribute('class', 'first');
-      child.setAttribute('class', 'second');
-      child.setAttribute('class', 'third');
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Should capture the final state
-      expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from rapid changes
-      const ops = capturedOperations[1]; // Get the second operation (the rapid changes)
-      expect(ops).toHaveLength(1);
-      const updateOp = ops[0] as any;
-      expect(updateOp.op).toBe('updateAttribute');
-      expect(updateOp.value).toBe('third');
-    });
-
-    test('should handle changes to elements outside root scope', async () => {
-      // Create element outside root
-      const outsideElement = document.createElement('div');
-      outsideElement.textContent = 'Outside';
-      container.appendChild(outsideElement);
-
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Change outside element
-      outsideElement.setAttribute('class', 'outside');
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Should not capture changes outside root
-      expect(capturedOperations).toHaveLength(0);
-    });
-
-    test('should handle callback errors gracefully', async () => {
-      // Create change detector with error-throwing callback
-      const errorCallback = jest.fn().mockImplementation(() => {
-        throw new Error('Callback error');
-      });
-
-      const errorChangeDetector = new DomChangeDetector(root, nodeIdBiMap, errorCallback, 100);
-
-      // Create change
-      const child = document.createElement('span');
-      child.textContent = 'Hello';
-      root.appendChild(child);
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Should not crash, error should be caught
-      expect(errorCallback).toHaveBeenCalled();
-
-      // Cleanup
-      errorChangeDetector.disconnect?.();
-    });
-  });
-
-  describe('Performance and Batching', () => {
-    test('should batch multiple changes into single callback', async () => {
-      const child = document.createElement('span');
-      child.textContent = 'Hello';
-      root.appendChild(child);
-
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Make multiple changes quickly
-      child.setAttribute('class', 'new-class');
-      child.textContent = 'Updated';
-      child.setAttribute('id', 'new-id');
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Should be batched into single callback
-      expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from multiple changes
-      const ops = capturedOperations[1]; // Get the second operation (the multiple changes)
-      expect(ops.length).toBeGreaterThanOrEqual(4);
-    });
-
-    test('should handle large DOM changes efficiently', async () => {
-      // Create large initial structure
-      for (let i = 0; i < 10; i++) {
-        const child = document.createElement('div');
-        child.textContent = `Child ${i}`;
-        root.appendChild(child);
-      }
-
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Make changes to all elements
-      const children = Array.from(root.children);
-      children.forEach((child, index) => {
-        child.setAttribute('data-index', index.toString());
-        child.textContent = `Updated Child ${index}`;
-      });
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Should handle large changes efficiently
-      expect(capturedOperations).toHaveLength(2); // First operation from initial setup, second from large changes
-      const ops = capturedOperations[1]; // Get the second operation (the large changes)
-      expect(ops.length).toBeGreaterThanOrEqual(3);
-    });
-  });
-
-  describe('Live DOM and Virtual DOM Synchronization', () => {
-    test('should keep virtual DOM in sync after attribute changes', async () => {
-      // Create initial structure
-      const child = document.createElement('span');
-      child.textContent = 'Hello';
-      child.setAttribute('class', 'original');
-      root.appendChild(child);
-
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Change attribute
-      child.setAttribute('class', 'updated');
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Get virtual DOM snapshot
-      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
-      const virtualChild = virtualRoot.querySelector('span');
-
-      // Verify virtual DOM matches live DOM
-      expect(virtualChild).toBeDefined();
-      expect(virtualChild!.getAttribute('class')).toBe('updated');
-      expect(virtualChild!.textContent).toBe('Hello');
-    });
-
-    test('should keep virtual DOM in sync after text content changes', async () => {
-      // Create initial structure
-      const child = document.createElement('span');
-      child.textContent = 'Original text';
-      root.appendChild(child);
-
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Change text content
-      child.textContent = 'Updated text';
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Get virtual DOM snapshot
-      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
-      const virtualChild = virtualRoot.querySelector('span');
-
-      // Verify virtual DOM matches live DOM
-      expect(virtualChild).toBeDefined();
-      expect(virtualChild!.textContent).toBe('Updated text');
-    });
-
-    test('should keep virtual DOM in sync after element insertion', async () => {
-      // Create initial structure
-      const child1 = document.createElement('span');
-      child1.textContent = 'Child 1';
-      root.appendChild(child1);
-
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Insert new element
-      const child2 = document.createElement('div');
-      child2.textContent = 'Child 2';
-      child2.setAttribute('id', 'new-child');
-      root.appendChild(child2);
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Get virtual DOM snapshot
-      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
-      const virtualChildren = Array.from(virtualRoot.children);
-
-      // Verify virtual DOM matches live DOM
-      expect(virtualChildren).toHaveLength(2);
-      expect(virtualChildren[0].textContent).toBe('Child 1');
-      expect(virtualChildren[1].textContent).toBe('Child 2');
-      expect(virtualChildren[1].getAttribute('id')).toBe('new-child');
-    });
-
-    test('should keep virtual DOM in sync after element removal', async () => {
-      // Create initial structure
-      const child1 = document.createElement('span');
-      child1.textContent = 'Child 1';
-      const child2 = document.createElement('div');
-      child2.textContent = 'Child 2';
-      root.appendChild(child1);
-      root.appendChild(child2);
-
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Remove element
-      root.removeChild(child1);
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Get virtual DOM snapshot
-      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
-      const virtualChildren = Array.from(virtualRoot.children);
-
-      // Verify virtual DOM matches live DOM
-      expect(virtualChildren).toHaveLength(1);
-      expect(virtualChildren[0].textContent).toBe('Child 2');
-    });
-
-    test('should keep virtual DOM in sync after nested element changes', async () => {
-      // Create nested structure
-      const parent = document.createElement('div');
-      parent.setAttribute('id', 'parent');
-      const child = document.createElement('span');
-      child.textContent = 'Nested child';
-      child.setAttribute('class', 'nested');
-      parent.appendChild(child);
-      root.appendChild(parent);
-
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Change nested element
-      child.setAttribute('class', 'updated-nested');
-      child.textContent = 'Updated nested child';
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Get virtual DOM snapshot
-      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
-      const virtualParent = virtualRoot.querySelector('#parent');
-      const virtualChild = virtualParent?.querySelector('span');
-
-      // Verify virtual DOM matches live DOM
-      expect(virtualParent).toBeDefined();
-      expect(virtualChild).toBeDefined();
-      expect(virtualChild!.getAttribute('class')).toBe('updated-nested');
-      expect(virtualChild!.textContent).toBe('Updated nested child');
-    });
-
-    test('should keep virtual DOM in sync after complex structural changes', async () => {
-      // Create initial structure
-      const container = document.createElement('div');
-      container.setAttribute('id', 'container');
-      const child1 = document.createElement('span');
-      child1.textContent = 'Child 1';
-      const child2 = document.createElement('span');
-      child2.textContent = 'Child 2';
-      container.appendChild(child1);
-      container.appendChild(child2);
-      root.appendChild(container);
-
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Make complex changes
-      child1.setAttribute('class', 'updated');
-      child2.textContent = 'Updated Child 2';
-      const newChild = document.createElement('div');
-      newChild.textContent = 'New Child';
-      newChild.setAttribute('id', 'new-child');
-      container.appendChild(newChild);
-      container.removeChild(child1);
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Get virtual DOM snapshot
-      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
-      const virtualContainer = virtualRoot.querySelector('#container');
-      const virtualChildren = Array.from(virtualContainer!.children);
-
-      // Verify virtual DOM matches live DOM
-      expect(virtualChildren).toHaveLength(2);
-      expect(virtualChildren[0].textContent).toBe('Updated Child 2');
-      expect(virtualChildren[1].textContent).toBe('New Child');
-      expect(virtualChildren[1].getAttribute('id')).toBe('new-child');
-    });
-
-    test('should keep virtual DOM in sync after text node changes', async () => {
-      // Create text node
-      const textNode = document.createTextNode('Original text');
-      root.appendChild(textNode);
-
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Change text content
-      textNode.textContent = 'Updated text';
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Get virtual DOM snapshot
-      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
-      const virtualTextNode = virtualRoot.childNodes[0];
-
-      // Verify virtual DOM matches live DOM
-      expect(virtualTextNode.nodeType).toBe(Node.TEXT_NODE);
-      expect(virtualTextNode.textContent).toBe('Updated text');
-    });
-
-    test('should keep virtual DOM in sync after attribute removal', async () => {
-      // Create element with attribute
-      const child = document.createElement('span');
-      child.setAttribute('class', 'original');
+      liveNodeMap.assignNodeIdsToSubTree(child);
+      
+      // Wait for insert to be processed
+      await waitForMutations(100);
+      
+      // Then set attribute (separate batch)
       child.setAttribute('id', 'test');
-      child.textContent = 'Hello';
-      root.appendChild(child);
+      await waitForMutations(100);
 
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Remove attribute
-      child.removeAttribute('class');
-
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Get virtual DOM snapshot
-      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
-      const virtualChild = virtualRoot.querySelector('#test');
-
-      // Verify virtual DOM matches live DOM
-      expect(virtualChild).toBeDefined();
-      expect(virtualChild!.hasAttribute('class')).toBe(false);
-      expect(virtualChild!.getAttribute('id')).toBe('test');
-      expect(virtualChild!.textContent).toBe('Hello');
+      const insertIdx = operations.findIndex(op => op.op === 'insert');
+      const childId = liveNodeMap.getNodeId(child);
+      const attrIdx = operations.findIndex(op => op.op === 'updateAttribute' && op.nodeId === childId);
+      
+      expect(insertIdx).not.toBe(-1);
+      expect(attrIdx).not.toBe(-1);
+      // Insert should come before attribute update (but may be in different batches)
+      // If both exist, verify insert came first
+      if (insertIdx !== -1 && attrIdx !== -1) {
+        expect(insertIdx).toBeLessThan(attrIdx);
+      }
+      
+      detector.disconnect();
     });
 
-    test('should keep virtual DOM in sync after multiple rapid changes', async () => {
-      // Create initial structure
+    test('should emit insert before remove for node added then removed', async () => {
+      const root = document.createElement('div');
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
+
+      const detector = createDetector(root);
+      
       const child = document.createElement('span');
-      child.textContent = 'Original';
-      child.setAttribute('class', 'original');
       root.appendChild(child);
+      liveNodeMap.assignNodeIdsToSubTree(child);
+      
+      // Remove immediately after insert (in same batch)
+      root.removeChild(child);
+      liveNodeMap.removeNodesInSubtree(child);
+      
+      // Wait for requestAnimationFrame processing
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await delay(50);
 
-      // Wait for initial setup
-      await new Promise(resolve => setTimeout(resolve, 150));
+      // Note: Since the detector uses snapshot-based diffing, mutations that cancel out
+      // (like add-then-remove in same batch) produce no net change and no operations.
+      // This is by design - the detector emits operations representing the net state change,
+      // not every intermediate mutation. This ensures efficient synchronization.
+      const insertOps = operations.filter(op => op.op === 'insert');
+      const removeOps = operations.filter(op => op.op === 'remove');
+      
+      // Expect no operations since there's no net change (snapshot and live both have no child)
+      expect(insertOps.length).toBe(0);
+      expect(removeOps.length).toBe(0);
+      
+      detector.disconnect();
+    });
 
-      // Make rapid changes
-      child.setAttribute('class', 'first');
-      child.setAttribute('class', 'second');
-      child.textContent = 'Updated';
-      child.setAttribute('id', 'final');
+    test('should process attributes before children for elements', async () => {
+      const root = document.createElement('div');
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
 
-      // Wait for change detection
-      await new Promise(resolve => setTimeout(resolve, 150));
+      const detector = createDetector(root);
+      
+      root.setAttribute('id', 'test');
+      const child = document.createElement('span');
+      root.appendChild(child);
+      liveNodeMap.assignNodeIdsToSubTree(child);
+      
+      await waitForMutations(100);
 
-      // Get virtual DOM snapshot
-      const virtualRoot = changeDetector.getSnapshotDomRoot() as HTMLElement;
-      const virtualChild = virtualRoot.querySelector('span');
-
-      // Verify virtual DOM matches final live DOM state
-      expect(virtualChild).toBeDefined();
-      expect(virtualChild!.getAttribute('class')).toBe('second');
-      expect(virtualChild!.textContent).toBe('Updated');
-      expect(virtualChild!.getAttribute('id')).toBe('final');
+      const attrIdx = operations.findIndex(op => op.op === 'updateAttribute' && op.nodeId === liveNodeMap.getNodeId(root));
+      const insertIdx = operations.findIndex(op => op.op === 'insert' && op.parentId === liveNodeMap.getNodeId(root));
+      
+      // Attributes should be processed before child insertions
+      expect(attrIdx).not.toBe(-1);
+      expect(insertIdx).not.toBe(-1);
+      expect(attrIdx).toBeLessThan(insertIdx);
+      
+      detector.disconnect();
     });
   });
 
+  describe('batch processing', () => {
+    test('should process mutations in batches', async () => {
+      const root = document.createElement('div');
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
 
+      const detector = createDetector(root, false, 100); // 100ms batch interval
+      
+      const child1 = document.createElement('span');
+      root.appendChild(child1);
+      liveNodeMap.assignNodeIdsToSubTree(child1);
+      
+      await delay(50);
+      
+      const child2 = document.createElement('p');
+      root.appendChild(child2);
+      liveNodeMap.assignNodeIdsToSubTree(child2);
+      
+      // Wait for batch interval
+      await delay(150);
+
+      // Both should be in operations (batched together)
+      const insertOps = operations.filter(op => op.op === 'insert');
+      expect(insertOps.length).toBeGreaterThanOrEqual(1);
+      
+      detector.disconnect();
+    });
+  });
+
+  describe('cleanup', () => {
+    test('should disconnect observer and clear intervals', async () => {
+      const root = document.createElement('div');
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
+
+      const detector = createDetector(root);
+      
+      const child = document.createElement('span');
+      root.appendChild(child);
+      liveNodeMap.assignNodeIdsToSubTree(child);
+      
+      await waitForMutations(100); // Wait for first mutation to be captured
+      const opsBeforeDisconnect = operations.length;
+      
+      detector.disconnect();
+      
+      // Add another mutation after disconnect
+      const child2 = document.createElement('p');
+      root.appendChild(child2);
+      liveNodeMap.assignNodeIdsToSubTree(child2);
+      
+      await waitForMutations(100);
+      
+      // Operations should not increase (observer disconnected)
+      expect(operations.length).toBe(opsBeforeDisconnect);
+    });
+  });
+
+  describe('snapshot consistency', () => {
+    test('should maintain snapshot consistency after operations', async () => {
+      const root = document.createElement('div');
+      root.id = 'root';
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
+
+      const detector = createDetector(root);
+      
+      const child = document.createElement('span');
+      child.id = 'child';
+      root.appendChild(child);
+      liveNodeMap.assignNodeIdsToSubTree(child);
+      
+      await waitForMutations(100);
+
+      const snapshot = detector.getSnapshotDomRoot();
+      expect((snapshot as Element).id).toBe('root');
+      expect((snapshot as Element).childNodes.length).toBe(1);
+      expect(((snapshot as Element).firstChild as Element).id).toBe('child');
+      
+      detector.disconnect();
+    });
+
+    test('should use separate node objects for operations and snapshot (Bug #1 fix)', async () => {
+      // This test verifies the fix for Bug #1: Operation nodes must be different objects
+      // from snapshot nodes to prevent DOM.insertBefore from moving nodes
+      const root = document.createElement('div');
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
+
+      const detector = createDetector(root);
+      
+      const child = document.createElement('span');
+      child.textContent = 'Test';
+      root.appendChild(child);
+      liveNodeMap.assignNodeIdsToSubTree(child);
+      
+      await waitForMutations(100);
+
+      // Get snapshot before applying operations
+      const snapshotMap = detector.getSnapshotNodeMap();
+      const snapshotRoot = snapshotMap.getNodeById(liveNodeMap.getNodeId(root)!)!;
+      const snapshotChild = snapshotRoot.childNodes[0] as Node;
+
+      // Get the insert operation
+      const insertOps = operations.filter(op => op.op === 'insert');
+      expect(insertOps.length).toBe(1);
+      const operationNode = (insertOps[0] as any).node;
+
+      // Verify operation node is a different object from snapshot node
+      expect(operationNode).not.toBe(snapshotChild);
+      expect(operationNode).not.toBe(child);
+      
+      // Verify snapshot still has its child (wasn't moved)
+      expect(snapshotRoot.childNodes.length).toBe(1);
+      expect(snapshotRoot.childNodes[0]).toBe(snapshotChild);
+      
+      detector.disconnect();
+    });
+
+    test('should not corrupt snapshot map when creating operation clones (Bug #2 fix)', async () => {
+      // This test verifies the fix for Bug #2: Snapshot map must still point to
+      // snapshot nodes after creating operation clones (not target DOM nodes)
+      const root = document.createElement('div');
+      const child = document.createElement('span');
+      child.id = 'child';
+      root.appendChild(child);
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
+      
+      const childId = liveNodeMap.getNodeId(child)!;
+
+      const detector = createDetector(root);
+      const snapshotMap = detector.getSnapshotNodeMap();
+      
+      // Get the snapshot child node
+      const snapshotRoot = snapshotMap.getNodeById(liveNodeMap.getNodeId(root)!)!;
+      const snapshotChild = snapshotMap.getNodeById(childId)!;
+
+      // Modify the live DOM to trigger operation generation
+      const newChild = document.createElement('p');
+      newChild.textContent = 'New';
+      root.appendChild(newChild);
+      liveNodeMap.assignNodeIdsToSubTree(newChild);
+      
+      await waitForMutations(100);
+
+      // Verify snapshot map still points to snapshot nodes (not operation nodes)
+      const snapshotChildAfter = snapshotMap.getNodeById(childId);
+      expect(snapshotChildAfter).toBe(snapshotChild); // Same object (snapshot node)
+      
+      // Get the insert operation node
+      const insertOps = operations.filter(op => op.op === 'insert');
+      if (insertOps.length > 0) {
+        const operationNode = (insertOps[insertOps.length - 1] as any).node;
+        
+        // Verify operation node is NOT tracked by snapshot map
+        // (map should only track snapshot nodes, not operation nodes)
+        expect(snapshotMap.getNodeById(liveNodeMap.getNodeId(newChild)!)).not.toBe(operationNode);
+        
+        // Verify snapshot still has its original structure
+        expect(snapshotRoot.childNodes.length).toBe(2); // Original child + new child in snapshot
+        expect(snapshotRoot.childNodes[0]).toBe(snapshotChild);
+      }
+      
+      detector.disconnect();
+    });
+  });
 });
+

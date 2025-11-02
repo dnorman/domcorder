@@ -1,4 +1,5 @@
 import type { Asset } from "@domcorder/proto-ts";
+import { ASSET_CONTAINING_ATTRIBUTES } from '../common';
 
 export type AssetLoadedHandler = (asset: AssetEntry) => void;
 
@@ -160,11 +161,19 @@ export class AssetManager {
 
   public findAndBindAssetToElementProperty(
     element: Element,
-    property: string
+    property: string,
+    value: string
   ): void {
-    const value = element.getAttribute(property);
-    if (!value) return;
+    if (value === null || value === undefined) return;
+    
+    // Check if this is an asset-containing attribute with placeholders
+    if (!ASSET_CONTAINING_ATTRIBUTES.includes(property) || !value.includes('asset:')) {
+      // No asset processing needed, just set the value
+      element.setAttribute(property, value);
+      return;
+    }
 
+    // Has asset placeholders - process them
     const detectedAssetIds = new Set<number>();
     const assetMatch = value.matchAll(/asset:(?<assetId>\d+)/g);
     
@@ -173,19 +182,19 @@ export class AssetManager {
       if (!assetId || detectedAssetIds.has(assetId)) continue;
 
       detectedAssetIds.add(assetId);
-      this.bindAssetToElementProperty(assetId, element, property);
+      this.bindAssetToElementProperty(assetId, element, property, value);
     }
   }
 
   private bindAssetToElementProperty(
     assetId: number,
     element: Element,
-    property: string
+    property: string,
+    value: string
   ): void {
     const asset = this.getOrCreateAssetEntry(assetId);
     const pendingBlobUrl = asset.pendingBlobUrl!;
     
-    const value = element.getAttribute(property);
     if (!value) return;
 
     if (property === 'srcset') {

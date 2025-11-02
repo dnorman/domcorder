@@ -3,3 +3,5 @@ export * from "./StringMutationOperation";
 export * from "./DomOperation";
 export * from "./compare-dom";
 export * from "./Deferred";
+export * from "./StyleSheetIdUtils";
+export * from "./AssetConstants";

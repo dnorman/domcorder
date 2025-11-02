@@ -25,7 +25,7 @@ export async function inlineAdoptedStyleSheet(
     const rules = Array.from(sheet.cssRules);
     const text = rules.map(rule => rule.cssText).join('\n');
     const vStyleSheet: VStyleSheet = new VStyleSheet(
-      (sheet as any).__css_stylesheet_id__,
+      sheet.__adopted_stylesheet_id__!,
       text,
       sheet.media.mediaText || undefined
     );
