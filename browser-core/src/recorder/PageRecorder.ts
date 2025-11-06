@@ -83,7 +83,6 @@ export class PageRecorder {
   }
 
   private async emitFrame(frame: Frame, timestamp: boolean = true) {
-    console.log(frame);
     if (timestamp) {
       this.emitTimestampFrame();
     }
