@@ -127,17 +127,17 @@ await frame.encode(writer); // May produce multiple chunks
 The `Reader` class parses incoming byte chunks and reconstructs complete frames.
 
 **Key Features:**
-- **Arbitrary chunk boundaries**: Handles frames split across any number of chunks
+- **Deterministic boundaries**: Uses frame length prefixes to avoid redundant parsing attempts
 - **Internal buffering**: Maintains buffer of incomplete data
-- **Frame parsing**: Attempts to parse frames when sufficient data is available
+- **Efficient parsing**: Reads exactly the bytes needed for each frame
 - **Header support**: Can parse optional 32-byte file header
 - **Factory pattern**: `Reader.create(stream, expectHeader)` returns `[Reader, ReadableStream<Frame>]`
 
 **Parsing Strategy:**
 - Accumulates incoming chunks in an internal buffer
-- When buffer has at least 4 bytes, attempts to peek at frame type
-- Calls `Frame.decode()` to parse complete frame
-- If parsing fails with "not enough data", waits for more chunks
+- When buffer has at least 4 bytes, reads the **frame length** (u32)
+- Waits until buffer has `length` additional bytes
+- Calls `Frame.decode()` to parse the complete frame once
 - Removes consumed bytes from buffer after successful parse
 
 **Frame Decoding:**
@@ -175,17 +175,15 @@ The Rust `FrameReader` implements async streaming frame parsing.
 **Key Features:**
 - Reads from `AsyncRead` trait (file, network stream, etc.)
 - Buffers incomplete frames (4KB chunks)
-- Attempts deserialization on each chunk received
-- Handles O(n²) complexity for large frames (see TODO in code)
+- Uses frame length prefixes for O(n) parsing complexity
+- Efficiently handles large frames (like Asset frames)
 
 **Parsing Strategy:**
 - Maintains internal buffer of accumulated data
-- On each 4KB read, attempts to deserialize a frame from buffer
-- If deserialization fails with `UnexpectedEof`, reads more data
-- Continues until frame successfully deserialized or stream ends
-
-**Performance Note:**
-The Rust reader has a known performance issue: it attempts to deserialize on every 4KB chunk, which can cause O(n²) complexity for large frames (like Asset frames). The TODO suggests adding frame length prefixes to optimize this.
+- On each read, checks if at least 4 bytes (the length prefix) are available
+- Peeks at the length, then waits until the entire frame data is buffered
+- Deserializes exactly once using `bincode`
+- Continues until stream ends or an error occurs
 
 ## Data Flow
 
@@ -271,15 +269,18 @@ Reader buffers all chunks, then parses complete frame.
 
 - **Format**: bincode (Rust serialization format)
 - **Endianness**: Big-endian
-- **Frame structure**: Variable-length, no length prefix (must parse to determine size)
-- **Frame type**: u32 (first 4 bytes of each frame)
+- **Frame structure**: Length-prefixed
+  1. Frame length (u32, big-endian) - *Total bytes in the frame, excluding this prefix*
+  2. Frame data (variable length)
+- **Frame type**: u32 (first 4 bytes of frame data)
 
 ### Frame Encoding Pattern
 
 All frames follow this pattern:
-1. Frame type (u32, big-endian)
-2. Frame-specific data (variable length)
-3. Frame boundary (implied by `endFrame()` call)
+1. Frame length (u32, big-endian)
+2. Frame type (u32, big-endian)
+3. Frame-specific data (variable length)
+4. Frame boundary (implied by `endFrame()` call and length prefix)
 
 ### String Encoding
 
@@ -311,19 +312,6 @@ Arrays/vectors are encoded as:
 - **No recovery**: Errors are fatal, stream is closed
 - **Fail-fast**: Invalid data causes immediate error
 - **No frame skipping**: Must process frames in order
-
-## Future Optimizations
-
-### Frame Length Prefixes
-
-The Rust reader has a TODO to add frame length prefixes:
-- Current: Must attempt deserialization on every chunk (O(n²) for large frames)
-- Proposed: Prefix each frame with u32/u64 length
-  - Read length first (4-8 bytes)
-  - Read exactly that many bytes
-  - Deserialize once with complete data
-
-This would eliminate the performance issue for large Asset frames.
 
 ## Testing
 

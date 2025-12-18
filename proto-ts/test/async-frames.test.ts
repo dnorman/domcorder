@@ -20,7 +20,7 @@ describe("Async Frame Encoders", () => {
         // Check all data
         const analysis = await check();
         expect(analysis.chunkCount).toBeGreaterThan(0);
-        expect(analysis.totalBytes).toBe(12); // u32 frame type + u64 timestamp
+        expect(analysis.totalBytes).toBe(16); // u32 length + u32 frame type + u64 timestamp
     });
 
     test("should encode keyframe with regular encode", async () => {
@@ -28,7 +28,7 @@ describe("Async Frame Encoders", () => {
         const check = streamObserve(stream);
 
         // Encode keyframe (regular version)
-        await new Keyframe(testVDocument, 0, 1920, 1080).encode(writer);
+        await new Keyframe(testVDocument, 1920, 1080).encode(writer);
 
         writer.close();
 
@@ -50,6 +50,6 @@ describe("Async Frame Encoders", () => {
         // Check all data
         const analysis = await check();
         expect(analysis.chunkCount).toBeGreaterThan(0);
-        expect(analysis.totalBytes).toBe(12); // u32 frame type + u32 width + u32 height
+        expect(analysis.totalBytes).toBe(16); // u32 length + u32 frame type + u32 width + u32 height
     });
 });

@@ -158,12 +158,19 @@ export class Reader implements BufferReader {
     }
 
     private tryParseFrame(): boolean {
-        // Need at least 4 bytes for frame type
+        // Need at least 4 bytes for frame length
         if (this.availableBytes() < 4) {
             return false;
         }
 
         const startOffset = this.bufferOffset;
+        const frameLength = this.readU32();
+
+        // Check if we have the full frame
+        if (this.availableBytes() < frameLength) {
+            this.bufferOffset = startOffset; // Backtrack
+            return false;
+        }
 
         try {
             this.frameNumber++;
@@ -173,6 +180,14 @@ export class Reader implements BufferReader {
 
             if (frame === null) {
                 throw new Error("Failed to decode frame - unknown or invalid frame type");
+            }
+
+            // Verify we consumed exactly frameLength bytes
+            const consumed = this.bufferOffset - (startOffset + 4);
+            if (consumed !== frameLength) {
+                console.warn(`⚠️ Reader: Frame ${this.frameNumber} consumed ${consumed} bytes, but length prefix was ${frameLength}`);
+                // Correct the offset to match the frame boundary
+                this.bufferOffset = startOffset + 4 + frameLength;
             }
 
             // Emit the frame

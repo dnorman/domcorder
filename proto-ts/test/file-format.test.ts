@@ -81,9 +81,10 @@ describe("File Format (.dcrr)", () => {
         const frameData = fileData.slice(HEADER_SIZE);
         expect(frameData.length).toBeGreaterThan(0);
 
-        // Should be able to identify first frame type (Timestamp = 0)
+        // Should be able to identify first frame length (Timestamp = 12 bytes)
         const frameTypeView = new DataView(frameData.buffer, frameData.byteOffset);
-        expect(frameTypeView.getUint32(0, false)).toBe(0); // Timestamp frame type
+        expect(frameTypeView.getUint32(0, false)).toBe(12); // Length of Timestamp frame
+        expect(frameTypeView.getUint32(4, false)).toBe(0);  // Timestamp frame type (index 0)
 
         console.log(`✅ Generated .dcrr file format: ${fileData.length} bytes (${HEADER_SIZE} header + ${frameData.length} frames)`);
         console.log(`📊 Stream analysis: ${analysis.chunkCount} chunks, avg size: ${analysis.averageChunkSize.toFixed(1)} bytes`);
