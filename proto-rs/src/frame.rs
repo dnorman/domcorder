@@ -30,6 +30,14 @@ pub enum Frame {
     ElementBlurred(ElementBlurredData) = 20,
     WindowFocused(WindowFocusedData) = 21,
     WindowBlurred(WindowBlurredData) = 22,
+
+    // Additional stylesheet frame types
+    StyleSheetRuleInserted(StyleSheetRuleInsertedData) = 23,
+    StyleSheetRuleDeleted(StyleSheetRuleDeletedData) = 24,
+    StyleSheetReplaced(StyleSheetReplacedData) = 25,
+
+    CanvasChanged(CanvasChangedData) = 26,
+    DomNodePropertyTextChanged(DomNodePropertyTextChangedData) = 27,
 }
 
 /// Frame data structures corresponding to TypeScript frame data types
@@ -198,4 +206,37 @@ pub struct WindowFocusedData {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WindowBlurredData {
     // Empty struct
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StyleSheetRuleInsertedData {
+    pub style_sheet_id: u32,
+    pub rule_index: u32,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StyleSheetRuleDeletedData {
+    pub style_sheet_id: u32,
+    pub rule_index: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StyleSheetReplacedData {
+    pub style_sheet_id: u32,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanvasChangedData {
+    pub node_id: u32,
+    pub mime_type: String,
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DomNodePropertyTextChangedData {
+    pub node_id: u32,
+    pub property_name: String,
+    pub operations: Vec<TextOperationData>,
 }

@@ -4,6 +4,7 @@
   "description": "TypeScript implementation of the domcorder binary protocol",
   "type": "module",
   "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
     "test": "bun test",
     "test:watch": "bun test --watch"

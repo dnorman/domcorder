@@ -17,7 +17,7 @@ export function compareBinaryFile(filename, actualBuffer, testName) {
   const protoTsDir = dirname(currentDir);  // .../proto-ts/
   const projectRoot = dirname(protoTsDir);  // .../ (project root)
   const expectedFile = join(projectRoot, ".sample_data", "proto", filename);
-  const shouldUpdate = process.env.PROTO_TEST_UPDATE === testName;
+  const shouldUpdate = process.env.PROTO_TEST_UPDATE === testName || process.env.PROTO_TEST_UPDATE === "true" || process.env.PROTO_TEST_UPDATE === "all";
 
   console.log(`\n🔍 Comparing binary file: ${testName}`);
   console.log(`   Expected file: ${filename}`);

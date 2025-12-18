@@ -11,6 +11,7 @@ export class Writer {
     private controller!: ReadableStreamDefaultController<Uint8Array>;
     private stream: ReadableStream<Uint8Array>;
     private frameNumber: number = 0;
+    private frameStartOffset: number = -1;
 
     private static enc = new TextEncoder();
 
@@ -52,7 +53,8 @@ export class Writer {
         }
 
         // Auto-flush if buffer reaches chunk size (prevents buffer overflow)
-        if (this.bufLength >= this.chunkSize) {
+        // ONLY if we are not currently encoding a frame
+        if (this.bufLength >= this.chunkSize && this.frameStartOffset === -1) {
             this.flush();
         }
     }
@@ -78,13 +80,22 @@ export class Writer {
     }
 
     bytes(b: Uint8Array): void {
-        let offset = 0;
+        if (this.frameStartOffset !== -1) {
+            // We are inside a frame - must buffer everything to calculate length prefix
+            while (this.bufLength + b.length > this.buf.length) {
+                this.growBuffer();
+            }
+            this.buf.set(b, this.bufLength);
+            this.bufLength += b.length;
+            return;
+        }
 
+        let offset = 0;
         while (offset < b.length) {
             // Calculate how much we can write without exceeding chunk size
-            const remainingChunk = this.chunkSize - this.bufLength;
+            const remainingChunk = Math.max(0, this.chunkSize - this.bufLength);
             const remainingData = b.length - offset;
-            const writeSize = Math.min(remainingChunk, remainingData);
+            const writeSize = remainingChunk > 0 ? Math.min(remainingChunk, remainingData) : remainingData;
 
             // Ensure buffer has space
             while (this.bufLength + writeSize > this.buf.length) {
@@ -174,10 +185,30 @@ export class Writer {
     }
 
     /** 
+     * Called at the start of every frame encode method
+     * Reserves space for the frame length prefix
+     */
+    startFrame(): void {
+        this.frameStartOffset = this.bufLength;
+        this.u32(0); // Reserve 4 bytes for length
+    }
+
+    /** 
      * Called at the end of every frame encode method
      * Always flushes buffer and yields control - this is when chunks become visible to stream consumers
      */
     async endFrame(): Promise<void> {
+        if (this.frameStartOffset !== -1) {
+            // Calculate frame length (excluding the length prefix itself)
+            const frameLength = this.bufLength - this.frameStartOffset - 4;
+            
+            // Write length prefix into the reserved space (Big-Endian)
+            const view = new DataView(this.buf.buffer, this.buf.byteOffset + this.frameStartOffset, 4);
+            view.setUint32(0, frameLength, false);
+            
+            this.frameStartOffset = -1; // Reset for next frame
+        }
+        
         this.frameNumber++;
         this.flush();
         // Yield control to allow stream processing
@@ -190,7 +221,7 @@ export class Writer {
      * This is when chunks become visible to stream consumers
      */
     async streamWait(): Promise<void> {
-        if (this.bufLength >= this.chunkSize) {
+        if (this.bufLength >= this.chunkSize && this.frameStartOffset === -1) {
             this.flush();
             await new Promise<void>((resolve) => setTimeout(resolve, 0));
         }

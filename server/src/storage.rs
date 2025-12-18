@@ -213,6 +213,16 @@ impl StorageState {
         while let Some(frame_result) = frame_reader.next().await {
             match frame_result {
                 Ok(frame) => {
+                    // Print message for Asset frames
+                    if let domcorder_proto::Frame::Asset(ref asset) = frame {
+                        info!(
+                            "🎨 Received Asset frame: id={}, url={}, size={} bytes",
+                            asset.asset_id,
+                            asset.url,
+                            asset.buf.len()
+                        );
+                    }
+
                     // Frame parsed successfully - apply filter (currently passthrough)
                     let filtered_frame = self.filter_frame(frame);
 
@@ -293,6 +303,16 @@ impl StorageState {
         while let Some(frame_result) = frame_reader.next().await {
             match frame_result {
                 Ok(frame) => {
+                    // Print message for Asset frames
+                    if let domcorder_proto::Frame::Asset(ref asset) = frame {
+                        info!(
+                            "🎨 Received Asset frame: id={}, url={}, size={} bytes",
+                            asset.asset_id,
+                            asset.url,
+                            asset.buf.len()
+                        );
+                    }
+
                     // Frame parsed successfully - apply filter (currently passthrough)
                     let filtered_frame = self.filter_frame(frame);
 

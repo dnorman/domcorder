@@ -216,7 +216,6 @@ pub fn sample_frames() -> Vec<Frame> {
                     }),
                 ],
             },
-            asset_count: 1,
             viewport_width: 1920,
             viewport_height: 1080,
         }),
@@ -270,7 +269,6 @@ pub fn sample_frames() -> Vec<Frame> {
                     content: "New content".to_string(),
                 })],
             }),
-            asset_count: 0,
         }),
         Frame::DomNodeRemoved(DomNodeRemovedData { node_id: 43 }),
         Frame::DomAttributeChanged(DomAttributeChangedData {
@@ -303,7 +301,6 @@ pub fn sample_frames() -> Vec<Frame> {
                 text: "body { color: red; }".to_string(),
                 media: Some("screen".to_string()),
             },
-            asset_count: 0,
         }),
         Frame::ElementScrolled(ElementScrolledData {
             node_id: 42,

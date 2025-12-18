@@ -90,7 +90,7 @@ export async function generateTestFrames(writer: Writer): Promise<void> {
 
     // Frame 1: Keyframe with DOM
     const vdocument = testVDocument; // Use the hardcoded VDocument
-    await new Keyframe(vdocument, 1, 1920, 1080).encode(writer); // 1 asset follows
+    await new Keyframe(vdocument, 1920, 1080).encode(writer);
 
     // Frame 2: Asset (sample image data)
     const sampleImageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]); // PNG header
@@ -123,7 +123,7 @@ export async function generateTestFrames(writer: Writer): Promise<void> {
 
     // Frame 10: DomNodeAdded
     const velement = createSimpleNode();
-    await new DomNodeAdded(1, 0, velement, 0).encode(writer);
+    await new DomNodeAdded(1, 0, velement).encode(writer);
 
     // Frame 11: DomNodeRemoved
     await new DomNodeRemoved(43).encode(writer);
@@ -145,7 +145,7 @@ export async function generateTestFrames(writer: Writer): Promise<void> {
 
     // Frame 17: NewAdoptedStyleSheet
     const testStyleSheet = new VStyleSheet(1, "body { color: red; }", "screen");
-    await new NewAdoptedStyleSheet(testStyleSheet, 0).encode(writer);
+    await new NewAdoptedStyleSheet(testStyleSheet).encode(writer);
 
     // Frame 18: ElementScrolled
     await new ElementScrolled(42, 10, 20).encode(writer);

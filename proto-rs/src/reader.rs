@@ -108,56 +108,32 @@ impl<R: AsyncRead + Unpin> FrameReader<R> {
     }
 
     async fn try_read_frame(&mut self) -> io::Result<Option<Frame>> {
-        // TODO: PERFORMANCE OPTIMIZATION - Add frame length prefix to protocol
-        // Current approach tries to deserialize on every 4KB chunk, causing O(n²) complexity
-        // for large frames. Should prefix each frame with its byte length (u32/u64) so we can:
-        // 1. Read the length first (4-8 bytes)
-        // 2. Read exactly that many bytes for the frame
-        // 3. Deserialize once with complete data
-        // This would eliminate the exponential parse attempts for large assets.
-
         let config = bincode::DefaultOptions::new()
             .with_big_endian()
             .with_fixint_encoding();
 
-        // Read chunks until we can deserialize a complete frame
+        // Read chunks until we have enough data for the length and the frame
         let mut temp_buf = [0u8; 4096];
-        let mut parse_attempts = 0;
 
         loop {
-            // Try to deserialize from current buffer
-            if !self.buffer.is_empty() {
-                parse_attempts += 1;
-                println!(
-                    "🔍 Parse attempt #{}: buffer size {} bytes",
-                    parse_attempts,
-                    self.buffer.len()
-                );
+            // Check if we have at least the length prefix (4 bytes)
+            if self.buffer.len() >= 4 {
+                // Peek at the length
+                let len_bytes = [self.buffer[0], self.buffer[1], self.buffer[2], self.buffer[3]];
+                let frame_len = u32::from_be_bytes(len_bytes) as usize;
 
-                let mut cursor = std::io::Cursor::new(&self.buffer);
-                match config.deserialize_from(&mut cursor) {
-                    Ok(frame) => {
-                        // Success! Remove consumed bytes from buffer
-                        let consumed = cursor.position() as usize;
-                        println!(
-                            "✅ Frame parsed successfully after {} attempts, consumed {} bytes",
-                            parse_attempts, consumed
-                        );
-                        self.buffer.drain(..consumed);
-                        return Ok(Some(frame));
-                    }
-                    Err(e) => {
-                        // Check if this is just incomplete data
-                        if let bincode::ErrorKind::Io(io_err) = e.as_ref() {
-                            if io_err.kind() == io::ErrorKind::UnexpectedEof {
-                                // Need more data, continue reading
-                            } else {
-                                return Err(io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    format!("Failed to decode frame: {}", e),
-                                ));
-                            }
-                        } else {
+                // Check if we have the full frame
+                if self.buffer.len() >= 4 + frame_len {
+                    // We have the full frame!
+                    let frame_data = &self.buffer[4..4 + frame_len];
+                    
+                    match config.deserialize::<Frame>(frame_data) {
+                        Ok(frame) => {
+                            // Success! Remove length + frame from buffer
+                            self.buffer.drain(..4 + frame_len);
+                            return Ok(Some(frame));
+                        }
+                        Err(e) => {
                             return Err(io::Error::new(
                                 io::ErrorKind::InvalidData,
                                 format!("Failed to decode frame: {}", e),
@@ -174,16 +150,11 @@ impl<R: AsyncRead + Unpin> FrameReader<R> {
                     if self.buffer.is_empty() {
                         return Ok(None);
                     }
-                    // Try final deserialize with remaining data
-                    let mut cursor = std::io::Cursor::new(&self.buffer);
-                    match config.deserialize_from(&mut cursor) {
-                        Ok(frame) => {
-                            let consumed = cursor.position() as usize;
-                            self.buffer.drain(..consumed);
-                            return Ok(Some(frame));
-                        }
-                        Err(_) => return Ok(None), // Incomplete frame at end
-                    }
+                    // If we have data but it's not a full frame, it's an error
+                    return Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        "Incomplete frame at end of stream",
+                    ));
                 }
                 Ok(n) => {
                     self.buffer.extend_from_slice(&temp_buf[..n]);

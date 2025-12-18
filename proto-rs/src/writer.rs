@@ -91,6 +91,11 @@ impl<W: Write> FrameWriter<W> {
             .serialize(frame)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
+        // Write frame length prefix (u32, big-endian)
+        let len = encoded.len() as u32;
+        self.writer.write_all(&len.to_be_bytes())?;
+
+        // Write frame data
         self.writer.write_all(&encoded)?;
         Ok(())
     }

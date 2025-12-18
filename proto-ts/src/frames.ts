@@ -89,6 +89,7 @@ export class Timestamp extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         if ((w as any).debug) console.log(`\n=== FRAME ${FrameType.Timestamp}: Timestamp ===`);
         w.u32(FrameType.Timestamp);         // enum variant index
         w.u64(toU64(this.timestamp));       // timestamp value
@@ -115,6 +116,7 @@ export class Keyframe extends Frame {
 
     // Regular async - yields only at frame boundary
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.Keyframe);
         // Encode the VDocument synchronously
         this.vDocument.encode(w);
@@ -152,6 +154,7 @@ export class Asset extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.Asset);
         w.u32(this.asset_id);                    // u32 BE
         w.strUtf8(this.url);               // u64 length + UTF-8 bytes (BE)
@@ -185,6 +188,7 @@ export class ViewportResized extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.ViewportResized);
         w.u32(this.width);  // u32 BE
         w.u32(this.height); // u32 BE
@@ -205,6 +209,7 @@ export class ScrollOffsetChanged extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.ScrollOffsetChanged);
         w.u32(this.scrollXOffset);
         w.u32(this.scrollYOffset);
@@ -225,6 +230,7 @@ export class MouseMoved extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.MouseMoved);
         w.u32(this.x); // u32 BE
         w.u32(this.y); // u32 BE
@@ -245,6 +251,7 @@ export class MouseClicked extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.MouseClicked);
         w.u32(this.x); // u32 BE
         w.u32(this.y); // u32 BE
@@ -274,6 +281,7 @@ export class KeyPressed extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.KeyPressed);
         w.strUtf8(this.code); // u64 length + UTF-8 bytes (BE)
         w.byte(this.altKey ? 1 : 0);
@@ -296,6 +304,7 @@ export class ElementFocused extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.ElementFocused);
         w.u32(this.node_id);
         await w.endFrame();
@@ -322,6 +331,7 @@ export class TextSelectionChanged extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.TextSelectionChanged);
         w.u32(this.selectionStartNodeId);
         w.u32(this.selectionStartOffset);
@@ -350,6 +360,7 @@ export class DomNodeAdded extends Frame {
 
     // Regular async - yields only at frame boundary
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.DomNodeAdded);
         w.u32(this.parentNodeId);
         w.u32(this.index);
@@ -370,6 +381,7 @@ export class DomNodeRemoved extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.DomNodeRemoved);
         w.u32(this.nodeId);
         await w.endFrame();
@@ -394,6 +406,7 @@ export class DomAttributeChanged extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.DomAttributeChanged);
         w.u32(this.nodeId);
         w.strUtf8(this.attributeName);
@@ -418,6 +431,7 @@ export class DomAttributeRemoved extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.DomAttributeRemoved);
         w.u32(this.nodeId);
         w.strUtf8(this.attributeName);
@@ -471,6 +485,7 @@ export class DomTextChanged extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.DomTextChanged);
         w.u32(this.nodeId);
 
@@ -511,6 +526,7 @@ export class DomNodeResized extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.DomNodeResized);
         w.u32(this.nodeId);
         w.u32(this.width);
@@ -554,6 +570,7 @@ export class DomNodePropertyTextChanged extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.DomNodePropertyTextChanged);
         w.u32(this.nodeId);
         w.strUtf8(this.propertyName);
@@ -594,6 +611,7 @@ export class DomNodePropertyChanged extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.DomNodePropertyChanged);
         w.u32(this.nodeId);
         w.strUtf8(this.propertyName);
@@ -624,6 +642,7 @@ export class CanvasChanged extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.CanvasChanged);
         w.u32(this.nodeId);
         w.strUtf8(this.mimeType);
@@ -656,6 +675,7 @@ export class AdoptedStyleSheetsChanged extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.AdoptedStyleSheetsChanged);
         w.u64(BigInt(this.styleSheetIds.length));
         for (const id of this.styleSheetIds) {
@@ -680,6 +700,7 @@ export class NewAdoptedStyleSheet extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.NewAdoptedStyleSheet);
         this.styleSheet.encode(w);
         await w.endFrame();
@@ -704,6 +725,7 @@ export class ElementScrolled extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.ElementScrolled);
         w.u32(this.node_id);
         w.u32(this.scrollXOffset);
@@ -724,6 +746,7 @@ export class ElementBlurred extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.ElementBlurred);
         w.u32(this.node_id);
         await w.endFrame();
@@ -741,6 +764,7 @@ export class WindowFocused extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.WindowFocused);
         await w.endFrame();
     }
@@ -757,6 +781,7 @@ export class WindowBlurred extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.WindowBlurred);
         await w.endFrame();
     }
@@ -780,6 +805,7 @@ export class StyleSheetRuleInserted extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.StyleSheetRuleInserted);
         w.u32(this.styleSheetId);
         w.u32(this.ruleIndex);
@@ -804,6 +830,7 @@ export class StyleSheetRuleDeleted extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.StyleSheetRuleDeleted);
         w.u32(this.styleSheetId);
         w.u32(this.ruleIndex);
@@ -827,8 +854,10 @@ export class StyleSheetReplaced extends Frame {
     }
 
     async encode(w: Writer): Promise<void> {
+        w.startFrame();
         w.u32(FrameType.StyleSheetReplaced);
         w.u32(this.styleSheetId);
+        w.strUtf8(this.content);
         await w.endFrame();
     }
 }

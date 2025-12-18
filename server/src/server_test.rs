@@ -110,7 +110,7 @@ mod tests {
             saved_data, sample_data,
             "Saved data should match uploaded data"
         );
-        assert_eq!(saved_data.len(), 1600, "Saved file should be 1600 bytes");
+        assert_eq!(saved_data.len(), 1985, "Saved file should be 1985 bytes");
 
         // Verify we can still read it as a valid DCRR file
         let mut reader = FrameReader::new(Cursor::new(&saved_data), true);

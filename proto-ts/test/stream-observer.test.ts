@@ -78,10 +78,10 @@ describe("Stream Observer Utility", () => {
 
         let analysis = await check();
         expect(analysis.chunkCount).toBe(1);
-        expect(analysis.totalBytes).toBe(12); // u32 frame type + u64 timestamp
+        expect(analysis.totalBytes).toBe(16); // u32 length + u32 frame type + u64 timestamp
 
         // Encode a keyframe with test DOM
-        await new Keyframe(testVDocument, 0, 1920, 1080).encode(writer);
+        await new Keyframe(testVDocument, 1920, 1080).encode(writer);
 
         analysis = await check();
         expect(analysis.chunkCount).toBeGreaterThan(0);

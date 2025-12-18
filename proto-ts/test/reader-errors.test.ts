@@ -38,6 +38,8 @@ describe("Reader Error Handling", () => {
     test("should fail on truncated stream when expecting more data", async () => {
         // Create stream that ends abruptly in middle of frame
         const truncatedData = new Uint8Array([
+            // Frame length prefix: 12 bytes (Timestamp)
+            0x00, 0x00, 0x00, 0x0C,
             // Frame type: Timestamp (u32 BE)
             0x00, 0x00, 0x00, 0x00,
             // Partial timestamp data (only 4 bytes instead of 8)
@@ -62,6 +64,8 @@ describe("Reader Error Handling", () => {
     test("should fail on invalid frame type", async () => {
         // Create stream with invalid frame type
         const invalidFrame = new Uint8Array([
+            // Frame length prefix: 4 bytes
+            0x00, 0x00, 0x00, 0x04,
             // Invalid frame type: 999 (doesn't exist)
             0x00, 0x00, 0x03, 0xE7
         ]);
@@ -84,6 +88,8 @@ describe("Reader Error Handling", () => {
     test("should fail on string with invalid length", async () => {
         // Create KeyPressed frame with string length that exceeds available data
         const invalidString = new Uint8Array([
+            // Frame length: claims 100 bytes but we only have 16
+            0x00, 0x00, 0x00, 0x64,
             // Frame type: KeyPressed
             0x00, 0x00, 0x00, 0x06,
             // String length: claims 1000 bytes but we only have 4
