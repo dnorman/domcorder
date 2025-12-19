@@ -38,15 +38,36 @@ export async function fetchAssets(
             const i = ++index;
             if (res.ok) {
               partialAsset.mime = res.mime;
-              partialAsset.buf = res.buf;  
-            } 
+              partialAsset.buf = res.buf;
+              partialAsset.fetchError = { type: 'none' };
+            } else {
+              // Map fetch failure reason to fetch_error
+              if (res.reason === 'opaque') {
+                partialAsset.fetchError = { type: 'cors' };
+              } else if (res.reason === 'network') {
+                partialAsset.fetchError = { type: 'network' };
+              } else if (res.reason === 'http') {
+                partialAsset.fetchError = { type: 'http' };
+              } else {
+                partialAsset.fetchError = { type: 'unknown', message: res.reason || 'unexpected error' };
+              }
+              partialAsset.buf = new ArrayBuffer(0);
+            }
           } catch (error) {
             console.error('Error fetching asset:', error);
+            partialAsset.fetchError = { 
+              type: 'unknown', 
+              message: error instanceof Error ? error.message : String(error) 
+            };
+            partialAsset.buf = new ArrayBuffer(0);
           }
 
           if (!partialAsset.buf) {
             partialAsset.buf = new ArrayBuffer(0);
           }
+        } else {
+          // Asset already has data (from snapshot), no fetch error
+          partialAsset.fetchError = { type: 'none' };
         }
 
         assetHandler(partialAsset as Asset);

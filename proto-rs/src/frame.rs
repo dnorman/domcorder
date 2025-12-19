@@ -38,6 +38,11 @@ pub enum Frame {
 
     CanvasChanged(CanvasChangedData) = 26,
     DomNodePropertyTextChanged(DomNodePropertyTextChangedData) = 27,
+    RecordingMetadata(RecordingMetadataData) = 28,
+    AssetReference(AssetReferenceData) = 29,
+    CacheManifest(CacheManifestData) = 30,
+    PlaybackConfig(PlaybackConfigData) = 31,
+    Heartbeat = 32,
 }
 
 /// Frame data structures corresponding to TypeScript frame data types
@@ -166,11 +171,21 @@ pub struct DomNodePropertyChangedData {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AssetFetchError {
+    None,           // No error (success or legitimately empty)
+    CORS,           // Blocked by CORS
+    Network,        // Network error
+    Http,           // HTTP error (4xx, 5xx)
+    Unknown(String), // Unknown error with message for logging
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssetData {
     pub asset_id: u32,
     pub url: String,
     pub mime: Option<String>,
     pub buf: Vec<u8>,
+    pub fetch_error: AssetFetchError,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -239,4 +254,49 @@ pub struct DomNodePropertyTextChangedData {
     pub node_id: u32,
     pub property_name: String,
     pub operations: Vec<TextOperationData>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordingMetadataData {
+    /// The initial URL of the page being recorded
+    pub initial_url: String,
+    /// Heartbeat interval in seconds (0 = disabled)
+    /// If no frames are sent for this duration, heartbeat frames will be sent
+    pub heartbeat_interval_seconds: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssetReferenceData {
+    /// The asset ID (matches AssetData.asset_id for reference)
+    pub asset_id: u32,
+    /// The original URL of the asset
+    pub url: String,
+    /// The hash (SHA-256 for incoming from client, random_id when stored in recording)
+    pub hash: String,
+    /// The MIME type of the asset (optional, for CSS processing and other type-specific handling)
+    pub mime: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CacheManifestData {
+    /// The site origin this manifest is for
+    pub site_origin: String,
+    /// List of cached assets (URL + SHA-256 hash)
+    pub assets: Vec<ManifestEntryData>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManifestEntryData {
+    /// The asset URL
+    pub url: String,
+    /// The SHA-256 hash (manifest hash) for this asset
+    pub sha256_hash: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlaybackConfigData {
+    /// The storage type (e.g., "local", "s3")
+    pub storage_type: String,
+    /// JSON payload for module-specific configuration
+    pub config_json: String,
 }
