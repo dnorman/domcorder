@@ -1,9 +1,11 @@
 pub mod asset_cache;
+pub mod recording_handler;
 pub mod server;
 pub mod storage;
 
 // Re-export commonly used types
 pub use asset_cache::{AssetFileStore, MetadataStore};
+pub use recording_handler::{handle_websocket_recording, RecordingConfig, RecordingHooks};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
