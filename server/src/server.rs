@@ -1,6 +1,5 @@
-use crate::asset_cache::manifest::generate_manifest;
+use crate::recording_handler::{handle_websocket_recording, RecordingConfig, RecordingHooks};
 use crate::AppState;
-use axum::extract::ws::{Message, WebSocket};
 use axum::{
     Router,
     body::Body,
@@ -9,13 +8,12 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use domcorder_proto::{Frame, FrameReader, FrameWriter, CacheManifestData, ManifestEntryData, PlaybackConfigData};
-use std::io::Cursor;
+use domcorder_proto::{Frame, FrameWriter, PlaybackConfigData};
 use futures::TryStreamExt;
-use futures_util::{SinkExt, StreamExt};
 use futures::stream;
+use futures_util::StreamExt;
 use serde_json;
-use tokio::io::AsyncWriteExt;
+use std::io::Cursor;
 
 use tokio_util::io::{ReaderStream, StreamReader};
 use tower_http::cors::CorsLayer;
@@ -79,222 +77,26 @@ async fn handle_websocket_record(
         debug!("User-Agent: {}", ua);
     }
     
-    ws.on_upgrade(move |socket| handle_websocket_stream(socket, state, user_agent))
+    ws.on_upgrade(move |socket| {
+        handle_websocket_recording(
+            socket,
+            state,
+            user_agent,
+            RecordingConfig {
+                max_size: 100 * 1024 * 1024, // 100MB
+                subdir: None,
+                custom_filename: None,
+            },
+            RecordingHooks {
+                on_start: None,
+                on_metadata: None,
+                on_complete: None,
+                on_error: None,
+            },
+        )
+    })
 }
 
-async fn handle_websocket_stream(socket: WebSocket, state: AppState, user_agent: Option<String>) {
-    info!("🔌 WebSocket connection established for recording");
-
-    let (mut sender, mut receiver) = socket.split();
-
-    // Wait for RecordingMetadata frame to get initial_url
-    let mut site_origin: Option<String> = None;
-    
-    // Buffer for initial frames until we get metadata
-    let mut frame_buffer = Vec::new();
-    
-    // Read initial frames to find RecordingMetadata
-    while let Some(msg) = receiver.next().await {
-        match msg {
-            Ok(Message::Binary(data)) => {
-                frame_buffer.push(data);
-                
-                // Try to parse frames from the buffer to find RecordingMetadata
-                // We'll use a simple approach: try to parse the first frame
-                if !frame_buffer.is_empty() && site_origin.is_none() {
-                        // Try to parse the first frame from the accumulated buffer
-                        let combined = frame_buffer.concat();
-                        let cursor = std::io::Cursor::new(combined);
-                        let mut reader = FrameReader::new(cursor, false);
-                    
-                    if let Some(Ok(frame)) = reader.next().await {
-                        if let Frame::RecordingMetadata(metadata) = frame {
-                            info!("📋 Received RecordingMetadata: initial_url={}", metadata.initial_url);
-                            
-                            // Register recording and extract site origin
-                            let filename = state.generate_filename();
-                            match state.metadata_store.register_recording(&filename, &metadata.initial_url).await {
-                                Ok(site_info) => {
-                                    site_origin = Some(site_info.origin.clone());
-                                    
-                                    // Generate and send cache manifest as a binary frame
-                                    match generate_manifest(state.metadata_store.as_ref(), &site_info.origin, None).await {
-                                        Ok(manifest) => {
-                                            info!("📦 Sending cache manifest with {} entries", manifest.assets.len());
-                                            
-                                            // Convert manifest to frame data
-                                            let manifest_entries: Vec<ManifestEntryData> = manifest.assets
-                                                .iter()
-                                                .map(|e| ManifestEntryData {
-                                                    url: e.url.clone(),
-                                                    sha256_hash: e.sha256_hash.clone(), // Manifest still uses SHA-256
-                                                })
-                                                .collect();
-                                            
-                                            let manifest_frame = Frame::CacheManifest(CacheManifestData {
-                                                site_origin: manifest.site_origin.clone(),
-                                                assets: manifest_entries,
-                                            });
-                                            
-                                            // Encode frame to bytes
-                                            let mut buffer = Vec::new();
-                                            let mut cursor = Cursor::new(&mut buffer);
-                                            let mut frame_writer = FrameWriter::new(&mut cursor);
-                                            
-                                            if let Err(e) = frame_writer.write_frame(&manifest_frame) {
-                                                error!("Failed to encode manifest frame: {}", e);
-                                                let _ = sender.close().await;
-                                                return;
-                                            }
-                                            
-                                            // Send as binary message (convert Vec<u8> to Bytes)
-                                            let buffer_len = buffer.len();
-                                            let bytes = buffer.into();
-                                            if let Err(e) = sender.send(Message::Binary(bytes)).await {
-                                                error!("Failed to send manifest frame: {}", e);
-                                                let _ = sender.close().await;
-                                                return;
-                                            }
-                                            info!("✅ Sent cache manifest frame ({} bytes)", buffer_len);
-                                        }
-                                        Err(e) => {
-                                            error!("Failed to generate manifest: {}", e);
-                                            let _ = sender.close().await;
-                                            return;
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("Failed to register recording: {}", e);
-                                    let _ = sender.close().await;
-                                    return;
-                                }
-                            }
-                            
-                            // Continue processing - the metadata frame will be written to the recording
-                            break;
-                        }
-                    }
-                }
-            }
-            Ok(Message::Close(_)) => {
-                info!("🔌 WebSocket closed before metadata received");
-                return;
-            }
-            Err(e) => {
-                error!("WebSocket error while waiting for metadata: {}", e);
-                return;
-            }
-            _ => {}
-        }
-    }
-
-    // Create a pipe to stream WebSocket data to the existing save method
-    let (pipe_writer, pipe_reader) = tokio::io::duplex(8192);
-    let mut pipe_writer = pipe_writer;
-    let pipe_reader = pipe_reader;
-
-    // Calculate total bytes from buffer before moving it
-    let mut total_bytes = frame_buffer.iter().map(|b| b.len()).sum::<usize>();
-
-    // Write buffered frames to pipe
-    for data in frame_buffer {
-        if let Err(e) = pipe_writer.write_all(&data).await {
-            error!("Failed to write buffered frame: {}", e);
-            let _ = sender.close().await;
-            return;
-        }
-    }
-
-    // Spawn a task to handle the streaming save with site_origin and user_agent
-    let state_clone = state.clone();
-    let site_origin_clone = site_origin.clone();
-    let user_agent_clone = user_agent.clone();
-    let save_task = tokio::spawn(async move {
-        state_clone
-            .save_recording_stream_frames_only_with_site(
-                pipe_reader, 
-                site_origin_clone.as_deref(),
-                user_agent_clone.as_deref(),
-            )
-            .await
-    });
-    // let mut last_frame_time: Option<u128> = None;
-    const MAX_RECORDING_SIZE: usize = 100 * 1024 * 1024; // 100MB limit
-
-    // Process remaining WebSocket messages and stream to pipe
-    while let Some(msg) = receiver.next().await {
-        match msg {
-            Ok(Message::Binary(data)) => {
-
-
-                // last_frame_time = Some(now);
-                total_bytes += data.len();
-
-                // Safety check: prevent runaway recordings
-                if total_bytes > MAX_RECORDING_SIZE {
-                    let error_msg = format!("Recording too large ({} bytes)", total_bytes);
-                    error!("❌ {}", error_msg);
-                    let _ = sender.close().await;
-                    return;
-                }
-
-                // Write data to the pipe (streams to disk immediately)
-                if let Err(e) = pipe_writer.write_all(&data).await {
-                    let error_msg = format!("Failed to write to pipe: {}", e);
-                    error!("❌ {}", error_msg);
-                    let _ = sender.close().await;
-                    return;
-                }
-            }
-            Ok(Message::Text(_)) => {
-                // Ignore text messages - protocol uses binary frames only
-                warn!("Received unexpected text message, ignoring");
-            }
-            Ok(Message::Close(_)) => {
-                info!("🔌 WebSocket connection closed, finalizing recording");
-                break;
-            }
-            Err(e) => {
-                error!("WebSocket error: {}", e);
-                break;
-            }
-            _ => {
-                debug!("Received other message type");
-            }
-        }
-    }
-
-    // Close the pipe writer to signal end of stream
-    info!(
-        "🔌 Closing pipe writer, total bytes processed: {}",
-        total_bytes
-    );
-    drop(pipe_writer);
-
-    // Wait for the save task to complete
-    match save_task.await {
-        Ok(Ok(filename)) => {
-            info!("✅ Recording saved as {} ({} bytes)", filename, total_bytes);
-            // Close WebSocket normally on success
-            let _ = sender.close().await;
-        }
-        Ok(Err(e)) => {
-            let error_msg = format!("Failed to save recording: {}", e);
-            error!("❌ {}", error_msg);
-            // Close WebSocket with error
-            let _ = sender.close().await;
-        }
-        Err(e) => {
-            let error_msg = format!("Save task panicked: {}", e);
-            error!("❌ {}", error_msg);
-            // Close WebSocket with error
-            let _ = sender.close().await;
-        }
-    }
-
-    info!("🔌 WebSocket connection ended");
-}
 
 async fn handle_options() -> impl IntoResponse {
     info!("📡 Received OPTIONS /record request (CORS preflight)");

@@ -14,7 +14,7 @@ lerna-debug.log*
 
 .cache
 .playwright-mcp/
-recordings/
+domcorder-storage/
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 

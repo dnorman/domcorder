@@ -21,6 +21,10 @@ impl StorageState {
     ) -> Self {
         // Ensure storage directory exists
         fs::create_dir_all(&storage_dir).expect("Failed to create storage directory");
+        
+        // Ensure recordings subdirectory exists
+        let recordings_dir = storage_dir.join("recordings");
+        fs::create_dir_all(&recordings_dir).expect("Failed to create recordings directory");
 
         Self {
             storage_dir,
@@ -28,6 +32,11 @@ impl StorageState {
             metadata_store,
             asset_file_store,
         }
+    }
+    
+    /// Get the recordings directory path
+    fn recordings_dir(&self) -> PathBuf {
+        self.storage_dir.join("recordings")
     }
 
     pub fn generate_filename(&self) -> String {
@@ -38,7 +47,7 @@ impl StorageState {
 
     pub fn save_recording(&self, data: &[u8]) -> io::Result<String> {
         let filename = self.generate_filename();
-        let filepath = self.storage_dir.join(&filename);
+        let filepath = self.recordings_dir().join(&filename);
 
         let mut file = fs::File::create(&filepath)?;
         file.write_all(data)?;
@@ -52,9 +61,9 @@ impl StorageState {
         let active_recordings = self.active_recordings.lock().unwrap();
 
         let read_dir = if let Some(subdir) = subdir {
-            fs::read_dir(&self.storage_dir.join(&subdir))?
+            fs::read_dir(&self.recordings_dir().join(&subdir))?
         } else {
-            fs::read_dir(&self.storage_dir)?
+            fs::read_dir(&self.recordings_dir())?
         };
 
         for entry in read_dir {
@@ -88,7 +97,7 @@ impl StorageState {
     }
 
     pub fn get_recording(&self, filename: &str) -> io::Result<Vec<u8>> {
-        let filepath = self.storage_dir.join(filename);
+        let filepath = self.recordings_dir().join(filename);
 
         if !filepath.exists() {
             return Err(io::Error::new(
@@ -105,7 +114,7 @@ impl StorageState {
     }
 
     pub fn recording_exists(&self, filename: &str) -> bool {
-        self.storage_dir.join(filename).exists()
+        self.recordings_dir().join(filename).exists()
     }
 
     /// Mark a recording as active (being written to)
@@ -134,8 +143,8 @@ impl StorageState {
         filename: Option<String>,
     ) -> io::Result<String> {
         let recording_dir = match subdir.clone() {    
-            Some(subdir) => self.storage_dir.join(subdir.clone()),
-            None => self.storage_dir.clone(),
+            Some(subdir) => self.recordings_dir().join(subdir.clone()),
+            None => self.recordings_dir(),
         };
 
         fs::create_dir_all(&recording_dir)?;
@@ -207,11 +216,36 @@ impl StorageState {
         site_origin: Option<&str>,
         user_agent: Option<&str>,
     ) -> io::Result<String> {
-        let filename = self.generate_filename();
-        let filepath = self.storage_dir.join(&filename);
+        self.save_recording_stream_frames_only_with_site_and_path(source, site_origin, user_agent, None, None).await
+    }
+
+    /// Stream and validate frames with site context for asset caching, with custom path/filename
+    pub async fn save_recording_stream_frames_only_with_site_and_path<R: AsyncRead + Unpin>(
+        &self,
+        source: R,
+        site_origin: Option<&str>,
+        user_agent: Option<&str>,
+        subdir: Option<PathBuf>,
+        custom_filename: Option<String>,
+    ) -> io::Result<String> {
+        let recording_dir = match subdir {
+            Some(ref subdir) => self.recordings_dir().join(subdir),
+            None => self.recordings_dir(),
+        };
+        
+        fs::create_dir_all(&recording_dir)?;
+        
+        let filename = custom_filename.unwrap_or_else(|| self.generate_filename());
+        let filepath = recording_dir.join(&filename);
+        
+        // For active recording tracking, use relative path if subdir is provided
+        let tracking_path = match subdir {
+            Some(ref subdir) => subdir.join(&filename).to_string_lossy().to_string(),
+            None => filename.clone(),
+        };
 
         // Mark this recording as active
-        self.mark_recording_active(&filename);
+        self.mark_recording_active(&tracking_path);
 
         // Create the file for writing
         let output_file = fs::File::create(&filepath)?;
@@ -225,7 +259,7 @@ impl StorageState {
 
         if let Err(e) = frame_writer.write_header(&header) {
             let failed_filename = format!("{}.failed", filename);
-            let failed_filepath = self.storage_dir.join(&failed_filename);
+            let failed_filepath = recording_dir.join(&failed_filename);
             let _ = fs::rename(&filepath, &failed_filepath);
             return Err(e);
         }
@@ -241,9 +275,9 @@ impl StorageState {
                         // Write the validated frame to output
                         if let Err(e) = frame_writer.write_frame(&frame) {
                             let failed_filename = format!("{}.failed", filename);
-                            let failed_filepath = self.storage_dir.join(&failed_filename);
+                            let failed_filepath = recording_dir.join(&failed_filename);
                             let _ = fs::rename(&filepath, &failed_filepath);
-                            self.mark_recording_completed(&filename);
+                            self.mark_recording_completed(&tracking_path);
                             return Err(e);
                         }
                     }
@@ -252,9 +286,9 @@ impl StorageState {
                 Err(e) => {
                     // Frame parsing failed - mark as failed and return error
                     let failed_filename = format!("{}.failed", filename);
-                    let failed_filepath = self.storage_dir.join(&failed_filename);
+                    let failed_filepath = recording_dir.join(&failed_filename);
                     let _ = fs::rename(&filepath, &failed_filepath);
-                    self.mark_recording_completed(&filename);
+                    self.mark_recording_completed(&tracking_path);
                     return Err(e);
                 }
             }
@@ -264,9 +298,10 @@ impl StorageState {
         frame_writer.flush()?;
 
         // Mark this recording as completed
-        self.mark_recording_completed(&filename);
+        self.mark_recording_completed(&tracking_path);
 
-        Ok(filename)
+        // Return the tracking path (relative path if subdir was used)
+        Ok(tracking_path)
     }
 
     /// Stream and validate frames from an AsyncRead source, writing them to a file
@@ -285,7 +320,7 @@ impl StorageState {
         user_agent: Option<&str>,
     ) -> io::Result<String> {
         let filename = self.generate_filename();
-        let filepath = self.storage_dir.join(&filename);
+        let filepath = self.recordings_dir().join(&filename);
 
         // Mark this recording as active
         self.mark_recording_active(&filename);
@@ -303,7 +338,7 @@ impl StorageState {
             Err(e) => {
                 // Header validation failed - mark as failed and return error
                 let failed_filename = format!("{}.failed", filename);
-                let failed_filepath = self.storage_dir.join(&failed_filename);
+                let failed_filepath = self.recordings_dir().join(&failed_filename);
                 if let Err(_) = fs::rename(&filepath, &failed_filepath) {
                     // If rename fails, try to delete the original file
                     let _ = fs::remove_file(&filepath);
@@ -315,7 +350,7 @@ impl StorageState {
         // Write the original header to the output file (preserving timestamp)
         if let Err(e) = frame_writer.write_header(&header) {
             let failed_filename = format!("{}.failed", filename);
-            let failed_filepath = self.storage_dir.join(&failed_filename);
+            let failed_filepath = self.recordings_dir().join(&failed_filename);
             let _ = fs::rename(&filepath, &failed_filepath);
             return Err(e);
         }
@@ -331,7 +366,7 @@ impl StorageState {
                         // Write the validated frame to output
                         if let Err(e) = frame_writer.write_frame(&frame) {
                             let failed_filename = format!("{}.failed", filename);
-                            let failed_filepath = self.storage_dir.join(&failed_filename);
+                            let failed_filepath = self.recordings_dir().join(&failed_filename);
                             let _ = fs::rename(&filepath, &failed_filepath);
                             self.mark_recording_completed(&filename);
                             return Err(e);
@@ -342,7 +377,7 @@ impl StorageState {
                 Err(e) => {
                     // Frame parsing failed - mark as failed and return error
                     let failed_filename = format!("{}.failed", filename);
-                    let failed_filepath = self.storage_dir.join(&failed_filename);
+                    let failed_filepath = self.recordings_dir().join(&failed_filename);
                     let _ = fs::rename(&filepath, &failed_filepath);
                     self.mark_recording_completed(&filename);
                     return Err(e);
@@ -367,7 +402,7 @@ impl StorageState {
         use tokio::fs::File;
         use tokio::io::AsyncSeekExt;
 
-        let filepath = self.storage_dir.join(filename);
+        let filepath = self.recordings_dir().join(filename);
 
         if !filepath.exists() {
             return Err(io::Error::new(
@@ -435,9 +470,7 @@ impl StorageState {
                 warn!("⚠️  Asset fetch unknown error: asset_id={}, url={}, error={}, attempting server-side fetch", 
                       asset.asset_id, asset.url, msg);
             }
-            // Empty asset due to fetch failure - try to fetch it server-side
-            warn!("⚠️  Asset frame has empty buffer (fetch_error={:?}): asset_id={}, url={}, attempting server-side fetch", 
-                  asset.fetch_error, asset.asset_id, asset.url);
+            
             
             match crate::asset_cache::fetcher::fetch_and_cache_asset(
                 &asset.url,
