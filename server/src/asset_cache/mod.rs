@@ -264,7 +264,7 @@ pub async fn store_or_get_asset_metadata(
     
     // Store the asset in CAS (using SHA-256 as key)
     asset_file_store.put(sha256_hash, data, mime_type).await?;
-    info!("💾 Stored new asset: sha256={}, random_id={} ({} bytes)", 
+    debug!("💾 Stored new asset: sha256={}, random_id={} ({} bytes)", 
           &sha256_hash[..16], &random_id[..16], data.len());
     
     // Store metadata linking SHA-256 to random_id
