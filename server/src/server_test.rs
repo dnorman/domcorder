@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::StorageState;
+    use crate::{StorageState, AssetFileStore, MetadataStore};
+    use crate::asset_cache::local::LocalBinaryStore;
+    use crate::asset_cache::sqlite::SqliteMetadataStore;
     use domcorder_proto::{FileHeader, Frame, FrameReader, FrameWriter};
     use std::io::Cursor;
     use tempfile::TempDir;
@@ -10,7 +12,19 @@ mod tests {
 
     fn create_test_storage() -> (StorageState, TempDir) {
         let temp_dir = tempfile::tempdir().unwrap();
-        let storage = StorageState::new(temp_dir.path().to_path_buf());
+        
+        // Initialize asset cache stores for testing
+        let db_path = temp_dir.path().join("asset_cache.db");
+        let metadata_store: Box<dyn MetadataStore> = Box::new(
+            SqliteMetadataStore::new(&db_path).unwrap(),
+        );
+
+        let assets_dir = temp_dir.path().join("assets");
+        let asset_file_store: Box<dyn AssetFileStore> = Box::new(
+            LocalBinaryStore::new(&assets_dir, "http://test.example".to_string()).unwrap(),
+        );
+        
+        let storage = StorageState::new(temp_dir.path().to_path_buf(), metadata_store, asset_file_store);
         (storage, temp_dir)
     }
 

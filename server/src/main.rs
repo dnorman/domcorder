@@ -1,4 +1,7 @@
 use domcorder_server::{StorageState, server};
+use domcorder_server::asset_cache::{AssetFileStore, MetadataStore};
+use domcorder_server::asset_cache::local::LocalBinaryStore;
+use domcorder_server::asset_cache::sqlite::SqliteMetadataStore;
 use hyper_util::rt::TokioIo;
 use hyper_util::server::conn::auto::Builder as ConnBuilder;
 use std::path::PathBuf;
@@ -20,7 +23,22 @@ async fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("./recordings"));
 
-    let state = Arc::new(StorageState::new(storage_dir.clone()));
+    // Initialize asset cache stores
+    let db_path = storage_dir.join("asset_cache.db");
+    let metadata_store: Box<dyn MetadataStore> = Box::new(
+        SqliteMetadataStore::new(&db_path)
+            .expect("Failed to initialize asset metadata store"),
+    );
+
+    let assets_dir = storage_dir.join("assets");
+    let base_url = std::env::var("BASE_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8723".to_string());
+    let asset_file_store: Box<dyn AssetFileStore> = Box::new(
+        LocalBinaryStore::new(&assets_dir, base_url.clone())
+            .expect("Failed to initialize asset file store"),
+    );
+
+    let state = Arc::new(StorageState::new(storage_dir.clone(), metadata_store, asset_file_store));
 
     // Create and run the server
     let app = server::create_app(state);
@@ -47,13 +65,7 @@ async fn main() {
                 .serve_connection_with_upgrades(
                     io,
                     hyper::service::service_fn(move |req| {
-                        // debug!(
-                        //     "Incoming request: {} {} {:?}",
-                        //     req.method(),
-                        //     req.uri(),
-                        //     req.version()
-                        // );
-                        // debug!("Request headers: {:?}", req.headers());
+
                         app_clone.clone().call(req)
                     }),
                 )

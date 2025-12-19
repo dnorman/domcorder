@@ -1,4 +1,4 @@
-import type { Asset } from "@domcorder/proto-ts";
+import type { Asset, AssetReference } from "@domcorder/proto-ts";
 import { ASSET_CONTAINING_ATTRIBUTES } from '../common';
 
 export type AssetLoadedHandler = (asset: AssetEntry) => void;
@@ -64,6 +64,131 @@ export class AssetManager {
   }
 
   /**
+   * Handles an AssetReference frame separately from Asset frames
+   * 
+   * AssetReference frames have:
+   * - Original URL (sourceUrl): the URL from the recording
+   * - Resolved HTTP URL: the URL to fetch the asset from the server
+   * - No buffer: asset will be fetched from HTTP URL
+   */
+  public receiveAssetReference(assetRef: AssetReference, resolvedHttpUrl: string): void {
+    let assetEntry = this.assets.get(assetRef.asset_id);
+    if (!assetEntry) {
+      // Use the original URL from AssetReference as sourceUrl
+      assetEntry = this.addAssetEntry(assetRef.asset_id, assetRef.url);
+    }
+
+    if (assetEntry.resolvedUrl) {
+      // Already resolved, skip
+      return;
+    }
+
+    // For AssetReference, we have:
+    // - sourceUrl: the original URL (assetRef.url) - already set in addAssetEntry
+    // - resolvedUrl: the HTTP URL to fetch from (resolvedHttpUrl)
+    // - No buffer (will be fetched from HTTP URL when needed)
+    
+    assetEntry.buf = undefined; // No buffer for references
+    
+    // If this is a CSS file, we need to fetch and process it to replace asset:ID references
+    if (assetRef.mime === 'text/css') {
+      // Fetch the CSS content and process it
+      fetch(resolvedHttpUrl)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          return response.text();
+        })
+        .then(cssText => {
+          // Process CSS to replace asset:ID references
+          const processedCssText = this.processAssetsInCssText(cssText, (assetId, subAssetEntry) => {
+            const handler: AssetLoadedHandler = (loadedSubAssetEntry: AssetEntry) => {
+              // Update CSS text with resolved URL
+              const currentCssText = assetEntry.buf 
+                ? new TextDecoder().decode(assetEntry.buf)
+                : cssText;
+              const updatedCssText = currentCssText.replaceAll(
+                `asset:${assetId}`, 
+                loadedSubAssetEntry.resolvedUrl || loadedSubAssetEntry.pendingBlobUrl || `asset:${assetId}`
+              );
+              assetEntry.buf = new TextEncoder().encode(updatedCssText).buffer as ArrayBuffer;
+              
+              // Create blob URL for processed CSS
+              const blob = new Blob([assetEntry.buf], { type: 'text/css' });
+              const oldResolvedUrl = assetEntry.resolvedUrl;
+              const oldPendingBlobUrl = assetEntry.pendingBlobUrl;
+              // Revoke old blob URL if it exists
+              if (oldPendingBlobUrl && oldPendingBlobUrl !== oldResolvedUrl) {
+                URL.revokeObjectURL(oldPendingBlobUrl);
+              }
+              if (oldResolvedUrl && oldResolvedUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(oldResolvedUrl);
+              }
+              const newBlobUrl = URL.createObjectURL(blob);
+              assetEntry.pendingBlobUrl = newBlobUrl; // Update pendingBlobUrl so callbacks can find it
+              assetEntry.resolvedUrl = newBlobUrl;
+              
+              // Notify requestors
+              if (assetEntry.assetRequestors.size > 0) {
+                assetEntry.assetRequestors.forEach(requestor => {
+                  requestor(assetEntry);
+                });
+              }
+            };
+            
+            if (subAssetEntry.resolvedUrl || subAssetEntry.pendingBlobUrl) {
+              handler(subAssetEntry);
+            } else {
+              // Wait for asset to load
+              subAssetEntry.assetRequestors.add(handler);
+            }
+          });
+          
+          // Store processed CSS
+          assetEntry.buf = new TextEncoder().encode(processedCssText).buffer as ArrayBuffer;
+          const blob = new Blob([assetEntry.buf], { type: 'text/css' });
+          const initialBlobUrl = URL.createObjectURL(blob);
+          assetEntry.pendingBlobUrl = initialBlobUrl; // Set pendingBlobUrl so callbacks can find and replace it
+          assetEntry.resolvedUrl = initialBlobUrl;
+          
+          // Notify requestors
+          if (assetEntry.assetRequestors.size > 0) {
+            assetEntry.assetRequestors.forEach(requestor => {
+              requestor(assetEntry);
+            });
+          }
+        })
+        .catch(error => {
+          console.error(`❌ Failed to fetch CSS asset ${assetRef.asset_id}:`, error);
+          // Fallback: use the HTTP URL directly (may have asset:ID issues)
+          assetEntry.resolvedUrl = resolvedHttpUrl;
+          if (assetEntry.assetRequestors.size > 0) {
+            assetEntry.assetRequestors.forEach(requestor => {
+              requestor(assetEntry);
+            });
+          }
+        });
+    } else {
+      // For non-CSS assets, use HTTP URL directly
+      assetEntry.resolvedUrl = resolvedHttpUrl;
+      
+      // Notify any waiting requestors
+      if (assetEntry.assetRequestors.size > 0) {
+        assetEntry.assetRequestors.forEach(requestor => {
+          requestor(assetEntry);
+        });
+      }
+    }
+    
+    // Clean up pending blob URL if it exists
+    if (assetEntry.pendingBlobUrl) {
+      URL.revokeObjectURL(assetEntry.pendingBlobUrl);
+      assetEntry.pendingBlobUrl = undefined;
+    }
+  }
+
+  /**
    * Adds an asset to the manager, creating a blob and object URL
    */
   public receiveAsset(asset: Asset): void {
@@ -73,6 +198,7 @@ export class AssetManager {
     }
 
     if (assetEntry.resolvedUrl) {
+      // Asset already resolved, skip
       return;
     }
 
@@ -81,8 +207,19 @@ export class AssetManager {
     let blob: Blob | undefined;
     let objectUrl: string | undefined;
     
-    // Special handling for CSS assets which may have references to other assets.
-    if (asset.buf.byteLength > 0 && asset.mime === 'text/css') {
+    // If buffer is empty, use the URL directly (expecting HTTP URL)
+    if (asset.buf.byteLength === 0) {
+      // Validate that the URL is a valid HTTP/HTTPS URL
+      if (asset.url && (asset.url.startsWith('http://') || asset.url.startsWith('https://'))) {
+        objectUrl = asset.url;
+      } else {
+        console.warn(`⚠️ Asset ${asset.asset_id}: Empty buffer but invalid URL: ${asset.url}`);
+        // Fallback: create empty blob URL
+        blob = new Blob([], { type: asset.mime || 'application/octet-stream' });
+        objectUrl = URL.createObjectURL(blob);
+      }
+    } else if (asset.buf.byteLength > 0 && asset.mime === 'text/css') {
+      // Special handling for CSS assets which may have references to other assets.
       const originalCssText = new TextDecoder().decode(asset.buf);
 
       const processedCssText = this.processAssetsInCssText(originalCssText, (assetId, subAssetEntry) => {
@@ -193,7 +330,9 @@ export class AssetManager {
     value: string
   ): void {
     const asset = this.getOrCreateAssetEntry(assetId);
-    const pendingBlobUrl = asset.pendingBlobUrl!;
+    
+    // Use resolvedUrl if available, otherwise use pendingBlobUrl
+    const urlToUse = asset.resolvedUrl || asset.pendingBlobUrl!;
     
     if (!value) return;
 
@@ -207,7 +346,7 @@ export class AssetManager {
             const matchedAssetId = parseInt(assetMatch[1], 10);
             if (matchedAssetId === assetId) {
               // This part matched the asset id so fill in the asset url.
-              return desc.length ? [pendingBlobUrl, ...desc].join(' ') : pendingBlobUrl;
+              return desc.length ? [urlToUse, ...desc].join(' ') : urlToUse;
             } 
           }
           // Keep original if asset not found
@@ -216,20 +355,30 @@ export class AssetManager {
         .join(', ');
         element.setAttribute(property, processedParts);
     } else if (property === 'style') {
-      const processedCssText = this.replaceAssetInCssText(value, assetId, pendingBlobUrl);
+      const processedCssText = this.replaceAssetInCssText(value, assetId, urlToUse);
       element.setAttribute(property, processedCssText);
     } else {
-      element.setAttribute(property, pendingBlobUrl);
+      element.setAttribute(property, urlToUse);
     }
 
-    this.useAssetInElement(assetId, element, (asset) => {
-      const resolvedUrl = asset.resolvedUrl!;
-      const currentValue = element.getAttribute(property);
+    // Only set up replacement callback if asset is not yet resolved
+    if (!asset.resolvedUrl) {
+      this.useAssetInElement(assetId, element, (asset) => {
+        const resolvedUrl = asset.resolvedUrl!;
+        const currentValue = element.getAttribute(property);
         if (currentValue) {
-          const newValue = currentValue.replaceAll(asset.pendingBlobUrl!, resolvedUrl);
-          element.setAttribute(property, newValue);
-        } 
-    });
+          // If we have a pendingBlobUrl, replace it with resolvedUrl
+          // Otherwise, just set the resolvedUrl directly
+          if (asset.pendingBlobUrl && currentValue.includes(asset.pendingBlobUrl)) {
+            const newValue = currentValue.replaceAll(asset.pendingBlobUrl, resolvedUrl);
+            element.setAttribute(property, newValue);
+          } else if (!currentValue.includes(resolvedUrl)) {
+            // If currentValue doesn't already have resolvedUrl, set it directly
+            element.setAttribute(property, resolvedUrl);
+          }
+        }
+      });
+    }
   }
 
   public bindAssetsToStyleSheet(styleSheet: CSSStyleSheet, cssText: string) {
@@ -320,12 +469,11 @@ export class AssetManager {
   }
 
   private processAssetsInCssText(cssText: string, registrationCallback: (id: number, asset: AssetEntry) => void): string {
-    
     // FIXME update asset counts and references.
     const detectedAssetIds = new Set<number>();
 
     // Look for url() references and replace them with blob URLs if the asset exists
-    return cssText.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, quote, raw) => {
+    const result = cssText.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, quote, raw) => {
       const url = raw.trim();
       const assetMatch = /^asset:(\d+)$/.exec(url);
       if (assetMatch) {
@@ -342,6 +490,8 @@ export class AssetManager {
       }
       return match;
     });
+    
+    return result;
   }
 
   // processAssetsInCssText(cssText, registrationCallback) {

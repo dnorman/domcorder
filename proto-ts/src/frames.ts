@@ -41,6 +41,11 @@ export enum FrameType {
 
     CanvasChanged = 26,
     DomNodePropertyTextChanged = 27,
+    RecordingMetadata = 28,
+    AssetReference = 29,
+    CacheManifest = 30,
+    PlaybackConfig = 31,
+    Heartbeat = 32,
 }
 
 // BufferReader interface for decoding
@@ -126,12 +131,20 @@ export class Keyframe extends Frame {
     }
 }
 
+export type AssetFetchError = 
+    | { type: 'none' }
+    | { type: 'cors' }
+    | { type: 'network' }
+    | { type: 'http' }
+    | { type: 'unknown'; message: string };
+
 export class Asset extends Frame {
     constructor(
         public asset_id: number,
         public url: string,
         public mime: string | undefined,
-        public buf: ArrayBuffer
+        public buf: ArrayBuffer,
+        public fetch_error: AssetFetchError = { type: 'none' }
     ) {
         super();
     }
@@ -150,7 +163,25 @@ export class Asset extends Frame {
         const bytes = reader.readBytes(length);
         const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 
-        return new Asset(asset_id, url, mime, buf);
+        // Read fetch_error enum - bincode encodes enums as u32 discriminant + optional data
+        const errorDiscriminant = reader.readU32();
+        let fetch_error: AssetFetchError;
+        if (errorDiscriminant === 0) {
+            fetch_error = { type: 'none' };
+        } else if (errorDiscriminant === 1) {
+            fetch_error = { type: 'cors' };
+        } else if (errorDiscriminant === 2) {
+            fetch_error = { type: 'network' };
+        } else if (errorDiscriminant === 3) {
+            fetch_error = { type: 'http' };
+        } else if (errorDiscriminant === 4) {
+            const message = reader.readString();
+            fetch_error = { type: 'unknown', message };
+        } else {
+            throw new Error(`Unknown AssetFetchError discriminant: ${errorDiscriminant}`);
+        }
+
+        return new Asset(asset_id, url, mime, buf, fetch_error);
     }
 
     async encode(w: Writer): Promise<void> {
@@ -171,6 +202,167 @@ export class Asset extends Frame {
         const bytes = new Uint8Array(this.buf);
         w.u64(BigInt(bytes.length));  // u64 length (BE)
         w.bytes(bytes);               // Raw bytes
+
+        // Encode fetch_error enum
+        if (this.fetch_error.type === 'none') {
+            w.u32(0);
+        } else if (this.fetch_error.type === 'cors') {
+            w.u32(1);
+        } else if (this.fetch_error.type === 'network') {
+            w.u32(2);
+        } else if (this.fetch_error.type === 'http') {
+            w.u32(3);
+        } else if (this.fetch_error.type === 'unknown') {
+            w.u32(4);
+            w.strUtf8(this.fetch_error.message);
+        }
+
+        await w.endFrame();
+    }
+}
+
+export class RecordingMetadata extends Frame {
+    constructor(
+        public initial_url: string,
+        public heartbeat_interval_seconds: number = 0
+    ) {
+        super();
+    }
+
+    static decode(reader: BufferReader): RecordingMetadata {
+        if (reader.readU32() !== FrameType.RecordingMetadata) throw new Error(`Expected RecordingMetadata frame type`);
+        const initial_url = reader.readString();
+        const heartbeat_interval_seconds = reader.readU32();
+        return new RecordingMetadata(initial_url, heartbeat_interval_seconds);
+    }
+
+    async encode(w: Writer): Promise<void> {
+        w.startFrame();
+        w.u32(FrameType.RecordingMetadata);
+        w.strUtf8(this.initial_url);
+        w.u32(this.heartbeat_interval_seconds);
+        await w.endFrame();
+    }
+}
+
+export class Heartbeat extends Frame {
+    constructor() {
+        super();
+    }
+
+    static decode(reader: BufferReader): Heartbeat {
+        if (reader.readU32() !== FrameType.Heartbeat) {
+            throw new Error(`Expected Heartbeat frame type`);
+        }
+        return new Heartbeat();
+    }
+
+    async encode(w: Writer): Promise<void> {
+        w.startFrame();
+        w.u32(FrameType.Heartbeat);
+        await w.endFrame();
+    }
+}
+
+export class AssetReference extends Frame {
+    constructor(
+        public asset_id: number,
+        public url: string,
+        public hash: string,
+        public mime?: string
+    ) {
+        super();
+    }
+
+    static decode(reader: BufferReader): AssetReference {
+        if (reader.readU32() !== FrameType.AssetReference) throw new Error(`Expected AssetReference frame type`);
+        const asset_id = reader.readU32();
+        const url = reader.readString();
+        const hash = reader.readString();
+        // Read optional mime type - bincode format: 1 byte for None/Some
+        const hasMime = reader.readByte();
+        const mime = hasMime === 1 ? reader.readString() : undefined;
+        return new AssetReference(asset_id, url, hash, mime);
+    }
+
+    async encode(w: Writer): Promise<void> {
+        w.startFrame();
+        w.u32(FrameType.AssetReference);
+        w.u32(this.asset_id);
+        w.strUtf8(this.url);
+        w.strUtf8(this.hash);
+        // Write optional mime type - bincode format: 1 byte for None/Some
+        if (this.mime !== undefined) {
+            w.byte(1);
+            w.strUtf8(this.mime);
+        } else {
+            w.byte(0);
+        }
+        await w.endFrame();
+    }
+}
+
+export class ManifestEntry {
+    constructor(
+        public url: string,
+        public sha256_hash: string
+    ) {}
+}
+
+export class CacheManifest extends Frame {
+    constructor(
+        public site_origin: string,
+        public assets: ManifestEntry[]
+    ) {
+        super();
+    }
+
+    static decode(reader: BufferReader): CacheManifest {
+        if (reader.readU32() !== FrameType.CacheManifest) throw new Error(`Expected CacheManifest frame type`);
+        const site_origin = reader.readString();
+        const asset_count = reader.readU32();
+        const assets: ManifestEntry[] = [];
+        for (let i = 0; i < asset_count; i++) {
+            const url = reader.readString();
+            const sha256_hash = reader.readString();
+            assets.push(new ManifestEntry(url, sha256_hash));
+        }
+        return new CacheManifest(site_origin, assets);
+    }
+
+    async encode(w: Writer): Promise<void> {
+        w.startFrame();
+        w.u32(FrameType.CacheManifest);
+        w.strUtf8(this.site_origin);
+        w.u32(this.assets.length);
+        for (const entry of this.assets) {
+            w.strUtf8(entry.url);
+            w.strUtf8(entry.sha256_hash);
+        }
+        await w.endFrame();
+    }
+}
+
+export class PlaybackConfig extends Frame {
+    constructor(
+        public storage_type: string,
+        public config_json: string
+    ) {
+        super();
+    }
+
+    static decode(reader: BufferReader): PlaybackConfig {
+        if (reader.readU32() !== FrameType.PlaybackConfig) throw new Error(`Expected PlaybackConfig frame type`);
+        const storage_type = reader.readString();
+        const config_json = reader.readString();
+        return new PlaybackConfig(storage_type, config_json);
+    }
+
+    async encode(w: Writer): Promise<void> {
+        w.startFrame();
+        w.u32(FrameType.PlaybackConfig);
+        w.strUtf8(this.storage_type);
+        w.strUtf8(this.config_json);
         await w.endFrame();
     }
 }
@@ -890,3 +1082,8 @@ DECODERS[FrameType.StyleSheetRuleDeleted] = StyleSheetRuleDeleted.decode;
 DECODERS[FrameType.StyleSheetReplaced] = StyleSheetReplaced.decode;
 DECODERS[FrameType.CanvasChanged] = CanvasChanged.decode;
 DECODERS[FrameType.DomNodePropertyTextChanged] = DomNodePropertyTextChanged.decode;
+DECODERS[FrameType.RecordingMetadata] = RecordingMetadata.decode;
+DECODERS[FrameType.AssetReference] = AssetReference.decode;
+DECODERS[FrameType.CacheManifest] = CacheManifest.decode;
+DECODERS[FrameType.PlaybackConfig] = PlaybackConfig.decode;
+DECODERS[FrameType.Heartbeat] = Heartbeat.decode;

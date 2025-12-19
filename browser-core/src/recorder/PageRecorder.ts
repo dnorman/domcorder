@@ -82,6 +82,10 @@ export class PageRecorder {
     this.frameHandlers = this.frameHandlers.filter(h => h !== handler);
   }
 
+  public getInitialUrl(): string {
+    return this.sourceDocument.location.href;
+  }
+
   private async emitFrame(frame: Frame, timestamp: boolean = true) {
     if (timestamp) {
       this.emitTimestampFrame();
@@ -446,7 +450,8 @@ export class PageRecorder {
         await this.emitFrame(keyframe);
       },
       onAsset: async (asset: InlinerAsset) => {
-        const assetFrame = new Asset(asset.id, asset.url, asset.mime, asset.buf);
+        const fetchError = (asset as any).fetchError || { type: 'none' };
+        const assetFrame = new Asset(asset.id, asset.url, asset.mime, asset.buf, fetchError);
         await this.emitFrame(assetFrame, false);
       },
     };

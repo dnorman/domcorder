@@ -5,6 +5,9 @@ import { AssetManager } from "./AssetManager";
 import {
   Frame,
   Asset,
+  AssetReference,
+  PlaybackConfig,
+  RecordingMetadata,
   DomAttributeChanged,
   DomAttributeRemoved,
   DomNodeAdded,
@@ -41,6 +44,7 @@ import { MouseSimulator } from "./MouseSimulator";
 import { SelectionSimulator } from "./SelectionSimulator";
 import { TypingSimulator } from "./TypingSimulator";
 import { PlaybackQueue } from "./PlaybackQueue";
+import { UrlResolver, createUrlResolver } from "./UrlResolver";
 
 
 export class PagePlayer {
@@ -65,6 +69,7 @@ export class PagePlayer {
   private readonly playerComponent?: any;
 
   private readonly playbackQueue: PlaybackQueue;
+  private urlResolver: UrlResolver | null = null;
 
   constructor(
     targetIframe: HTMLIFrameElement,
@@ -118,11 +123,19 @@ export class PagePlayer {
 
   private async handleFrame(frame: Frame): Promise<void> {
     try {
-      if (frame instanceof Keyframe) {
+      if (frame instanceof PlaybackConfig) {
+        await this._handlePlaybackConfigFrame(frame as PlaybackConfig);
+      } else if (frame instanceof RecordingMetadata) {
+        // RecordingMetadata is sent during recording for site identification
+        // During playback, we can safely ignore it
+        // No action needed
+      } else if (frame instanceof Keyframe) {
         await this._handleKeyFrame(frame as Keyframe);
-    } else if (frame instanceof Asset) {
-      await this._handleAssetFrame(frame as Asset);
-    } else if (frame instanceof Timestamp) {
+      } else if (frame instanceof Asset) {
+        await this._handleAssetFrame(frame as Asset);
+      } else if (frame instanceof AssetReference) {
+        await this._handleAssetReferenceFrame(frame as AssetReference);
+      } else if (frame instanceof Timestamp) {
       await this._handleTimestampFrame(frame);
     } else if (frame instanceof ViewportResized) {
       await this._handleViewportResizedFrame(frame);
@@ -322,6 +335,51 @@ export class PagePlayer {
   private _handleAssetFrame(frame: Asset) {
     // Add the asset to the AssetManager
     this.assetManager.receiveAsset(frame);
+  }
+
+  /**
+   * Handle AssetReference frame by converting it to an Asset with HTTP URL
+   * The server should have resolved the SHA-256 to random_id and provided an HTTP URL,
+   * but if not, we'll construct one based on the server's asset endpoint.
+   */
+  /**
+   * Handle PlaybackConfig frame to initialize URL resolver
+   */
+  private async _handlePlaybackConfigFrame(frame: PlaybackConfig): Promise<void> {
+    try {
+      this.urlResolver = createUrlResolver(frame.storage_type, frame.config_json);
+      console.debug(`📦 PlaybackConfig: storage_type=${frame.storage_type}`);
+    } catch (error) {
+      console.error('Failed to create URL resolver:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle AssetReference frame separately from Asset frames
+   * Uses the URL resolver to convert the random_id to an HTTP URL.
+   */
+  private async _handleAssetReferenceFrame(frame: AssetReference): Promise<void> {
+    if (!this.urlResolver) {
+      throw new Error('URL resolver not initialized. PlaybackConfig frame must be received first.');
+    }
+    
+    // Validate hash is not empty
+    if (!frame.hash || frame.hash.length === 0) {
+      console.warn(`⚠️ AssetReference ${frame.asset_id} has empty hash, skipping`);
+      return;
+    }
+    
+    try {
+      // Resolve random_id to HTTP URL
+      const httpUrl = this.urlResolver.resolveUrl(frame.hash);
+      
+      // Use the dedicated method for AssetReference (preserves original URL as sourceUrl)
+      this.assetManager.receiveAssetReference(frame, httpUrl);
+    } catch (error) {
+      console.error(`❌ Failed to resolve AssetReference ${frame.asset_id}:`, error);
+      // Don't throw - allow playback to continue with other assets
+    }
   } 
 
   /**

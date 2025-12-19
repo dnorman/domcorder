@@ -1,3 +1,7 @@
+use crate::asset_cache::{
+    AssetUsageParams, AssetFileStore, MetadataStore,
+    store_or_get_asset_metadata,
+};
 use crate::{RecordingInfo, StorageState};
 use chrono::Utc;
 use domcorder_proto::{FileHeader, FrameReader, FrameWriter};
@@ -6,16 +10,23 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use tokio::io::AsyncRead;
 use tokio_stream::StreamExt;
-use tracing::info;
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 impl StorageState {
-    pub fn new(storage_dir: PathBuf) -> Self {
+    pub fn new(
+        storage_dir: PathBuf,
+        metadata_store: Box<dyn MetadataStore>,
+        asset_file_store: Box<dyn AssetFileStore>,
+    ) -> Self {
         // Ensure storage directory exists
         fs::create_dir_all(&storage_dir).expect("Failed to create storage directory");
+
         Self {
             storage_dir,
             active_recordings: std::sync::Mutex::new(std::collections::HashMap::new()),
+            metadata_store,
+            asset_file_store,
         }
     }
 
@@ -186,6 +197,16 @@ impl StorageState {
         &self,
         source: R,
     ) -> io::Result<String> {
+        self.save_recording_stream_frames_only_with_site(source, None, None).await
+    }
+
+    /// Stream and validate frames with site context for asset caching
+    pub async fn save_recording_stream_frames_only_with_site<R: AsyncRead + Unpin>(
+        &self,
+        source: R,
+        site_origin: Option<&str>,
+        user_agent: Option<&str>,
+    ) -> io::Result<String> {
         let filename = self.generate_filename();
         let filepath = self.storage_dir.join(&filename);
 
@@ -213,20 +234,10 @@ impl StorageState {
         while let Some(frame_result) = frame_reader.next().await {
             match frame_result {
                 Ok(frame) => {
-                    // Print message for Asset frames
-                    if let domcorder_proto::Frame::Asset(ref asset) = frame {
-                        info!(
-                            "🎨 Received Asset frame: id={}, url={}, size={} bytes",
-                            asset.asset_id,
-                            asset.url,
-                            asset.buf.len()
-                        );
-                    }
+                    // Process Asset and AssetReference frames
+                    let processed_frame = self.filter_frame_async(frame, site_origin, user_agent).await;
 
-                    // Frame parsed successfully - apply filter (currently passthrough)
-                    let filtered_frame = self.filter_frame(frame);
-
-                    if let Some(frame) = filtered_frame {
+                    if let Some(frame) = processed_frame {
                         // Write the validated frame to output
                         if let Err(e) = frame_writer.write_frame(&frame) {
                             let failed_filename = format!("{}.failed", filename);
@@ -262,6 +273,16 @@ impl StorageState {
     pub async fn save_recording_stream<R: AsyncRead + Unpin>(
         &self,
         source: R,
+    ) -> io::Result<String> {
+        self.save_recording_stream_with_site(source, None, None).await
+    }
+
+    /// Stream and validate frames with site context
+    pub async fn save_recording_stream_with_site<R: AsyncRead + Unpin>(
+        &self,
+        source: R,
+        site_origin: Option<&str>,
+        user_agent: Option<&str>,
     ) -> io::Result<String> {
         let filename = self.generate_filename();
         let filepath = self.storage_dir.join(&filename);
@@ -303,20 +324,10 @@ impl StorageState {
         while let Some(frame_result) = frame_reader.next().await {
             match frame_result {
                 Ok(frame) => {
-                    // Print message for Asset frames
-                    if let domcorder_proto::Frame::Asset(ref asset) = frame {
-                        info!(
-                            "🎨 Received Asset frame: id={}, url={}, size={} bytes",
-                            asset.asset_id,
-                            asset.url,
-                            asset.buf.len()
-                        );
-                    }
+                    // Process Asset and AssetReference frames
+                    let processed_frame = self.filter_frame_async(frame, site_origin, user_agent).await;
 
-                    // Frame parsed successfully - apply filter (currently passthrough)
-                    let filtered_frame = self.filter_frame(frame);
-
-                    if let Some(frame) = filtered_frame {
+                    if let Some(frame) = processed_frame {
                         // Write the validated frame to output
                         if let Err(e) = frame_writer.write_frame(&frame) {
                             let failed_filename = format!("{}.failed", filename);
@@ -386,11 +397,275 @@ impl StorageState {
         }
     }
 
-    /// Filter function for frames - currently a passthrough, but can be extended later
-    fn filter_frame(&self, frame: domcorder_proto::Frame) -> Option<domcorder_proto::Frame> {
-        // For now, all frames that parse successfully are valid
-        Some(frame)
+    /// Process an Asset frame: extract binary data, hash it, store it in CAS
+    /// Determine if server-side fetch should be attempted based on fetch_error
+    fn should_fetch_server_side(fetch_error: &domcorder_proto::AssetFetchError) -> bool {
+        match fetch_error {
+            domcorder_proto::AssetFetchError::CORS | domcorder_proto::AssetFetchError::Network => {
+                true // CORS or network error - try server-side fetch
+            }
+            domcorder_proto::AssetFetchError::Http => {
+                false // HTTP error (404, 500, etc.) - don't retry
+            }
+            domcorder_proto::AssetFetchError::Unknown(_) => {
+                true // Unknown error - try server-side fetch as fallback
+            }
+            domcorder_proto::AssetFetchError::None => {
+                false // No error - either success or legitimately empty
+            }
+        }
     }
+
+    /// Returns an AssetReference frame with random_id for writing to recording
+    /// Returns None if the asset is empty and server-side fetch also fails
+    async fn process_asset_frame(
+        &self,
+        asset: &domcorder_proto::AssetData,
+        site_origin: Option<&str>,
+        user_agent: Option<&str>,
+    ) -> Result<Option<domcorder_proto::AssetReferenceData>, Box<dyn std::error::Error + Send + Sync>> {
+        let data = &asset.buf;
+        
+        // Check fetch_error to determine if we should attempt server-side fetch
+        let should_fetch = Self::should_fetch_server_side(&asset.fetch_error);
+        
+        if data.is_empty() && should_fetch {
+            // Log unknown errors
+            if let domcorder_proto::AssetFetchError::Unknown(msg) = &asset.fetch_error {
+                warn!("⚠️  Asset fetch unknown error: asset_id={}, url={}, error={}, attempting server-side fetch", 
+                      asset.asset_id, asset.url, msg);
+            }
+            // Empty asset due to fetch failure - try to fetch it server-side
+            warn!("⚠️  Asset frame has empty buffer (fetch_error={:?}): asset_id={}, url={}, attempting server-side fetch", 
+                  asset.fetch_error, asset.asset_id, asset.url);
+            
+            match crate::asset_cache::fetcher::fetch_and_cache_asset(
+                &asset.url,
+                user_agent,
+                self.metadata_store.as_ref(),
+                self.asset_file_store.as_ref(),
+            ).await {
+                Ok((sha256_hash, random_id)) => {
+                    info!("✅ Successfully fetched asset server-side: random_id={}", &random_id[..16]);
+                    
+                    // Register asset usage on the site (if we have site context)
+                    if let Some(origin) = site_origin {
+                        let usage_params = AssetUsageParams {
+                            site_origin: origin.to_string(),
+                            url: asset.url.clone(),
+                            sha256_hash: sha256_hash.clone(),
+                            size: 0, // We don't know the actual size from the fetch result
+                        };
+                        if let Err(e) = self.metadata_store.register_asset_usage(usage_params).await {
+                            warn!("Failed to register asset usage: {}", e);
+                        }
+                    }
+                    
+                    // Return AssetReference with random_id (for recording)
+                    return Ok(Some(domcorder_proto::AssetReferenceData {
+                        asset_id: asset.asset_id,
+                        url: asset.url.clone(),
+                        hash: random_id,
+                        mime: asset.mime.clone(),
+                    }));
+                }
+                Err(e) => {
+                    warn!("❌ Failed to fetch asset server-side: {}", e);
+                    // Skip this asset - both client and server fetch failed
+                    return Ok(None);
+                }
+            }
+        } else if data.is_empty() && !should_fetch {
+            // Legitimately empty asset or HTTP error - skip it
+            if matches!(asset.fetch_error, domcorder_proto::AssetFetchError::Http) {
+                warn!("⚠️  Asset HTTP error: asset_id={}, url={}, skipping", 
+                      asset.asset_id, asset.url);
+            }
+            return Ok(None);
+        }
+
+        // Compute SHA-256 hash (for storage and manifest)
+        let sha256_hash = crate::asset_cache::hash::sha256(data);
+        
+        // Store asset and get/ensure random_id exists
+        let mime = asset.mime.as_deref().unwrap_or("application/octet-stream");
+        let random_id = store_or_get_asset_metadata(
+            &sha256_hash,
+            data,
+            mime,
+            self.metadata_store.as_ref(),
+            self.asset_file_store.as_ref(),
+        ).await?;
+
+        // Register asset usage on the site (if we have site context)
+        if let Some(origin) = site_origin {
+            let usage_params = AssetUsageParams {
+                site_origin: origin.to_string(),
+                url: asset.url.clone(),
+                sha256_hash: sha256_hash.clone(),
+                size: data.len() as u64,
+            };
+            if let Err(e) = self.metadata_store.register_asset_usage(usage_params).await {
+                warn!("Failed to register asset usage: {}", e);
+            }
+        }
+
+        // Return AssetReference with random_id (for recording)
+        Ok(Some(domcorder_proto::AssetReferenceData {
+            asset_id: asset.asset_id,
+            url: asset.url.clone(),
+            hash: random_id,
+            mime: asset.mime.clone(),
+        }))
+    }
+
+    /// Process an AssetReference frame: verify server has the asset and resolve SHA-256 → random_id
+    /// Returns AssetReference with random_id for writing to recording
+    async fn process_asset_reference_frame(
+        &self,
+        asset_ref: &domcorder_proto::AssetReferenceData,
+        site_origin: Option<&str>,
+        user_agent: Option<&str>,
+    ) -> Result<domcorder_proto::AssetReferenceData, Box<dyn std::error::Error + Send + Sync>> {
+        // The hash field contains SHA-256 from the client
+        // Resolve it to random_id for storage in the recording
+        match self.metadata_store.resolve_hashes(&asset_ref.hash).await {
+            Ok(Some(random_id)) => {
+                // Asset exists! Just register usage
+                debug!("✅ AssetReference verified: sha256={}, random_id={}", &asset_ref.hash[..16], &random_id[..16]);
+                
+                if let Some(origin) = site_origin {
+                    let usage_params = AssetUsageParams {
+                        site_origin: origin.to_string(),
+                        url: asset_ref.url.clone(),
+                        sha256_hash: asset_ref.hash.clone(), // Original SHA-256 from client
+                        size: 0, // We don't know size from reference, but that's OK
+                    };
+                    if let Err(e) = self.metadata_store.register_asset_usage(usage_params).await {
+                        warn!("Failed to register asset usage: {}", e);
+                    }
+                }
+                
+                // Get MIME type from metadata store
+                let mime = self.metadata_store.get_asset_mime_type(&random_id).await
+                    .ok()
+                    .flatten();
+                
+                // Return AssetReference with random_id (for recording)
+                Ok(domcorder_proto::AssetReferenceData {
+                    asset_id: asset_ref.asset_id,
+                    url: asset_ref.url.clone(),
+                    hash: random_id,
+                    mime,
+                })
+            }
+            Ok(None) => {
+                // Asset not found - try to fetch it server-side
+                warn!("⚠️  AssetReference not found in cache: sha256={}, attempting server fetch", 
+                      &asset_ref.hash[..16]);
+                
+                match crate::asset_cache::fetcher::fetch_and_cache_asset(
+                    &asset_ref.url,
+                    user_agent,
+                    self.metadata_store.as_ref(),
+                    self.asset_file_store.as_ref(),
+                ).await {
+                    Ok((fetched_sha256, fetched_random_id)) => {
+                        // Verify the fetched hash matches what recorder expected
+                        if fetched_sha256 != asset_ref.hash {
+                            return Err(Box::new(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                format!("Hash mismatch: expected {}, got {}", 
+                                       &asset_ref.hash[..16], &fetched_sha256[..16]),
+                            )));
+                        }
+                        
+                        // Register usage
+                        if let Some(origin) = site_origin {
+                            let usage_params = AssetUsageParams {
+                                site_origin: origin.to_string(),
+                                url: asset_ref.url.clone(),
+                                sha256_hash: asset_ref.hash.clone(),
+                                size: 0,
+                            };
+                            if let Err(e) = self.metadata_store.register_asset_usage(usage_params).await {
+                                warn!("Failed to register asset usage: {}", e);
+                            }
+                        }
+                        
+                        // Get MIME type from metadata store
+                        let mime = self.metadata_store.get_asset_mime_type(&fetched_random_id).await
+                            .ok()
+                            .flatten();
+                        
+                        // Return AssetReference with random_id (for recording)
+                        Ok(domcorder_proto::AssetReferenceData {
+                            asset_id: asset_ref.asset_id,
+                            url: asset_ref.url.clone(),
+                            hash: fetched_random_id,
+                            mime,
+                        })
+                    }
+                    Err(e) => {
+                        warn!("Failed to fetch asset server-side: {}", e);
+                        Err(Box::new(e))
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Error checking asset cache: {}", e);
+                Err(Box::new(e))
+            }
+        }
+    }
+
+    /// Filter function for frames - processes Asset and AssetReference frames
+    /// Converts AssetData → AssetReference and resolves AssetReference hash (SHA-256 → random_id)
+    async fn filter_frame_async(
+        &self,
+        frame: domcorder_proto::Frame,
+        site_origin: Option<&str>,
+        user_agent: Option<&str>,
+    ) -> Option<domcorder_proto::Frame> {
+        match &frame {
+            // Process Asset frames: extract and cache the binary data, convert to AssetReference
+            domcorder_proto::Frame::Asset(asset) => {
+                match self.process_asset_frame(asset, site_origin, user_agent).await {
+                    Ok(Some(asset_ref)) => {
+                        // Convert to AssetReference frame with random_id
+                        Some(domcorder_proto::Frame::AssetReference(asset_ref))
+                    }
+                    Ok(None) => {
+                        // Empty asset - skip it
+                        None
+                    }
+                    Err(e) => {
+                        warn!("Failed to process asset frame: {}", e);
+                        None // Skip this frame on error
+                    }
+                }
+            }
+            // Process AssetReference frames: resolve SHA-256 → random_id
+            domcorder_proto::Frame::AssetReference(asset_ref) => {
+                match self.process_asset_reference_frame(asset_ref, site_origin, user_agent).await {
+                    Ok(asset_ref_with_random_id) => {
+                        // Return AssetReference with random_id
+                        Some(domcorder_proto::Frame::AssetReference(asset_ref_with_random_id))
+                    }
+                    Err(e) => {
+                        warn!("Failed to process asset reference frame: {}", e);
+                        None // Skip this frame on error
+                    }
+                }
+            }
+            // Heartbeat frames - keep connection alive but don't write to recording
+            domcorder_proto::Frame::Heartbeat => {
+                None // Skip heartbeat frames in recording
+            }
+            _ => Some(frame),
+        }
+    }
+
 }
 
 /// A reader that can tail a file that's still being written to
