@@ -71,6 +71,20 @@ export class PagePlayer {
   private readonly playbackQueue: PlaybackQueue;
   private urlResolver: UrlResolver | null = null;
 
+  // Live catch-up mode state
+  private isLiveMode: boolean = false;
+  private latestTimestamp: number | null = null;
+  private catchUpState: {
+    lastMousePosition: {x: number, y: number} | null;
+    lastScrollPosition: {scrollX: number, scrollY: number} | null;
+    lastViewportSize: {width: number, height: number} | null;
+  } = {
+    lastMousePosition: null,
+    lastScrollPosition: null,
+    lastViewportSize: null,
+  };
+  private currentTimestamp: number = 0;
+
   constructor(
     targetIframe: HTMLIFrameElement,
     overlayElement: HTMLElement,
@@ -113,7 +127,7 @@ export class PagePlayer {
     });
 
     this.playbackQueue = new PlaybackQueue(live, async (frame: Frame, timestamp: number) => {
-      await this.handleFrame(frame);
+      await this.handleFrame(frame, timestamp);
     });
   }
 
@@ -121,7 +135,13 @@ export class PagePlayer {
     this.playbackQueue.enqueueFrame(frame);
   }
 
-  private async handleFrame(frame: Frame): Promise<void> {
+  private async handleFrame(frame: Frame, timestamp: number): Promise<void> {
+    // Update current timestamp from the timestamp parameter (not just from Timestamp frames)
+    this.currentTimestamp = timestamp;
+    
+    // Check catch-up completion after updating timestamp
+    this._checkCatchUpComplete();
+    
     try {
       if (frame instanceof PlaybackConfig) {
         await this._handlePlaybackConfigFrame(frame as PlaybackConfig);
@@ -206,9 +226,17 @@ export class PagePlayer {
   }
 
   private _handleWindowScrolledFrame(scrollFrame: ScrollOffsetChanged) {
-    this.targetDocument.defaultView!.scrollTo(scrollFrame.scrollXOffset, scrollFrame.scrollYOffset);
-    if (this.selectionSimulator) {
-      this.selectionSimulator.updateScrollPosition(scrollFrame.scrollXOffset, scrollFrame.scrollYOffset);
+    if (this.isLiveMode && this.latestTimestamp !== null && this.currentTimestamp < this.latestTimestamp) {
+      // Track scroll but don't apply during catch-up
+      this.catchUpState.lastScrollPosition = { 
+        scrollX: scrollFrame.scrollXOffset, 
+        scrollY: scrollFrame.scrollYOffset 
+      };
+    } else {
+      this.targetDocument.defaultView!.scrollTo(scrollFrame.scrollXOffset, scrollFrame.scrollYOffset);
+      if (this.selectionSimulator) {
+        this.selectionSimulator.updateScrollPosition(scrollFrame.scrollXOffset, scrollFrame.scrollYOffset);
+      }
     }
   }
 
@@ -343,12 +371,26 @@ export class PagePlayer {
    * but if not, we'll construct one based on the server's asset endpoint.
    */
   /**
-   * Handle PlaybackConfig frame to initialize URL resolver
+   * Handle PlaybackConfig frame to initialize URL resolver and catch-up mode
    */
   private async _handlePlaybackConfigFrame(frame: PlaybackConfig): Promise<void> {
     try {
       this.urlResolver = createUrlResolver(frame.storage_type, frame.config_json);
       console.debug(`📦 PlaybackConfig: storage_type=${frame.storage_type}`);
+      
+      // Initialize live catch-up mode if recording is live
+      this.isLiveMode = frame.is_live;
+      this.latestTimestamp = frame.latest_timestamp;
+      
+      if (this.isLiveMode && this.latestTimestamp !== null) {
+        console.debug(`🔴 Live mode: catching up to timestamp ${this.latestTimestamp}`);
+        // Reset catch-up state
+        this.catchUpState = {
+          lastMousePosition: null,
+          lastScrollPosition: null,
+          lastViewportSize: null,
+        };
+      }
     } catch (error) {
       console.error('Failed to create URL resolver:', error);
       throw error;
@@ -391,11 +433,22 @@ export class PagePlayer {
   }
 
   private _handleMouseMovedFrame(mouseMovedData: MouseMoved): void {
-    this.mouseSimulator.moveTo(mouseMovedData.x, mouseMovedData.y);
+    if (this.isLiveMode && this.latestTimestamp !== null && this.currentTimestamp < this.latestTimestamp) {
+      // Track position but don't update cursor during catch-up
+      this.catchUpState.lastMousePosition = { x: mouseMovedData.x, y: mouseMovedData.y };
+    } else {
+      this.mouseSimulator.moveTo(mouseMovedData.x, mouseMovedData.y);
+    }
   }
 
   private _handleMouseClickedFrame(mouseClickedData: MouseClicked): void {
-    this.mouseSimulator.click(mouseClickedData.x, mouseClickedData.y);
+    if (this.isLiveMode && this.latestTimestamp !== null && this.currentTimestamp < this.latestTimestamp) {
+      // Suppress click animation and sound during catch-up
+      // Just track the position
+      this.catchUpState.lastMousePosition = { x: mouseClickedData.x, y: mouseClickedData.y };
+    } else {
+      this.mouseSimulator.click(mouseClickedData.x, mouseClickedData.y);
+    }
   }
 
   private _handleTextSelectionChangedFrame(textSelectionChangedData: TextSelectionChanged): void {
@@ -413,18 +466,80 @@ export class PagePlayer {
   }
 
   private _handleTimestampFrame(frame: Timestamp): void {
-    // NoOp
+    // Timestamp is already updated in handleFrame, no action needed here
+    // Catch-up completion is also checked in handleFrame
   }
 
   private _handleViewportResizedFrame(frame: ViewportResized): void {
-    // Update viewport dimensions and resize iframe
-    this.viewportWidth = frame.width;
-    this.viewportHeight = frame.height;
-    this._updateIframeSize();
+    if (this.isLiveMode && this.latestTimestamp !== null && this.currentTimestamp < this.latestTimestamp) {
+      // Track viewport size but don't apply during catch-up
+      this.catchUpState.lastViewportSize = { width: frame.width, height: frame.height };
+    } else {
+      // Update viewport dimensions and resize iframe
+      this.viewportWidth = frame.width;
+      this.viewportHeight = frame.height;
+      this._updateIframeSize();
+    }
   }
 
   private _handleKeyPressedFrame(frame: KeyPressed): void {
-    this.typingSimulator.simulateKeyPress(frame);
+    if (this.isLiveMode && this.latestTimestamp !== null && this.currentTimestamp < this.latestTimestamp) {
+      // Suppress keyboard display during catch-up
+      // Don't call typingSimulator.simulateKeyPress()
+    } else {
+      this.typingSimulator.simulateKeyPress(frame);
+    }
+  }
+
+  /**
+   * Check if catch-up is complete and apply tracked values
+   */
+  private _checkCatchUpComplete(): void {
+    if (!this.isLiveMode || this.latestTimestamp === null) {
+      return;
+    }
+
+    if (this.currentTimestamp >= this.latestTimestamp) {
+      // Catch-up complete! Apply tracked values and exit catch-up mode
+      console.debug(`✅ Catch-up complete at timestamp ${this.currentTimestamp}`);
+
+      // Apply last tracked mouse position
+      if (this.catchUpState.lastMousePosition) {
+        this.mouseSimulator.moveTo(
+          this.catchUpState.lastMousePosition.x,
+          this.catchUpState.lastMousePosition.y
+        );
+      }
+
+      // Apply last tracked scroll position
+      if (this.catchUpState.lastScrollPosition) {
+        this.targetDocument.defaultView!.scrollTo(
+          this.catchUpState.lastScrollPosition.scrollX,
+          this.catchUpState.lastScrollPosition.scrollY
+        );
+        if (this.selectionSimulator) {
+          this.selectionSimulator.updateScrollPosition(
+            this.catchUpState.lastScrollPosition.scrollX,
+            this.catchUpState.lastScrollPosition.scrollY
+          );
+        }
+      }
+
+      // Apply last tracked viewport size
+      if (this.catchUpState.lastViewportSize) {
+        this.viewportWidth = this.catchUpState.lastViewportSize.width;
+        this.viewportHeight = this.catchUpState.lastViewportSize.height;
+        this._updateIframeSize();
+      }
+
+      // Exit catch-up mode
+      this.isLiveMode = false;
+      this.catchUpState = {
+        lastMousePosition: null,
+        lastScrollPosition: null,
+        lastViewportSize: null,
+      };
+    }
   }
 
   private _updateIframeSize(): void {

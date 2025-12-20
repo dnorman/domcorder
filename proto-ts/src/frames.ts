@@ -346,7 +346,9 @@ export class CacheManifest extends Frame {
 export class PlaybackConfig extends Frame {
     constructor(
         public storage_type: string,
-        public config_json: string
+        public config_json: string,
+        public is_live: boolean,
+        public latest_timestamp: number | null
     ) {
         super();
     }
@@ -355,7 +357,10 @@ export class PlaybackConfig extends Frame {
         if (reader.readU32() !== FrameType.PlaybackConfig) throw new Error(`Expected PlaybackConfig frame type`);
         const storage_type = reader.readString();
         const config_json = reader.readString();
-        return new PlaybackConfig(storage_type, config_json);
+        const is_live = reader.readByte() !== 0;
+        const has_timestamp = reader.readByte() !== 0;
+        const latest_timestamp = has_timestamp ? Number(reader.readU64()) : null;
+        return new PlaybackConfig(storage_type, config_json, is_live, latest_timestamp);
     }
 
     async encode(w: Writer): Promise<void> {
@@ -363,6 +368,13 @@ export class PlaybackConfig extends Frame {
         w.u32(FrameType.PlaybackConfig);
         w.strUtf8(this.storage_type);
         w.strUtf8(this.config_json);
+        w.byte(this.is_live ? 1 : 0);
+        if (this.latest_timestamp !== null) {
+            w.byte(1);
+            w.u64(BigInt(this.latest_timestamp));
+        } else {
+            w.byte(0);
+        }
         await w.endFrame();
     }
 }

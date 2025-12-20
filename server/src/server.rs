@@ -149,9 +149,19 @@ async fn handle_get_recording(
         }
     };
     
+    // Check if recording is live and get latest timestamp
+    let is_live = state.is_recording_active(&filename);
+    let latest_timestamp = if is_live {
+        state.get_latest_timestamp(&filename)
+    } else {
+        None
+    };
+    
     let playback_config = Frame::PlaybackConfig(PlaybackConfigData {
         storage_type,
         config_json,
+        is_live,
+        latest_timestamp,
     });
     
     match state.get_recording_stream(&filename).await {

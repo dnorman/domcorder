@@ -21,12 +21,18 @@ pub struct RecordingInfo {
     pub is_active: bool, // Whether the recording is still being written to
 }
 
+#[derive(Debug, Clone)]
+pub struct ActiveRecordingInfo {
+    /// Most recent Timestamp frame value (None until first Timestamp frame)
+    pub latest_timestamp: Option<u64>,
+}
+
 pub type AppState = std::sync::Arc<StorageState>;
 
 pub struct StorageState {
     pub storage_dir: std::path::PathBuf,
     // Track which recordings are currently being written to
-    pub active_recordings: Mutex<HashMap<String, DateTime<Utc>>>,
+    pub active_recordings: Mutex<HashMap<String, ActiveRecordingInfo>>,
     // Asset caching stores
     pub metadata_store: Box<dyn MetadataStore>,
     pub asset_file_store: Box<dyn AssetFileStore>,

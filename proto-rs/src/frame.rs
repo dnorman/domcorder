@@ -299,4 +299,8 @@ pub struct PlaybackConfigData {
     pub storage_type: String,
     /// JSON payload for module-specific configuration
     pub config_json: String,
+    /// Whether the recording is currently active (live)
+    pub is_live: bool,
+    /// The latest timestamp in the recording (None if not live)
+    pub latest_timestamp: Option<u64>,
 }

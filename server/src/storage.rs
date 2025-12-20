@@ -120,7 +120,12 @@ impl StorageState {
     /// Mark a recording as active (being written to)
     pub fn mark_recording_active(&self, filename: &str) {
         let mut active_recordings = self.active_recordings.lock().unwrap();
-        active_recordings.insert(filename.to_string(), Utc::now());
+        active_recordings.insert(
+            filename.to_string(),
+            crate::ActiveRecordingInfo {
+                latest_timestamp: None,
+            },
+        );
     }
 
     /// Mark a recording as completed (no longer being written to)
@@ -133,6 +138,22 @@ impl StorageState {
     pub fn is_recording_active(&self, filename: &str) -> bool {
         let active_recordings = self.active_recordings.lock().unwrap();
         active_recordings.contains_key(&filename.to_string())
+    }
+
+    /// Update the latest timestamp for an active recording
+    pub fn update_recording_timestamp(&self, filename: &str, timestamp: u64) {
+        let mut active_recordings = self.active_recordings.lock().unwrap();
+        if let Some(info) = active_recordings.get_mut(filename) {
+            info.latest_timestamp = Some(timestamp);
+        }
+    }
+
+    /// Get the latest timestamp for an active recording
+    pub fn get_latest_timestamp(&self, filename: &str) -> Option<u64> {
+        let active_recordings = self.active_recordings.lock().unwrap();
+        active_recordings
+            .get(filename)
+            .and_then(|info| info.latest_timestamp)
     }
 
     /// TEMPORARILY BYPASS FRAME PROCESSING: Stream raw data directly to file with header
@@ -268,6 +289,11 @@ impl StorageState {
         while let Some(frame_result) = frame_reader.next().await {
             match frame_result {
                 Ok(frame) => {
+                    // Update latest timestamp if this is a Timestamp frame
+                    if let domcorder_proto::Frame::Timestamp(timestamp_data) = &frame {
+                        self.update_recording_timestamp(&tracking_path, timestamp_data.timestamp);
+                    }
+
                     // Process Asset and AssetReference frames
                     let processed_frame = self.filter_frame_async(frame, site_origin, user_agent).await;
 
