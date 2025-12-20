@@ -236,6 +236,35 @@ function snapshotLinkElement(
   );
 }
 
+function snapshotPrefetchLinkElement(
+  linkElement: HTMLLinkElement,
+  nodeIdMap: NodeIdBiMap
+): VElement {
+  // Resource hints (prefetch, preload, modulepreload, dns-prefetch, preconnect, prerender) 
+  // are just performance optimizations - they don't affect rendering.
+  // Preserve the original attributes for reference but don't collect as assets
+  const attrs: Record<string, string> = {};
+  for (const attr of linkElement.attributes as NamedNodeMap) {
+    attrs[attr.name] = attr.value;
+  }
+
+  return new VElement(
+    nodeIdMap.getNodeId(linkElement)!,
+    "link",
+    undefined,
+    {
+      ...attrs,
+      "data-orig-rel": linkElement.rel,
+      "data-orig-href": linkElement.href,
+      // Remove the href to prevent any asset collection or fetching
+      "href": "",
+      // Remove rel to prevent browser from acting on it during playback
+      "rel": "",
+    },
+    []
+  );
+}
+
 function snapElement(el: Element, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap): VElement {
   // Handling of special element types
   if (el instanceof HTMLScriptElement) {
@@ -244,6 +273,9 @@ function snapElement(el: Element, assetTracker: AssetTracker, nodeIdMap: NodeIdB
     return snapshotStyleElement(el, assetTracker, nodeIdMap);
   } else if (el instanceof HTMLLinkElement && el.rel === "stylesheet") {
     return snapshotLinkElement(el, assetTracker, nodeIdMap);
+  } else if (el instanceof HTMLLinkElement && /(^|\s)(prefetch|preload|modulepreload|dns-prefetch|preconnect|prerender)(\s|$)/i.test(el.rel)) {
+    // Handle resource hints - they're just performance optimizations, not assets
+    return snapshotPrefetchLinkElement(el, nodeIdMap);
   }
 
   const attrs: Record<string, string> = {};
