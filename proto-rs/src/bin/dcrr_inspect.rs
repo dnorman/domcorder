@@ -8,21 +8,34 @@ use tokio::io::BufReader;
 async fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        eprintln!("Usage: dcrr-inspect <file.dcrr | url>");
+        eprintln!("Usage: dcrr-inspect <file>");
         std::process::exit(1);
     }
     let path = &args[1];
 
     let file = File::open(path).await.expect("Failed to open file");
     let reader = BufReader::new(file);
-    let mut frame_reader = FrameReader::new(reader, true);
 
-    let header = frame_reader.read_header().await.expect("Failed to read header");
-    let created_ms = header.created_at;
-    let created = chrono::DateTime::from_timestamp_millis(created_ms as i64)
-        .map(|dt| dt.to_string())
-        .unwrap_or_else(|| format!("{}ms", created_ms));
-    println!("DCRR v{} created {}", header.version, created);
+    // Peek at first 4 bytes to detect DCRR header
+    let mut peek_buf = [0u8; 4];
+    let peek_file = File::open(path).await.expect("Failed to open file");
+    let mut peek_reader = BufReader::new(peek_file);
+    use tokio::io::AsyncReadExt;
+    let _ = peek_reader.read_exact(&mut peek_buf).await;
+    let has_header = &peek_buf == b"DCRR";
+
+    let mut frame_reader = FrameReader::new(reader, has_header);
+
+    if has_header {
+        let header = frame_reader.read_header().await.expect("Failed to read header");
+        let created_ms = header.created_at;
+        let created = chrono::DateTime::from_timestamp_millis(created_ms as i64)
+            .map(|dt| dt.to_string())
+            .unwrap_or_else(|| format!("{}ms", created_ms));
+        println!("DCRR v{} created {}", header.version, created);
+    } else {
+        println!("Raw frame stream (no DCRR header)");
+    }
     println!();
 
     let mut frame_num = 0u64;
@@ -35,7 +48,6 @@ async fn main() {
                 let name = frame_type_name(&frame);
                 *counts.entry(name.clone()).or_default() += 1;
 
-                // Print each frame on one line
                 let detail = frame_detail(&frame);
                 if let Frame::Timestamp(ts) = &frame {
                     last_timestamp = Some(ts.timestamp);
@@ -123,6 +135,7 @@ fn frame_detail(frame: &Frame) -> String {
         Frame::DomAttributeChanged(d) => format!("node={} {}=...", d.node_id, d.attribute_name),
         Frame::DomTextChanged(d) => format!("node={}", d.node_id),
         Frame::ElementScrolled(d) => format!("node={} ({},{})", d.node_id, d.scroll_x_offset, d.scroll_y_offset),
+        Frame::PlaybackConfig(d) => format!("storage={} live={}", d.storage_type, d.is_live),
         _ => String::new(),
     }
 }
