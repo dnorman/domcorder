@@ -717,9 +717,10 @@ impl StorageState {
                     }
                 }
             }
-            // Heartbeat frames - write to recording so they flow through to playback
-            // consumers and keep idle connections (e.g. behind Cloudflare proxy) alive
-            domcorder_proto::Frame::Heartbeat => Some(frame),
+            // Heartbeat frames - keep connection alive but don't write to recording
+            domcorder_proto::Frame::Heartbeat => {
+                None // Skip heartbeat frames in recording
+            }
             _ => Some(frame),
         }
     }
