@@ -3,6 +3,32 @@ import type { DomOperation } from "../common/DomOperation";
 import { computeMinimalChanges } from "./StringChangeDetector";
 
 /**
+ * An operation as the change detector finds it in the live page. A change of an attribute
+ * carries the live element whose attribute changed, so that the recorder can ask the element
+ * itself whether it has been a password field: the id the operation names it by can name another
+ * node in the recorder's numbering of the page.
+ */
+export type DetectedDomOperation =
+  | Exclude<DomOperation, { op: 'updateAttribute' }>
+  | (Extract<DomOperation, { op: 'updateAttribute' }> & { element: Element });
+
+/**
+ * The live node that each node of an insert operation's subtree was copied from, so that the
+ * recorder can ask the live node what the copy cannot tell, such as whether a field has been a
+ * password field. The operation hands over a copy because the copy shows the subtree as it was
+ * when the change was found. Weak, so that it keeps no copy alive.
+ */
+const liveNodesOfCopies = new WeakMap<Node, Node>();
+
+/** Links each node of `copy`, a copy of `liveNode`'s subtree, to the live node it copies. */
+function linkCopyToLiveNodes(liveNode: Node, copy: Node) {
+  liveNodesOfCopies.set(copy, liveNode);
+  for (let i = 0; i < liveNode.childNodes.length; i++) {
+    linkCopyToLiveNodes(liveNode.childNodes[i], copy.childNodes[i]);
+  }
+}
+
+/**
  * DomChangeDetector - A specification-aligned implementation of DOM change detection.
  * 
  * This implementation ensures:
@@ -17,6 +43,11 @@ import { computeMinimalChanges } from "./StringChangeDetector";
  * - Explicit causal ordering guarantees
  */
 export class DomChangeDetector {
+  /** The live node that `copy`, a node of an insert operation's subtree, copies, if it is one. */
+  public static liveNodeOf<T extends Node>(copy: T): T | undefined {
+    return liveNodesOfCopies.get(copy) as T | undefined;
+  }
+
   private readonly liveDomRoot: Node;
   private readonly liveNodeMap: NodeIdBiMap;
   
@@ -26,7 +57,7 @@ export class DomChangeDetector {
   private readonly liveDomObserver: MutationObserver;
   private readonly dirtySubtrees = new Set<Node>();
 
-  private readonly callback: (ops: DomOperation[]) => void;
+  private readonly callback: (ops: DetectedDomOperation[]) => void;
   private readonly batchIntervalMs: number;
   private batchInterval: number | null = null;
   private readonly processImmediately: boolean;
@@ -44,7 +75,7 @@ export class DomChangeDetector {
   constructor(
     liveDomRoot: Node,
     liveNodeMap: NodeIdBiMap,
-    callback: (ops: DomOperation[]) => void,
+    callback: (ops: DetectedDomOperation[]) => void,
     batchIntervalMs: number = 1000,
     processImmediately: boolean = false
   ) {
@@ -182,7 +213,7 @@ export class DomChangeDetector {
    * 4. Calls the callback with all operations
    */
   private processDirtyRegions(): void {
-    const allOps: DomOperation[] = [];
+    const allOps: DetectedDomOperation[] = [];
 
     // console.log(`[processDirtyRegions] Processing ${this.dirtySubtrees.size} dirty nodes:`, Array.from(this.dirtySubtrees).map(n => this.liveNodeMap.getNodeId(n)));
 
@@ -240,7 +271,7 @@ export class DomChangeDetector {
    * @param snapshotNode - The previous state of the node in the snapshot
    * @returns Array of operations needed to transform snapshot to live state
    */
-  private computeAndApplyOperations(liveNode: Node, snapshotNode: Node): DomOperation[] {
+  private computeAndApplyOperations(liveNode: Node, snapshotNode: Node): DetectedDomOperation[] {
     if (liveNode.nodeType !== snapshotNode.nodeType) {
       throw new Error(
         `[DomChangeDetector] Node types do not match: ` +
@@ -249,7 +280,7 @@ export class DomChangeDetector {
     }
 
     const liveNodeId = this.liveNodeMap.getNodeId(liveNode)!;
-    const ops: DomOperation[] = [];
+    const ops: DetectedDomOperation[] = [];
   
     // Handle CharacterData nodes (Text, Comment, CDATASection)
     if (liveNode.nodeType === Node.TEXT_NODE || 
@@ -306,8 +337,8 @@ export class DomChangeDetector {
     liveEl: Element,
     snapshotEl: Element,
     nodeId: number
-  ): DomOperation[] {
-    const ops: DomOperation[] = [];
+  ): DetectedDomOperation[] {
+    const ops: DetectedDomOperation[] = [];
     const oldAttrs = snapshotEl.attributes;
     const newAttrs = liveEl.attributes;
     
@@ -329,7 +360,8 @@ export class DomChangeDetector {
           op: 'updateAttribute',
           nodeId: nodeId,
           name: attrName,
-          value: newAttr
+          value: newAttr,
+          element: liveEl
         });
         snapshotEl.setAttribute(attrName, newAttr);
       }
@@ -344,7 +376,8 @@ export class DomChangeDetector {
           op: 'updateAttribute',
           nodeId: nodeId,
           name: attrName,
-          value: newAttrs[i].value
+          value: newAttrs[i].value,
+          element: liveEl
         });
         snapshotEl.setAttribute(attrName, newAttrs[i].value);
       }
@@ -361,8 +394,8 @@ export class DomChangeDetector {
     liveEl: Element,
     snapshotEl: Element,
     parentId: number
-  ): DomOperation[] {
-    const ops: DomOperation[] = [];
+  ): DetectedDomOperation[] {
+    const ops: DetectedDomOperation[] = [];
     
     const snapshotChildren = Array.from(snapshotEl.childNodes);
     const snapshotChildrenIds = snapshotChildren.map(c => this.snapshotNodeMap.getNodeId(c));
@@ -420,6 +453,7 @@ export class DomChangeDetector {
         const clonedChildForOperation = clonedChild.cloneNode(true);
         // Copy IDs without updating the snapshot map (which should only track snapshot nodes)
         NodeIdBiMap.copyNodeIdsToSubTree(clonedChild, clonedChildForOperation);
+        linkCopyToLiveNodes(existingLiveChild, clonedChildForOperation);
         
         ops.push({ 
           op: "insert", 
@@ -468,6 +502,7 @@ export class DomChangeDetector {
         const clonedChildForOperation = clonedChild.cloneNode(true);
         // Copy IDs without updating the snapshot map (which should only track snapshot nodes)
         NodeIdBiMap.copyNodeIdsToSubTree(clonedChild, clonedChildForOperation);
+        linkCopyToLiveNodes(existingLiveChild, clonedChildForOperation);
 
         ops.push({ 
           op: "insert", 
@@ -499,8 +534,8 @@ export class DomChangeDetector {
   private computeRecursiveChildOperations(
     liveEl: Element,
     snapshotEl: Element
-  ): DomOperation[] {
-    const ops: DomOperation[] = [];
+  ): DetectedDomOperation[] {
+    const ops: DetectedDomOperation[] = [];
     
     const snapshotChildren = Array.from(snapshotEl.childNodes);
     const snapshotChildrenIds = snapshotChildren.map(c => this.snapshotNodeMap.getNodeId(c));

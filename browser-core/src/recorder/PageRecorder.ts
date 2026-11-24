@@ -1,6 +1,6 @@
 import { generateKeyFrame, inlineSubTree, type InlineStartedEvent, type KeyFrameStartedEvent } from "./inliner";
 import type { Asset as InlinerAsset } from "./inliner/Asset";
-import { DomChangeDetector } from "./DomChangeDetector";
+import { DomChangeDetector, type DetectedDomOperation } from "./DomChangeDetector";
 import { UserInteractionTracker, type UserInteractionEventHandler } from "./UserInteractionTracker";
 import {
   Frame,
@@ -43,6 +43,7 @@ import { inlineAdoptedStyleSheet, type InlineAdoptedStyleSheetEvent } from "./in
 import { AssetTracker } from "./inliner/AssetTracker";
 import { CanvasChangedCallback, CanvasChangedEvent, CanvasTracker } from "./CanvasTracker";
 import { FormFieldTracker } from "./FormFieldTracker";
+import { recordedAttributeValue, watchPasswordFields } from "./PasswordFields";
 
 export type FrameHandler = (frame: Frame) => Promise<void>;
 
@@ -55,6 +56,7 @@ export class PageRecorder {
   private styleSheetWatcher: StyleSheetWatcher | null;
   private canvasTracker: CanvasTracker | null;
   private formFieldTracker: FormFieldTracker | null;
+  private stopWatchingPasswordFields: (() => void) | null;
   private userInteractionTracker: UserInteractionTracker | null;
   private sourceDocNodeIdMap: NodeIdBiMap | null;
   private recordingEpoch: number;
@@ -70,6 +72,7 @@ export class PageRecorder {
     this.sourceDocNodeIdMap = null;
     this.canvasTracker = null;
     this.formFieldTracker = null;
+    this.stopWatchingPasswordFields = null;
     this.recordingEpoch = Date.now();
     this.assetTracker = new AssetTracker();
   }
@@ -104,6 +107,10 @@ export class PageRecorder {
     this.recordingEpoch = Date.now();
     this.sourceDocNodeIdMap = new NodeIdBiMap();
     this.sourceDocNodeIdMap.assignNodeIdsToSubTree(this.sourceDocument);
+    // A second start leaves an earlier start's watch running, since it leaves that start's
+    // trackers running and what they record must stay masked. Ending both here would make a
+    // second start a restart.
+    this.stopWatchingPasswordFields = watchPasswordFields(this.sourceDocument);
 
     // Setup user interaction tracking
     this.userInteractionTracker = new UserInteractionTracker(
@@ -223,6 +230,10 @@ export class PageRecorder {
     this.styleSheetWatcher?.stop();
     this.canvasTracker?.unwatch();
     this.formFieldTracker?.stop();
+    // Last, and not in a `finally`: if a step above throws, the trackers not yet stopped go on
+    // recording, and the watch must keep masking for them
+    this.stopWatchingPasswordFields?.();
+    this.stopWatchingPasswordFields = null;
   }
 
   private emitTimestampFrame() {
@@ -321,7 +332,7 @@ export class PageRecorder {
   }
 
   private async processOperation(
-    operation: DomOperation,
+    operation: DetectedDomOperation,
     nodeIdMap: NodeIdBiMap
   ): Promise<void> {
     switch (operation.op) {
@@ -357,7 +368,8 @@ export class PageRecorder {
         break;
 
       case "updateAttribute":
-        const updateAttrFrame = new DomAttributeChanged(operation.nodeId, operation.name, operation.value);
+        const recordedValue = recordedAttributeValue(operation.element, operation.name, operation.value);
+        const updateAttrFrame = new DomAttributeChanged(operation.nodeId, operation.name, recordedValue);
         await this.emitFrame(updateAttrFrame, false);
         break;
 

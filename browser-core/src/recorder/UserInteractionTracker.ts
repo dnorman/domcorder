@@ -1,5 +1,6 @@
 import { NodeIdBiMap } from '../common/NodeIdBiMap';
 import { EventRateLimiter } from './EventRateLimiter';
+import { MASK_CHARACTER, isDispatchedToPasswordField } from './PasswordFields';
 
 export type TextSelectionEvent = {
   startNodeId: number;
@@ -281,6 +282,19 @@ export class UserInteractionTracker {
   };
 
   private handleKeyPress = (event: KeyboardEvent): void => {
+    // A key pressed in a password field, or a modifier held with it, tells which character the
+    // person typed, so only that a key was pressed is recorded
+    if (isDispatchedToPasswordField(event)) {
+      this.eventHandler.onKeyPress?.({
+        code: MASK_CHARACTER,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: false,
+        metaKey: false
+      });
+      return;
+    }
+
     this.eventHandler.onKeyPress?.({
       code: event.code,
       ctrlKey: event.ctrlKey,

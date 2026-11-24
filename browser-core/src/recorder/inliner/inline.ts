@@ -12,6 +12,7 @@ import {
 import type { NodeIdBiMap } from "../../common";
 import type { Asset } from "./Asset";
 import { AssetTracker } from "./AssetTracker";
+import { recordedAttributeValue } from "../PasswordFields";
 
 export async function fetchAssets(
   concurrency: number,
@@ -76,10 +77,17 @@ export async function fetchAssets(
   );
 }
 
-export function snapshotNode(node: Node, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap): VNode {
+/**
+ * Finds, for an element being snapshotted, the element of the live page it shows, which the
+ * recorder asks whether it has been a password field: in a keyframe the element itself, in an
+ * added subtree the element the change detector copied, and undefined when that is not known.
+ */
+export type LiveElementOf = (snapshotted: Element) => Element | undefined;
+
+export function snapshotNode(node: Node, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap, liveElementOf: LiveElementOf): VNode {
   switch (node.nodeType) {
     case Node.ELEMENT_NODE: {
-      return snapElement(node as Element, assetTracker, nodeIdMap);
+      return snapElement(node as Element, assetTracker, nodeIdMap, liveElementOf);
     }
 
     case Node.TEXT_NODE: {
@@ -147,8 +155,8 @@ export function snapshotNode(node: Node, assetTracker: AssetTracker, nodeIdMap: 
 // -------------------- Phase 1 (streaming variant) --------------------
 
 
-function snapshotScriptElement(el: HTMLScriptElement, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap): VElement {
-  const children = Array.from(el.childNodes).map(c => snapshotNode(c, assetTracker, nodeIdMap));
+function snapshotScriptElement(el: HTMLScriptElement, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap, liveElementOf: LiveElementOf): VElement {
+  const children = Array.from(el.childNodes).map(c => snapshotNode(c, assetTracker, nodeIdMap, liveElementOf));
 
   // Clear text content from script children
   for (const c of children) {
@@ -166,8 +174,8 @@ function snapshotScriptElement(el: HTMLScriptElement, assetTracker: AssetTracker
   );
 }
 
-function snapshotStyleElement(styleElement: Element, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap): VElement {
-  const children = Array.from(styleElement.childNodes).map(c => snapshotNode(c, assetTracker, nodeIdMap));
+function snapshotStyleElement(styleElement: Element, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap, liveElementOf: LiveElementOf): VElement {
+  const children = Array.from(styleElement.childNodes).map(c => snapshotNode(c, assetTracker, nodeIdMap, liveElementOf));
 
   const originalText = readStyleText(styleElement as HTMLStyleElement);
   if (originalText) {
@@ -265,12 +273,12 @@ function snapshotPrefetchLinkElement(
   );
 }
 
-function snapElement(el: Element, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap): VElement {
+function snapElement(el: Element, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap, liveElementOf: LiveElementOf): VElement {
   // Handling of special element types
   if (el instanceof HTMLScriptElement) {
-    return snapshotScriptElement(el, assetTracker, nodeIdMap);
+    return snapshotScriptElement(el, assetTracker, nodeIdMap, liveElementOf);
   } else if (el instanceof HTMLStyleElement) {
-    return snapshotStyleElement(el, assetTracker, nodeIdMap);
+    return snapshotStyleElement(el, assetTracker, nodeIdMap, liveElementOf);
   } else if (el instanceof HTMLLinkElement && el.rel === "stylesheet") {
     return snapshotLinkElement(el, assetTracker, nodeIdMap);
   } else if (el instanceof HTMLLinkElement && /(^|\s)(prefetch|preload|modulepreload|dns-prefetch|preconnect|prerender)(\s|$)/i.test(el.rel)) {
@@ -278,8 +286,9 @@ function snapElement(el: Element, assetTracker: AssetTracker, nodeIdMap: NodeIdB
     return snapshotPrefetchLinkElement(el, nodeIdMap);
   }
 
+  const liveElement = liveElementOf(el);
   const attrs: Record<string, string> = {};
-  for (const a of Array.from(el.attributes)) attrs[a.name] = a.value;
+  for (const a of Array.from(el.attributes)) attrs[a.name] = recordedAttributeValue(liveElement, a.name, a.value);
 
   // Queue asset-like attributes
   if (el instanceof HTMLImageElement) {
@@ -300,7 +309,7 @@ function snapElement(el: Element, assetTracker: AssetTracker, nodeIdMap: NodeIdB
   const children: VNode[] = [];
 
   for (const child of Array.from(el.childNodes)) {
-    const vChild = snapshotNode(child, assetTracker, nodeIdMap);
+    const vChild = snapshotNode(child, assetTracker, nodeIdMap, liveElementOf);
     children.push(vChild);
   }
 
@@ -320,16 +329,16 @@ function snapElement(el: Element, assetTracker: AssetTracker, nodeIdMap: NodeIdB
   );
 
   const sr = (el as HTMLElement).shadowRoot;
-  if (sr) node.shadow = snapShadow(sr, assetTracker, nodeIdMap);
+  if (sr) node.shadow = snapShadow(sr, assetTracker, nodeIdMap, liveElementOf);
 
   return node;
 }
 
-function snapShadow(sr: ShadowRoot, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap): VNode[] {
+function snapShadow(sr: ShadowRoot, assetTracker: AssetTracker, nodeIdMap: NodeIdBiMap, liveElementOf: LiveElementOf): VNode[] {
   const out: VNode[] = [];
   for (const n of Array.from(sr.childNodes)) {
     if (n.nodeType === Node.TEXT_NODE) out.push({ id: nodeIdMap.getNodeId(n)!, nodeType: "text", text: n.nodeValue ?? "" } as VTextNode);
-    else if (n.nodeType === Node.ELEMENT_NODE) out.push(snapElement(n as Element, assetTracker, nodeIdMap));
+    else if (n.nodeType === Node.ELEMENT_NODE) out.push(snapElement(n as Element, assetTracker, nodeIdMap, liveElementOf));
   }
   return out;
 }
