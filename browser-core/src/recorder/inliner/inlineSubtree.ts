@@ -3,6 +3,7 @@ import type { NodeIdBiMap } from "../../common";
 import type { Asset } from "./Asset";
 import { fetchAssets, rewriteTreeUrlsToAssetIds, snapshotNode } from "./inline";
 import { AssetTracker } from "./AssetTracker";
+import { DomChangeDetector } from "../DomChangeDetector";
 
 export interface InlineStartedEvent {
   node: VNode;
@@ -21,7 +22,9 @@ export async function inlineSubTree(
   concurrency: number = 6,
   inlineCrossOrigin: boolean = false
 ) {
-  const vNode = snapshotNode(node, assetTracker, nodeIdMap);
+  // `node` is the change detector's copy of a subtree added to the page, whose elements show the
+  // live elements they were copied from
+  const vNode = snapshotNode(node, assetTracker, nodeIdMap, DomChangeDetector.liveNodeOf);
   rewriteTreeUrlsToAssetIds(vNode, node.baseURI, assetTracker);
 
   handler.onInlineStarted({

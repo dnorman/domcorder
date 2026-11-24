@@ -101,7 +101,8 @@ function snapshotVDomStreaming(doc: Document, nodeIdMap: NodeIdBiMap, assetTrack
   const children = Array.from(doc.childNodes);
   const vChildren: VNode[] = [];
   for (const child of children) {
-    vChildren.push(snapshotNode(child, assetTracker, nodeIdMap));
+    // A keyframe is taken of the live page, whose elements show themselves
+    vChildren.push(snapshotNode(child, assetTracker, nodeIdMap, element => element));
   }
 
   // Handle adopted stylesheets (excluding anti-animation stylesheet)

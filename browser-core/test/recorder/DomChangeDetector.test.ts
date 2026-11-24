@@ -149,8 +149,106 @@ describe('DomChangeDetector', () => {
       const insertOps = operations.filter(op => op.op === 'insert');
       expect(insertOps.length).toBe(1);
       expect(insertOps[0].index).toBe(0);
-      
+
       detector.disconnect();
+    });
+
+    test('copies an added template with its content, which is not among its children', async () => {
+      const root = document.createElement('div');
+      container.appendChild(root);
+      liveNodeMap.assignNodeIdsToSubTree(root);
+      const detector = createDetector(root);
+
+      root.innerHTML = '<template><b>inside</b></template>';
+      await waitForMutations(100);
+
+      const insertOps = operations.filter(op => op.op === 'insert');
+      expect(insertOps.length).toBe(1);
+      expect((insertOps[0].node as HTMLTemplateElement).content.textContent).toBe('inside');
+
+      detector.disconnect();
+    });
+
+    test('copies an added subtree as it is in the page, each copy linked to and numbered as its own live node, with a custom element in it that reorders the children of a copy its code runs for', async () => {
+      // A browser runs a custom element's attribute callback for a copy of the element made in the
+      // page's document before the copy is returned; this one moves the copy's first child to its end
+      if (!customElements.get('reordering-children')) {
+        customElements.define('reordering-children', class extends HTMLElement {
+          static observedAttributes = ['data-order'];
+          attributeChangedCallback() { if (this.firstChild) this.append(this.firstChild); }
+        });
+      }
+      // The detector watches the whole document, as the recorder's does, so it must stop even if
+      // the test fails, or it would see the other tests' changes
+      document.body.replaceChildren(container);
+      liveNodeMap.assignNodeIdsToSubTree(document);
+      const detector = createDetector(document);
+      try {
+        container.innerHTML =
+          '<reordering-children data-order="first-to-last"><i id="a"></i><i id="b"></i><i id="c"></i></reordering-children>';
+        await waitForMutations(100);
+
+        const insertOps = operations.filter(op => op.op === 'insert');
+        expect(insertOps.length).toBe(1);
+        const live = Array.from(container.firstElementChild!.children);
+        const copies = Array.from((insertOps[0].node as Element).children);
+        expect(copies.map(copy => copy.id)).toEqual(live.map(node => node.id));
+        expect(copies.map((copy, i) => DomChangeDetector.liveNodeOf(copy) === live[i])).toEqual([true, true, true]);
+        expect(copies.map(copy => NodeIdBiMap.getNodeId(copy))).toEqual(live.map(node => NodeIdBiMap.getNodeId(node)));
+      } finally {
+        detector.disconnect();
+      }
+    });
+
+    test('copies an added subtree as it is in the page, each copy numbered as its own live node, though a custom element adds a child to each copy of itself', async () => {
+      // A copy that ran this callback would have a child more than the live element, so the ids,
+      // which go from the live subtree to the copies by position, could not all be copied: the
+      // copying would throw, and neither the subtree nor any later change would be recorded
+      if (!customElements.get('stamping-children')) {
+        customElements.define('stamping-children', class extends HTMLElement {
+          static observedAttributes = ['data-stamp'];
+          attributeChangedCallback() { this.append(document.createElement('b')); }
+        });
+      }
+      document.body.replaceChildren(container);
+      liveNodeMap.assignNodeIdsToSubTree(document);
+      const detector = createDetector(document);
+      try {
+        container.innerHTML = '<stamping-children data-stamp="on"><i id="a"></i><i id="b"></i></stamping-children>';
+        await waitForMutations(100);
+
+        const insertOps = operations.filter(op => op.op === 'insert');
+        expect(insertOps.length).toBe(1);
+        const live = Array.from(container.firstElementChild!.children);
+        const copies = Array.from((insertOps[0].node as Element).children);
+        expect(copies.map(copy => copy.outerHTML)).toEqual(['<i id="a"></i>', '<i id="b"></i>', '<b></b>']);
+        expect(copies.map(copy => NodeIdBiMap.getNodeId(copy))).toEqual(live.map(node => NodeIdBiMap.getNodeId(node)));
+      } finally {
+        detector.disconnect();
+      }
+    });
+
+    test('hands over the copy of a moved node in the page\'s document, whose current address its relative addresses resolve against', async () => {
+      const startAddress = location.href;
+      document.body.replaceChildren(container);
+      container.innerHTML = '<p>first</p><img src="img/moved.png">';
+      liveNodeMap.assignNodeIdsToSubTree(document);
+      const detector = createDetector(document);
+      try {
+        history.pushState({}, '', '/elsewhere/deeper/page.html');
+        container.prepend(container.querySelector('img')!);
+        await waitForMutations(100);
+
+        const image = operations
+          .filter(op => op.op === 'insert')
+          .map(op => op.node as Element)
+          .find(node => node.localName === 'img') as HTMLImageElement;
+        expect(image.src).toBe(new URL('img/moved.png', location.href).href);
+        expect(image.src).not.toBe(new URL('img/moved.png', startAddress).href);
+      } finally {
+        detector.disconnect();
+        history.replaceState({}, '', startAddress);
+      }
     });
   });
 
