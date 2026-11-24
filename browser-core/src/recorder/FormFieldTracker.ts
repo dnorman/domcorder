@@ -1,6 +1,7 @@
 import { NodeIdBiMap } from '../common';
 import type { StringMutationOperation } from '../common/StringMutationOperation';
 import { computeMinimalChanges } from './StringChangeDetector';
+import { recordedPropertyValue } from './PasswordFields';
 
 export type DomNodePropertyChanged = {
   nodeId: number;
@@ -438,8 +439,7 @@ export class FormFieldTracker {
     const valueMap = new Map<string, any>();
     
     for (const property of properties) {
-      const value = (element as any)[property];
-      valueMap.set(property, value);
+      valueMap.set(property, recordedPropertyValue(element, property));
     }
     
     this.previousValues.set(nodeId, valueMap);
@@ -679,7 +679,7 @@ export class FormFieldTracker {
     }
 
     // For text elements, we only care about the 'value' property
-    const currentValue = (liveEl as any).value || '';
+    const currentValue = recordedPropertyValue(liveEl, 'value') || '';
     const previousValue = previousValueMap.get('value') || '';
     
     if (currentValue !== previousValue) {
@@ -720,7 +720,7 @@ export class FormFieldTracker {
     const properties = this.getFormElementProperties(liveEl);
     
     for (const property of properties) {
-      const currentValue = (liveEl as any)[property];
+      const currentValue = recordedPropertyValue(liveEl, property);
       const previousValue = previousValueMap.get(property);
       
       if (currentValue !== previousValue) {
