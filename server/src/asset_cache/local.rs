@@ -1,6 +1,7 @@
 //! Local filesystem implementation of the AssetFileStore trait
 
 use crate::asset_cache::{AssetError, AssetFileStore};
+use crate::logged_url::LoggedUrl;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::{debug, info};
@@ -19,7 +20,7 @@ impl LocalBinaryStore {
     pub fn new<P: AsRef<Path>>(base_path: P, base_url: String) -> Result<Self, AssetError> {
         let base_path = base_path.as_ref().to_path_buf();
         fs::create_dir_all(&base_path)?;
-        info!("Initialized LocalBinaryStore at {:?} with base_url={}", base_path, base_url);
+        info!("Initialized LocalBinaryStore at {:?} with base_url={}", base_path, LoggedUrl(&base_url));
         Ok(Self { base_path, base_url })
     }
 
@@ -115,6 +116,7 @@ impl Clone for LocalBinaryStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::captured_logs::CapturedLogs;
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -142,6 +144,21 @@ mod tests {
         let url = store.resolve_url(hash).await.unwrap();
 
         assert_eq!(url, "/assets/test-hash-123");
+    }
+
+    #[test]
+    fn the_store_logs_its_base_url_without_its_user_info_query_or_fragment() {
+        let temp_dir = TempDir::new().unwrap();
+        let (logs, _capturing) = CapturedLogs::start();
+
+        LocalBinaryStore::new(
+            temp_dir.path(),
+            "https://person:SECRET@assets.example:8723/?token=SECRET#SECRET".to_string(),
+        )
+        .unwrap();
+
+        logs.assert_shows("with base_url=https://assets.example:8723/");
+        logs.assert_never_shows("SECRET");
     }
 
     #[tokio::test]

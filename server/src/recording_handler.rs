@@ -4,6 +4,7 @@
 //! by both the domcorder server and simplikeys, with hooks for custom behavior.
 
 use crate::asset_cache::manifest::generate_manifest;
+use crate::logged_url::LoggedUrl;
 use crate::AppState;
 use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket};
@@ -75,7 +76,8 @@ pub struct RecordingConfig {
 /// Hooks for customizing behavior (for simplikeys integration)
 pub struct RecordingHooks {
     /// Called before starting the recording to validate the connection
-    /// Returns the filename to use, or an error message
+    /// Returns the filename to use, or an error message. The handler logs the error's text as
+    /// it is, so keep addresses out of it.
     pub on_start: Option<
         Box<
             dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send>>
@@ -85,7 +87,8 @@ pub struct RecordingHooks {
     >,
 
     /// Called when RecordingMetadata is received
-    /// Can return custom site_origin or None to use default
+    /// Can return custom site_origin or None to use default. The handler logs an error's text
+    /// as it is, so keep addresses out of it.
     pub on_metadata: Option<
         Box<
             dyn Fn(&str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>, String>> + Send>>
@@ -162,7 +165,7 @@ pub async fn handle_websocket_recording(
 
                     if let Some(Ok(frame)) = reader.next().await {
                         if let Frame::RecordingMetadata(metadata) = frame {
-                            info!("📋 Received RecordingMetadata: initial_url={}", metadata.initial_url);
+                            info!("📋 Received RecordingMetadata: initial_url={}", LoggedUrl(&metadata.initial_url));
 
                             // Call on_start hook if provided (for simplikeys entity creation)
                             let final_filename = if let Some(ref on_start) = hooks.on_start {

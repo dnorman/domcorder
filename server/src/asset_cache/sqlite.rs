@@ -1,6 +1,7 @@
 //! SQLite implementation of the MetadataStore trait
 
 use crate::asset_cache::{AssetError, AssetMetadata, AssetUsageParams, ManifestEntry, MetadataStore, SiteInfo};
+use crate::logged_url::LoggedUrl;
 use chrono::Utc;
 use rusqlite::{params, Connection};
 use std::path::Path;
@@ -175,7 +176,7 @@ impl MetadataStore for SqliteMetadataStore {
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
-        debug!("Generated manifest for {} with {} entries", site_origin, entries.len());
+        debug!("Generated manifest for {} with {} entries", LoggedUrl(site_origin), entries.len());
         Ok(entries)
     }
 

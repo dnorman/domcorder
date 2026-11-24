@@ -2,6 +2,7 @@ use crate::asset_cache::{
     AssetUsageParams, AssetFileStore, MetadataStore,
     store_or_get_asset_metadata,
 };
+use crate::logged_url::LoggedUrl;
 use crate::{RecordingInfo, StorageState};
 use chrono::Utc;
 use domcorder_proto::{FileHeader, FrameReader, FrameWriter};
@@ -491,10 +492,11 @@ impl StorageState {
         let should_fetch = Self::should_fetch_server_side(&asset.fetch_error);
         
         if data.is_empty() && should_fetch {
-            // Log unknown errors
+            // Log unknown errors. The page's error text can quote the address it failed on, so
+            // only its length shows.
             if let domcorder_proto::AssetFetchError::Unknown(msg) = &asset.fetch_error {
-                warn!("⚠️  Asset fetch unknown error: asset_id={}, url={}, error={}, attempting server-side fetch", 
-                      asset.asset_id, asset.url, msg);
+                warn!("⚠️  Asset fetch unknown error: asset_id={}, url={}, error=<{} bytes>, attempting server-side fetch", 
+                      asset.asset_id, LoggedUrl(&asset.url), msg.len());
             }
             
             
@@ -529,7 +531,7 @@ impl StorageState {
                     }));
                 }
                 Err(e) => {
-                    warn!("❌ Failed to fetch asset server-side: {}", e);
+                    warn!("❌ Failed to fetch asset server-side: url={}, error={}", LoggedUrl(&asset.url), e);
                     // Skip this asset - both client and server fetch failed
                     return Ok(None);
                 }
@@ -538,7 +540,7 @@ impl StorageState {
             // Legitimately empty asset or HTTP error - skip it
             if matches!(asset.fetch_error, domcorder_proto::AssetFetchError::Http) {
                 warn!("⚠️  Asset HTTP error: asset_id={}, url={}, skipping", 
-                      asset.asset_id, asset.url);
+                      asset.asset_id, LoggedUrl(&asset.url));
             }
             return Ok(None);
         }
@@ -666,7 +668,7 @@ impl StorageState {
                         })
                     }
                     Err(e) => {
-                        warn!("Failed to fetch asset server-side: {}", e);
+                        warn!("Failed to fetch asset server-side: url={}, error={}", LoggedUrl(&asset_ref.url), e);
                         Err(Box::new(e))
                     }
                 }

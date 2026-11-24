@@ -4,6 +4,7 @@
 //! during playback, enabling browser caching.
 
 use crate::asset_cache::{AssetError, AssetFileStore, MetadataStore};
+use crate::logged_url::LoggedUrl;
 use domcorder_proto::Frame;
 use tracing::debug;
 
@@ -44,7 +45,7 @@ impl PlaybackFrameTransformer {
                     format!("{}{}", self.base_url, url)
                 };
                 
-                debug!("Resolved AssetReference to URL: {}", full_url);
+                debug!("Resolved AssetReference to URL: {}", LoggedUrl(&full_url));
                 
                 // Return Asset frame with URL instead of binary data
                 // The player will fetch from HTTP instead of using blob URL
@@ -75,7 +76,7 @@ impl PlaybackFrameTransformer {
                                     format!("{}{}", self.base_url, url)
                                 };
                                 
-                                debug!("Converted Asset to HTTP URL: {}", full_url);
+                                debug!("Converted Asset to HTTP URL: {}", LoggedUrl(&full_url));
                                 
                                 // Return Asset frame with URL instead of binary
                                 Ok(Frame::Asset(domcorder_proto::AssetData {
@@ -105,3 +106,64 @@ impl PlaybackFrameTransformer {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::PlaybackFrameTransformer;
+    use crate::asset_cache::hash::sha256;
+    use crate::asset_cache::local::LocalBinaryStore;
+    use crate::asset_cache::sqlite::SqliteMetadataStore;
+    use crate::asset_cache::store_or_get_asset_metadata;
+    use crate::captured_logs::CapturedLogs;
+    use domcorder_proto::{AssetData, AssetFetchError, AssetReferenceData, Frame};
+
+    #[tokio::test]
+    async fn playbacks_lines_show_an_assets_address_without_its_user_info() {
+        let dir = tempfile::tempdir().unwrap();
+        let metadata_store = SqliteMetadataStore::new(dir.path().join("asset_cache.db")).unwrap();
+        let asset_file_store =
+            LocalBinaryStore::new(dir.path().join("assets"), "http://test.example".to_string())
+                .unwrap();
+        let asset = b"asset".to_vec();
+        let random_id = store_or_get_asset_metadata(
+            &sha256(&asset),
+            &asset,
+            "text/plain",
+            &metadata_store,
+            &asset_file_store,
+        )
+        .await
+        .unwrap();
+        let transformer = PlaybackFrameTransformer::new(
+            Box::new(metadata_store),
+            Box::new(asset_file_store),
+            "https://person:SECRET@assets.example".to_string(),
+        );
+        let (logs, _capturing) = CapturedLogs::start();
+
+        // A recorded reference to the cached asset, and an older recording's asset held whole
+        transformer
+            .transform_frame(Frame::AssetReference(AssetReferenceData {
+                asset_id: 1,
+                url: "https://example.com/asset.txt".to_string(),
+                hash: random_id.clone(),
+                mime: None,
+            }))
+            .await
+            .unwrap();
+        transformer
+            .transform_frame(Frame::Asset(AssetData {
+                asset_id: 2,
+                url: "https://example.com/asset.txt".to_string(),
+                mime: None,
+                buf: asset,
+                fetch_error: AssetFetchError::None,
+            }))
+            .await
+            .unwrap();
+
+        let logged = format!("https://assets.example/assets/{random_id}");
+        logs.assert_shows(&format!("Resolved AssetReference to URL: {logged}"));
+        logs.assert_shows(&format!("Converted Asset to HTTP URL: {logged}"));
+        logs.assert_never_shows("SECRET");
+    }
+}
