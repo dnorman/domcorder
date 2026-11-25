@@ -3,6 +3,7 @@
 
 mod fixture;
 
+use crate::captured_logs::CapturedLogs;
 use domcorder_proto::{AssetData, AssetFetchError, Frame, RecordingMetadataData};
 use fixture::*;
 use futures_util::{SinkExt, StreamExt};
@@ -453,4 +454,22 @@ async fn a_message_past_the_size_limit_reports_the_size_and_lets_the_save_end_wi
             Reported::Ended,
         ]
     );
+}
+
+#[tokio::test]
+async fn the_metadata_line_shows_the_pages_address_without_its_user_info_query_or_fragment() {
+    let (logs, _capturing) = CapturedLogs::start();
+    let mut endpoint = Endpoint::start(None).await;
+    let mut page = endpoint.connect().await;
+    let metadata = Frame::RecordingMetadata(RecordingMetadataData {
+        initial_url: "https://person:SECRET@example.com/sign-in?token=SECRET#SECRET".to_string(),
+        heartbeat_interval_seconds: 0,
+    });
+
+    send(&mut page, &metadata).await;
+    page.close(None).await.unwrap();
+    endpoint.reports_until_the_handler_ends().await;
+
+    logs.assert_shows("Received RecordingMetadata: initial_url=https://example.com/sign-in");
+    logs.assert_never_shows("SECRET");
 }

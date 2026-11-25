@@ -3,7 +3,10 @@ mod tests {
     use crate::{StorageState, AssetFileStore, MetadataStore};
     use crate::asset_cache::local::LocalBinaryStore;
     use crate::asset_cache::sqlite::SqliteMetadataStore;
-    use domcorder_proto::{FileHeader, Frame, FrameReader, FrameWriter};
+    use crate::captured_logs::CapturedLogs;
+    use domcorder_proto::{
+        AssetData, AssetFetchError, AssetReferenceData, FileHeader, Frame, FrameReader, FrameWriter,
+    };
     use std::io::Cursor;
     use tempfile::TempDir;
 
@@ -179,5 +182,61 @@ mod tests {
             .await
             .expect("Should be able to read frames");
         assert!(frame.is_some(), "Should have at least one frame");
+    }
+
+    #[tokio::test]
+    async fn asset_warnings_show_the_assets_address_without_its_user_info_query_or_fragment() {
+        let (storage, _temp_dir) = create_test_storage();
+        // An address on a local port that refuses the save's own fetch
+        let refusing = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = refusing.local_addr().unwrap().port();
+        drop(refusing);
+        let address = format!("http://person:SECRET@127.0.0.1:{port}/asset.png?token=SECRET#SECRET");
+        let logged = format!("http://127.0.0.1:{port}/asset.png");
+        let unfetched = |asset_id, fetch_error| {
+            Frame::Asset(AssetData {
+                asset_id,
+                url: address.clone(),
+                mime: None,
+                buf: Vec::new(),
+                fetch_error,
+            })
+        };
+        let mut frames = FrameWriter::new(Vec::new());
+        for frame in [
+            // The page could not fetch the asset, and its error's text quotes the address
+            unfetched(1, AssetFetchError::Unknown(format!("Failed to fetch {address}"))),
+            // The page's fetch was answered with an HTTP error
+            unfetched(2, AssetFetchError::Http),
+            // The page refers to an asset this server has not cached
+            Frame::AssetReference(AssetReferenceData {
+                asset_id: 3,
+                url: address.clone(),
+                hash: "0".repeat(64),
+                mime: None,
+            }),
+        ] {
+            frames.write_frame(&frame).unwrap();
+        }
+        let (logs, _capturing) = CapturedLogs::start();
+
+        storage
+            .save_recording_stream_frames_only_with_site(
+                Cursor::new(frames.into_inner()),
+                Some("https://example.com"),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let error_bytes = format!("Failed to fetch {address}").len();
+        logs.assert_shows(&format!(
+            "Asset fetch unknown error: asset_id=1, url={logged}, error=<{error_bytes} bytes>"
+        ));
+        logs.assert_shows(&format!("storage: ❌ Failed to fetch asset server-side: url={logged}, error="));
+        logs.assert_shows(&format!("Asset HTTP error: asset_id=2, url={logged}, skipping"));
+        logs.assert_shows(&format!("storage: Failed to fetch asset server-side: url={logged}, error="));
+        logs.assert_shows("Failed to process asset reference frame: Storage error:");
+        logs.assert_never_shows("SECRET");
     }
 }

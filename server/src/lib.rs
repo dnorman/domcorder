@@ -1,4 +1,5 @@
 pub mod asset_cache;
+mod logged_url;
 pub mod recording_handler;
 pub mod server;
 pub mod storage;
@@ -49,5 +50,7 @@ impl std::fmt::Debug for StorageState {
     }
 }
 
+#[cfg(test)]
+mod captured_logs;
 #[cfg(test)]
 mod server_test;
