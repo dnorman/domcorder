@@ -86,6 +86,7 @@ async fn handle_websocket_record(
                 max_size: 100 * 1024 * 1024, // 100MB
                 subdir: None,
                 custom_filename: None,
+                stop: None,
             },
             RecordingHooks {
                 on_start: None,
