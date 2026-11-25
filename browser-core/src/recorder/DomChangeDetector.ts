@@ -1,6 +1,7 @@
 import { NodeIdBiMap } from "../common/NodeIdBiMap";
 import type { DomOperation } from "../common/DomOperation";
 import { computeMinimalChanges } from "./StringChangeDetector";
+import { copyOf, snapshotOf } from "./LiveNodeCopies";
 
 /**
  * An operation as the change detector finds it in the live page. A change of an attribute
@@ -11,36 +12,6 @@ import { computeMinimalChanges } from "./StringChangeDetector";
 export type DetectedDomOperation =
   | Exclude<DomOperation, { op: 'updateAttribute' }>
   | (Extract<DomOperation, { op: 'updateAttribute' }> & { element: Element });
-
-/**
- * The live node that each node of an insert operation's subtree was copied from, so that the
- * recorder can ask the live node what the copy cannot tell, such as whether a field has been a
- * password field. The operation hands over a copy because the copy shows the subtree as it was
- * when the change was found. Weak, so that it keeps no copy alive.
- */
-const liveNodesOfCopies = new WeakMap<Node, Node>();
-
-/**
- * Copies `liveNode`'s subtree into `document` one node at a time, and links each copy to the
- * live node it copies as the copy is made. A subtree copied whole and then matched to the live
- * subtree by position can be linked to the wrong nodes: copying a custom element can run the
- * page's code for the copy before the copy is returned, and that code can reorder its children,
- * so that a password field's copy would be linked to an ordinary field. A node of the copy that
- * this function did not make from a live node, such as one inside the shadow root that a host's
- * copy carries, stays unlinked, and the recorder masks its `value`.
- */
-function linkedCopyOf(liveNode: Node, document: Document): Node {
-  const copy = document.importNode(liveNode, false);
-  liveNodesOfCopies.set(copy, liveNode);
-  if (liveNode instanceof HTMLTemplateElement) {
-    // A template's content is not among its children, and only a whole copy takes it along
-    (copy as HTMLTemplateElement).content.append(document.importNode(liveNode.content, true));
-  }
-  for (const child of Array.from(liveNode.childNodes)) {
-    copy.appendChild(linkedCopyOf(child, document));
-  }
-  return copy;
-}
 
 /**
  * DomChangeDetector - A specification-aligned implementation of DOM change detection.
@@ -57,25 +28,15 @@ function linkedCopyOf(liveNode: Node, document: Document): Node {
  * - Explicit causal ordering guarantees
  */
 export class DomChangeDetector {
-  /** The live node that `copy`, a node of an insert operation's subtree, copies, if it is one. */
-  public static liveNodeOf<T extends Node>(copy: T): T | undefined {
-    return liveNodesOfCopies.get(copy) as T | undefined;
-  }
-
   private readonly liveDomRoot: Node;
   private readonly liveNodeMap: NodeIdBiMap;
   
   private readonly snapshotDomRoot: Node;
   private readonly snapshotNodeMap: NodeIdBiMap;
   /**
-   * The document the detector makes its copies in, its snapshot's. When the detector watches a
-   * whole document, as the recorder's does, that is the snapshot, a copy of the document in which
-   * the page's custom elements are not defined, so that making a copy there runs none of the code
-   * of the page's own registry. The copy of an element created with a scoped custom element
-   * registry keeps that registry, and so do the copies of such elements in a clonable shadow root,
-   * open or closed, which the browser copies along with its host; their code runs for the copies.
-   * A detector watching an element makes its copies in the page's own document, where the page's
-   * custom elements are defined.
+   * The document the detector makes its copies in: a copy of the live root's document, which
+   * defines no custom elements unless it keeps a scoped registry (see `snapshotOf`). When the
+   * detector watches a whole document, as the recorder's does, it is the snapshot itself.
    */
   private readonly snapshotDocument: Document;
 
@@ -105,7 +66,7 @@ export class DomChangeDetector {
     processImmediately: boolean = false
   ) {
     this.liveDomRoot = liveDomRoot;
-    this.snapshotDomRoot = liveDomRoot.cloneNode(true);
+    this.snapshotDomRoot = snapshotOf(liveDomRoot);
     this.snapshotDocument = this.snapshotDomRoot.ownerDocument ?? (this.snapshotDomRoot as Document);
     this.liveNodeMap = liveNodeMap;
     this.snapshotNodeMap = new NodeIdBiMap();
@@ -462,7 +423,14 @@ export class DomChangeDetector {
                   !snapshotChildrenIds.includes(liveChildId))) {
         // New node in live DOM → insert operation
         const existingLiveChild = liveChildren[liveChildrenIndex];
-        const clonedChild = this.snapshotDocument.importNode(existingLiveChild, true);
+        // The operation's copy, each node linked to the live node it copies, and the snapshot's, the
+        // browser's copy of the operation's. Where the snapshot document defines no custom elements
+        // (see `snapshotOf` in `LiveNodeCopies.ts`), the page's code runs for the snapshot's copy
+        // only where it ran for the operation's: for an element the browser copied (see
+        // `copyOfNodeAlone`) that keeps the scoped registry the page created it with, or that hosts
+        // a clonable shadow root, open or closed, holding scoped elements, whose copies keep theirs
+        const clonedChildForOperation = copyOf(existingLiveChild, this.snapshotDocument, { linked: true });
+        const clonedChild = clonedChildForOperation.cloneNode(true);
         
         // Mirror node IDs from live to snapshot
         this.snapshotNodeMap.mirrorNodeIdsToSubTree(existingLiveChild, clonedChild);
@@ -474,19 +442,19 @@ export class DomChangeDetector {
         snapshotChildrenIds.splice(snapshotChildrenIndex, 0, liveChildId!);
 
         // Emit insert operation (causal order: insert before modify)
-        // IMPORTANT: Copy the node again for the operation! If we pass the same node object that's
+        // IMPORTANT: The operation has a copy of its own! If we pass the same node object that's
         // already in the snapshot, the mutator's insertBefore will MOVE it from the snapshot to the target!
-        const clonedChildForOperation = linkedCopyOf(existingLiveChild, this.snapshotDocument);
         // Copy IDs without updating the snapshot map (which should only track snapshot nodes).
         // The ids go by position, from the live subtree to the snapshot copy and from that copy to
         // this one, so each node of this copy has its own live node's id only while both copies
-        // have the live subtree's shape. They have it unless the page's code runs for a copy, as the
-        // code of an element created with a scoped custom element registry does, and that of such
-        // elements in a clonable shadow root that the browser copies with its host (see
-        // `snapshotDocument`). Such code can change a copy, which is then recorded unlike the page.
-        // Changes in the number or the order of a copy's children can put the ids on the wrong
-        // nodes or make either copying of the ids throw, and then neither the subtree nor any later
-        // change of the page is recorded.
+        // have the live subtree's shape. They have it unless the page's code runs for a copy, which
+        // it can only for an element the browser copies (see `copyOfNodeAlone`). The snapshot's copy
+        // is the browser's copy of this one, so code that ran for this copy runs again for the
+        // snapshot's, and can give it again the children that `copyOfNodeAlone` removed from this
+        // one. Such code could change a copy, which would then be recorded unlike the page. Changes
+        // in the number or the order of a copy's children can put the ids on the wrong nodes or make
+        // either copying of the ids throw, and then neither the subtree nor any later change of the
+        // page is recorded.
         NodeIdBiMap.copyNodeIdsToSubTree(clonedChild, clonedChildForOperation);
         
         ops.push({ 
@@ -529,22 +497,26 @@ export class DomChangeDetector {
 
         // Insert the new node
         const existingLiveChild = liveChildren[liveChildrenIndex];
-        const clonedChild = this.snapshotDocument.importNode(existingLiveChild, true);
+        // The operation's copy and the snapshot's, a copy of it, as for a new node, so that the
+        // operation does not move nodes between snapshot and target
+        const clonedChildForOperation = copyOf(existingLiveChild, this.snapshotDocument, { linked: true });
+        const clonedChild = clonedChildForOperation.cloneNode(true);
         this.snapshotNodeMap.mirrorNodeIdsToSubTree(existingLiveChild, clonedChild);
 
-        // Copy again for the operation to avoid moving nodes between snapshot and target. The copy
-        // of a node the page moved or replaced is handed over in the page's own document, whose
-        // address the recorder resolves the copy's relative addresses (an image's `src`, a link's
-        // `href`) against; a new node's copy, in the branch above, stays in the snapshot document,
-        // whose address is the page's when the detector started. The two differ once the page
-        // changes its address (`history.pushState`). Adopted, the copy starts the loads of its
-        // images, image inputs, SVG images, videos, audio elements and their sources, and a
-        // `details` element's toggle, in the page's document, and their inline `onload`, `onerror`,
-        // `onloadstart` and `ontoggle` attributes then run with the copy as `this`. The
-        // `adoptedCallback` of an element of the copy that keeps a scoped registry runs too.
-        const clonedChildForOperation = existingLiveChild.ownerDocument!.adoptNode(
-          linkedCopyOf(existingLiveChild, this.snapshotDocument)
-        );
+        // The operation's copy of a node the page moved or replaced is handed over in the page's
+        // own document, whose address the recorder resolves the copy's relative addresses (an
+        // image's `src`, a link's `href`) against; a new node's copy, in the branch above, stays in
+        // the snapshot document, whose address is the page's when the detector started. The two
+        // differ once the page changes its address (`history.pushState`). Adopted, the copy starts
+        // the loads of its images, image inputs, SVG images, videos, audio elements and their
+        // sources, and a `details` element's toggle, in the page's document. Their inline `onload`,
+        // `onerror`, `onloadstart` and `ontoggle` attributes then run with the copy as `this` where
+        // the browser made the copy, as it does of an SVG image in every browser, of every element
+        // where elements carry no custom element registry, and of an element, or a subtree, whose
+        // copy made by hand was refused (see `copyOf` and `copyOfNodeAlone`). A copy made by hand
+        // carries them in a namespace of its own, where they are no handlers. The `adoptedCallback`
+        // of an element the browser copied that keeps a scoped registry runs too.
+        existingLiveChild.ownerDocument!.adoptNode(clonedChildForOperation);
         // Copy IDs without updating the snapshot map (which should only track snapshot nodes);
         // by position, which relies on both copies having the live subtree's shape, as for a new node
         NodeIdBiMap.copyNodeIdsToSubTree(clonedChild, clonedChildForOperation);

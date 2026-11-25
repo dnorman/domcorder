@@ -37,24 +37,31 @@
  * - A key pressed in a password field inside a closed shadow root. The recorder sees the root's
  *   host as the key's target and cannot look inside the root, so the key is recorded with its
  *   code and modifiers.
- * - What an inline event handler of a moved element writes into the recorder's copy of it. The
+ * - What an inline event handler of a moved element writes into the recorder's copy of it, where
+ *   the browser made the copy: in a browser whose elements carry no custom element registry
+ *   (Firefox), where the browser copies every node; for an SVG image, which every browser copies;
+ *   and for an element, or a whole subtree, whose copy made by hand a DOM call refused. The
  *   recorder adopts the copy of a moved node into the page's document, which runs the `onload`,
  *   `onerror`, `onloadstart` and `ontoggle` attributes of the copy's images, image inputs, SVG
  *   images, videos, audio elements and their sources, and `details` elements with the copy as
  *   `this`, and the copy's fields hold what was typed into them. Such a handler can run before the
  *   recorder records the copy whenever the browser answers without the network (an empty or
- *   invalid address, a cached image, a `details` toggle) and the frames before the copy take a
- *   task to handle, which depends on the frame handlers; what it writes into the copy's text, or
- *   into an attribute not masked for its live element, is then recorded.
- * - What a custom element created with a scoped custom element registry writes into the
- *   recorder's copy of it. The change detector makes its copies where the page's own custom
- *   elements are not defined, but the copy of such an element keeps its registry, as do the copies
- *   of such elements in a clonable shadow root, open or closed, which the browser copies along
- *   with its host, whatever element the host is; so their constructors and callbacks run for the
- *   copies. When the page moves such an element or host, the recorder adopts the copy into the
- *   page's document, which runs the element's `adoptedCallback` on the copy, whose fields hold
- *   what was typed into them; what the callback writes into the copy's text, or into an attribute
- *   not masked for its live element, is recorded.
+ *   invalid address, a cached image, a `details` toggle) and the frames before the copy take a task
+ *   to handle, which depends on the frame handlers; what it writes into the copy's text, or into an
+ *   attribute not masked for its live element, is then recorded. An element copied by hand carries
+ *   such an attribute in a namespace of its own, where it runs no code.
+ * - What a custom element's code writes into the recorder's copy of an element the browser copies.
+ *   Where elements carry a custom element registry, the recorder copies each HTML element by hand,
+ *   so that no custom element's code runs for a copy, but the browser copies an element, or a whole
+ *   subtree, whose copy made by hand a DOM call refused. If the page created such an element with a
+ *   scoped custom element registry, or it hosts a clonable shadow root, open or closed, holding
+ *   elements made with one, their constructors and callbacks run for its copy, and what they write
+ *   into it, such as what was typed into a field the copy holds, is recorded.
+ * - What a scoped registry's custom elements write into the copies a recorder makes when it is
+ *   given a document that a script made and gave that registry. The DOM's cloning rules keep the
+ *   registry in the copy of the document in which the recorder makes its copies, so a browser that
+ *   follows them would run its constructors and callbacks for the elements copied by hand there
+ *   that it defines. Chromium and WebKit drop it from the document's copy, and no code runs.
  * - A document inside the page. An iframe's `srcdoc`, a `data:` document and a frame's fetched
  *   source are recorded as served, so a password that a server writes into that markup as a
  *   `value` attribute is recorded.
